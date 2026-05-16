@@ -24,7 +24,7 @@ export async function signUp(
   try {
     const supabase = await createClient();
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -34,13 +34,8 @@ export async function signUp(
       return { success: false, error: error.message };
     }
 
-    if (data.user) {
-      // Create profile entry for the new user
-      await supabase.from("profiles").insert({
-        id: data.user.id,
-        email: data.user.email,
-      });
-    }
+    // HIER WURDE DER MANUELLE INSERT ENTFERNT!
+    // Die Supabase-Datenbank erledigt das automatisch über den Trigger.
 
     return { success: true };
   } catch (err) {
