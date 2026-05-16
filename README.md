@@ -35,4 +35,71 @@ npm install
 
 # Entwicklungsserver starten
 npm run dev
+
+# Tests ausführen
+npm run test
+
+# Build für Produktion
+npm run build
 ```
+
+## 🎨 Features & Komponenten
+
+### Phase 1-5: Core Functionality ✅
+
+- Anonyme Nachrichtensubmission ohne Konto
+- Deutsche Kennzeichen-Validierung & Normalisierung
+- Server Actions für sichere Backend-Kommunikation
+- Row-Level Security auf Datenbankebene
+- Unit & Integration Tests (Jest, React Testing Library)
+
+### Phase 6: UX Polishing & Legal Pages ✅
+
+- **Toast-Benachrichtigungen:** `sonner` für elegante Erfolgs- und Fehlermeldungen
+  - Success: `"Nachricht erfolgreich gedroppt! 🚗💨"`
+  - Error: Detaillierte Validierungsmeldungen
+- **Impressum** (`/impressum`): Deutsche Kontaktinformationen, Haftungsausschluss, Urheberrecht
+- **Datenschutzerklärung** (`/datenschutz`): DSGVO-konforme Privacy Policy
+  - Erklärt das Shadow-Drop-Konzept
+  - Beschreibt Datenverschlüsselung in Supabase
+  - Cookie-Policy (nur funktionale Authentifizierung)
+  - DSGVO-Benutzerrechte
+- **Footer-Komponente:** Mobile-first, verlinkt zu rechtlichen Seiten
+
+## 📄 Seitennav (Öffentlich Erreichbar)
+
+| Route          | Beschreibung                    | Auth-Schutz |
+| -------------- | ------------------------------- | ----------- |
+| `/`            | Anonymous Message Drop          | Nein        |
+| `/impressum`   | Rechtliche Informationen        | Nein        |
+| `/datenschutz` | Datenschutzerklärung (DSGVO)    | Nein        |
+| `/auth/login`  | Login für Fahrzeugbesitzer      | Nein        |
+| `/dashboard`   | Meine Nachrichten (Verifiziert) | **Ja**      |
+
+## 🧪 Testing
+
+```bash
+# Alle Tests ausführen
+npm run test
+
+# Mit Coverage
+npm run test -- --coverage
+
+# Watch-Mode
+npm run test -- --watch
+```
+
+**Test-Coverage:**
+
+- `plateUtils.test.ts`: Deutsche Kennzeichen-Validierung & Normalisierung
+- `ClaimPlateForm.test.tsx`: Fahrzeugverifikations-Formular
+
+## 🚀 Deployment
+
+Das Projekt ist produktionsbereit für die Veröffentlichung in Deutschland:
+
+- ✅ DSGVO-konform (Privacy Policy, Cookie-Management)
+- ✅ Mobile-First (Tailwind CSS responsive Design)
+- ✅ Sicher (RLS, verschlüsselte Datenübertragung)
+- ✅ Schnell (Next.js mit Server Actions)
+- ✅ Getestet (Unit & Integration Tests)
