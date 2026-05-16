@@ -1,6 +1,12 @@
 "use client";
 
-import { useActionState, useRef, useEffect, useState } from "react";
+import {
+  useActionState,
+  useRef,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import { dropMessage } from "./actions";
 import { validateGermanPlate } from "@/lib/utils/plateUtils";
 import { CheckCircle2 } from "lucide-react";
@@ -11,39 +17,35 @@ export default function Home() {
   const [state, formAction, isPending] = useActionState(dropMessage, null);
   const [plateInput, setPlateInput] = useState("");
   const [messageInput, setMessageInput] = useState("");
-  const [plateError, setPlateError] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Client-side plate validation feedback
-  useEffect(() => {
-    if (!plateInput.trim()) {
-      setPlateError("");
-      return;
-    }
-
-    if (!validateGermanPlate(plateInput)) {
-      setPlateError("Ungültiges Kennzeichen (z.B. KA-AB-1234)");
-    } else {
-      setPlateError("");
-    }
-  }, [plateInput]);
+  // Compute plate error synchronously (no effect needed)
+  const plateError =
+    plateInput.trim() && !validateGermanPlate(plateInput)
+      ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
+      : "";
 
   // Reset form on success
   useEffect(() => {
-    if (state?.success) {
+    if (!state?.success) return;
+
+    startTransition(() => {
       setShowSuccess(true);
       setPlateInput("");
       setMessageInput("");
       formRef.current?.reset();
+    });
 
-      const timer = setTimeout(() => {
+    const timer = setTimeout(() => {
+      startTransition(() => {
         setShowSuccess(false);
-      }, 3000);
+      });
+    }, 3000);
 
-      return () => clearTimeout(timer);
-    }
-  }, [state?.success]);
+    return () => clearTimeout(timer);
+  }, [state?.success, startTransition]);
 
   const isFormValid =
     plateInput.trim() &&
@@ -52,7 +54,7 @@ export default function Home() {
     messageInput.length <= MAX_MESSAGE_LENGTH;
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
+    <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
       {/* Header */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col items-center gap-1 px-4 py-6">
@@ -69,7 +71,7 @@ export default function Home() {
       <main className="flex flex-1 flex-col px-4 py-8">
         {showSuccess && (
           <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600 dark:text-green-400" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
             <p className="text-sm font-medium text-green-800 dark:text-green-200">
               Nachricht erfolgreich gesendet! 🎉
             </p>
