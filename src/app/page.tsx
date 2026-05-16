@@ -7,9 +7,9 @@ import {
   useState,
   useTransition,
 } from "react";
+import { toast } from "sonner";
 import { dropMessage } from "./actions";
 import { validateGermanPlate } from "@/lib/utils/plateUtils";
-import { CheckCircle2 } from "lucide-react";
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -17,7 +17,6 @@ export default function Home() {
   const [state, formAction, isPending] = useActionState(dropMessage, null);
   const [plateInput, setPlateInput] = useState("");
   const [messageInput, setMessageInput] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -27,25 +26,19 @@ export default function Home() {
       ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
       : "";
 
-  // Reset form on success
+  // Handle success/error with toast notifications
   useEffect(() => {
-    if (!state?.success) return;
-
-    startTransition(() => {
-      setShowSuccess(true);
-      setPlateInput("");
-      setMessageInput("");
-      formRef.current?.reset();
-    });
-
-    const timer = setTimeout(() => {
+    if (state?.success) {
+      toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
-        setShowSuccess(false);
+        setPlateInput("");
+        setMessageInput("");
+        formRef.current?.reset();
       });
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [state?.success, startTransition]);
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state?.success, state?.error, startTransition]);
 
   const isFormValid =
     plateInput.trim() &&
@@ -69,15 +62,6 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="flex flex-1 flex-col px-4 py-8">
-        {showSuccess && (
-          <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              Nachricht erfolgreich gesendet! 🎉
-            </p>
-          </div>
-        )}
-
         <form
           ref={formRef}
           action={formAction}
@@ -186,11 +170,6 @@ export default function Home() {
           </button>
         </form>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-        <p>Anonym. Schnell. Sicher.</p>
-      </footer>
     </div>
   );
 }
