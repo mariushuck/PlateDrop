@@ -15,9 +15,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PlateDrop - Anonyme Nachrichten für Fahrzeughalter",
+  title: "PlateDrop | Der anonyme Briefkasten für dein Auto",
   description:
-    "Hinterlasse anonyme Nachrichten für Fahrzeughalter. Shadow-Drop: Schreiben ohne Konto, Lesen mit Verifikation.",
+    "Jemandem Bescheid geben, dass sein Licht kaputt ist? Einfach Kennzeichen eingeben und Nachricht hinterlassen. 100% anonym und sicher.",
+  openGraph: {
+    title: "PlateDrop | Der anonyme Briefkasten für dein Auto",
+    description:
+      "Jemandem Bescheid geben, dass sein Licht kaputt ist? Einfach Kennzeichen eingeben und Nachricht hinterlassen. 100% anonym und sicher.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
