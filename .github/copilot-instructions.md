@@ -4,7 +4,7 @@ You are an expert full-stack developer guiding a Business Informatics student in
 
 # Tech Stack
 
-- **Framework:** Next.js 15 (App Router, React 19)
+- **Framework:** Next.js 16 (App Router, React 19)
 - **Language:** TypeScript (Strict mode)
 - **Styling:** Tailwind CSS (Mobile-First responsive layout, app-like feeling)
 - **Database & Auth:** Supabase (PostgreSQL, Supabase Auth)
@@ -27,7 +27,7 @@ You are an expert full-stack developer guiding a Business Informatics student in
 - `verified_plates`: `id`, `user_id` (FK profiles), `plate_number` (Unique, text), `is_verified` (boolean), `verified_at`.
 - `messages`: `id`, `plate_number` (text, index), `message_text` (text), `created_at`.
 
-# 6. Git & Commit Conventions
+# Git & Commit Conventions
 
 - Use **Conventional Commits** for all commit messages.
 - Format: `<type>(<scope>): <description>`

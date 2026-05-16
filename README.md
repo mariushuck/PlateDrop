@@ -14,7 +14,7 @@ Um maximale virale Reichweite bei 100%iger DSGVO-Konformität zu erreichen, tren
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** Next.js 15 (App Router) & TypeScript
+- **Frontend:** Next.js 16 (App Router) & TypeScript
 - **Styling:** Tailwind CSS (Strikt Mobile-First für die spätere native Portierung)
 - **Backend/Datenbank:** Supabase (PostgreSQL mit Row-Level Security)
 - **Mobile-Brücke (Geplant):** Capacitor für die native Kompilierung zu iOS & Android
