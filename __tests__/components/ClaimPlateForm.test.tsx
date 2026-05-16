@@ -14,11 +14,9 @@ const mockUseActionState = useActionState as jest.Mock;
 
 describe("ClaimPlateForm", () => {
   beforeEach(() => {
-    mockUseActionState.mockImplementation((action: unknown, initialState: unknown) => [
-      initialState,
-      action,
-      false,
-    ]);
+    mockUseActionState.mockImplementation(
+      (action: unknown, initialState: unknown) => [initialState, action, false],
+    );
   });
 
   afterEach(() => {
@@ -28,28 +26,32 @@ describe("ClaimPlateForm", () => {
   it("renders the form elements", () => {
     render(
       <ClaimPlateForm
-        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+        action={
+          jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]
+        }
       />,
     );
 
     expect(screen.getByLabelText(/Kennzeichen/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/KA-AB-1234/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Kennzeichen registrieren/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows client-side validation for invalid plates", () => {
     render(
       <ClaimPlateForm
-        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+        action={
+          jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]
+        }
       />,
     );
 
     const input = screen.getByLabelText(/Kennzeichen/i);
     fireEvent.change(input, { target: { value: "invalid-plate" } });
 
-    expect(
-      screen.getByText(/Ungültiges Kennzeichen/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Ungültiges Kennzeichen/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Kennzeichen registrieren/i }),
     ).toBeDisabled();
@@ -58,7 +60,9 @@ describe("ClaimPlateForm", () => {
   it("enables submission for valid plates", () => {
     render(
       <ClaimPlateForm
-        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+        action={
+          jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]
+        }
       />,
     );
 
@@ -82,7 +86,9 @@ describe("ClaimPlateForm", () => {
 
     render(
       <ClaimPlateForm
-        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+        action={
+          jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]
+        }
       />,
     );
 
