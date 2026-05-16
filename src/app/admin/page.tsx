@@ -136,14 +136,14 @@ export default function AdminPage() {
               key={verification.id}
               className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800"
             >
-              {/* Image Container */}
-              <div className="aspect-square relative overflow-hidden rounded-t-xl">
+              {/* Image Container: provide explicit width/height/alt to avoid layout shift */}
+              <div className="w-full overflow-hidden rounded-t-xl">
                 <Image
                   src={verification.proof_image_url}
-                  alt={`Proof for ${verification.plate_number}`}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  alt={`Beweisfoto für ${verification.plate_number}`}
+                  width={800}
+                  height={800}
+                  className="w-full h-auto object-cover"
                   priority={false}
                 />
               </div>
