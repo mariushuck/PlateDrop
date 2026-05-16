@@ -26,3 +26,16 @@ You are an expert full-stack developer guiding a Business Informatics student in
 
 - `verified_plates`: `id`, `user_id` (FK profiles), `plate_number` (Unique, text), `is_verified` (boolean), `verified_at`.
 - `messages`: `id`, `plate_number` (text, index), `message_text` (text), `created_at`.
+
+# 6. Git & Commit Conventions
+
+- Use **Conventional Commits** for all commit messages.
+- Format: `<type>(<scope>): <description>`
+- Types:
+  - `feat`: A new feature for the user.
+  - `fix`: A bug fix.
+  - `docs`: Documentation only changes.
+  - `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc).
+  - `refactor`: A code change that neither fixes a bug nor adds a feature.
+  - `chore`: Updating build tasks, package manager configs, etc. (e.g., `chore(init): finished Setup`).
+- Keep the description short, imperative, and lowercase.
