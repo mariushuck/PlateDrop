@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { approvePlate, rejectPlate } from "./actions";
@@ -136,11 +137,14 @@ export default function AdminPage() {
               className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800"
             >
               {/* Image Container */}
-              <div className="relative aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-700">
-                <img
+              <div className="aspect-square relative overflow-hidden rounded-t-xl">
+                <Image
                   src={verification.proof_image_url}
                   alt={`Proof for ${verification.plate_number}`}
-                  className="h-full w-full object-cover"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  priority={false}
                 />
               </div>
 
