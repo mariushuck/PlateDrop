@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { approvePlate, rejectPlate } from "./actions";
-import { AlertCircle, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Database } from "@/types/database.types";
 
 type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
