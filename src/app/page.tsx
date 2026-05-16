@@ -1,65 +1,196 @@
-import Image from "next/image";
+"use client";
+
+import {
+  useActionState,
+  useRef,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
+import { dropMessage } from "./actions";
+import { validateGermanPlate } from "@/lib/utils/plateUtils";
+import { CheckCircle2 } from "lucide-react";
+
+const MAX_MESSAGE_LENGTH = 500;
 
 export default function Home() {
+  const [state, formAction, isPending] = useActionState(dropMessage, null);
+  const [plateInput, setPlateInput] = useState("");
+  const [messageInput, setMessageInput] = useState("");
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [, startTransition] = useTransition();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Compute plate error synchronously (no effect needed)
+  const plateError =
+    plateInput.trim() && !validateGermanPlate(plateInput)
+      ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
+      : "";
+
+  // Reset form on success
+  useEffect(() => {
+    if (!state?.success) return;
+
+    startTransition(() => {
+      setShowSuccess(true);
+      setPlateInput("");
+      setMessageInput("");
+      formRef.current?.reset();
+    });
+
+    const timer = setTimeout(() => {
+      startTransition(() => {
+        setShowSuccess(false);
+      });
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [state?.success, startTransition]);
+
+  const isFormValid =
+    plateInput.trim() &&
+    !plateError &&
+    messageInput.trim() &&
+    messageInput.length <= MAX_MESSAGE_LENGTH;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-col items-center gap-1 px-4 py-6">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            PlateDrop
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+            Hinterlasse anonym eine Nachricht für jeden
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-39.5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </header>
+
+      {/* Main Content */}
+      <main className="flex flex-1 flex-col px-4 py-8">
+        {showSuccess && (
+          <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+            <p className="text-sm font-medium text-green-800 dark:text-green-200">
+              Nachricht erfolgreich gesendet! 🎉
+            </p>
+          </div>
+        )}
+
+        <form
+          ref={formRef}
+          action={formAction}
+          className="flex flex-1 flex-col gap-6"
+        >
+          {/* License Plate Input */}
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="plateNumber"
+              className="text-sm font-semibold text-slate-900 dark:text-white"
+            >
+              Kennzeichen
+            </label>
+
+            <div className="relative">
+              <input
+                id="plateNumber"
+                name="plateNumber"
+                type="text"
+                placeholder="z.B. KA-AB-1234"
+                value={plateInput}
+                onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+                disabled={isPending}
+                className="w-full rounded-lg border-2 border-slate-300 bg-white px-4 py-3 font-mono text-lg font-bold uppercase tracking-widest text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+              />
+
+              {plateInput && !plateError && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400">
+                  ✓
+                </div>
+              )}
+            </div>
+
+            {plateError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {plateError}
+              </p>
+            )}
+
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Deutsche Kennzeichen im Format KA-AB-1234
+            </p>
+          </div>
+
+          {/* Message Textarea */}
+          <div className="flex flex-1 flex-col gap-2">
+            <div className="flex items-center justify-between gap-4">
+              <label
+                htmlFor="messageText"
+                className="text-sm font-semibold text-slate-900 dark:text-white"
+              >
+                Nachricht
+              </label>
+
+              <span
+                className={`text-xs font-medium ${
+                  messageInput.length > MAX_MESSAGE_LENGTH
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-slate-500 dark:text-slate-400"
+                }`}
+              >
+                {messageInput.length} / {MAX_MESSAGE_LENGTH}
+              </span>
+            </div>
+
+            <textarea
+              id="messageText"
+              name="messageText"
+              placeholder="Schreibe deine anonyme Nachricht hier..."
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              disabled={isPending}
+              maxLength={MAX_MESSAGE_LENGTH}
+              rows={6}
+              className="w-full flex-1 rounded-lg border-2 border-slate-300 bg-white p-4 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/8 px-5 transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-39.5"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Bleibe respektvoll und konstruktiv
+            </p>
+          </div>
+
+          {/* Error Display */}
+          {state?.error && (
+            <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                {state.error}
+              </p>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isPending || !isFormValid}
+            className="rounded-lg bg-slate-900 px-6 py-4 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
           >
-            Documentation
-          </a>
-        </div>
+            {isPending ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Wird gesendet...
+              </span>
+            ) : (
+              "Nachricht senden"
+            )}
+          </button>
+        </form>
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+        <p>Anonym. Schnell. Sicher.</p>
+      </footer>
     </div>
   );
 }
