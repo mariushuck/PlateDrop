@@ -38,12 +38,18 @@ To run a single test file: `npx jest __tests__/utils/plateUtils.test.ts`
 - `profiles`: users read/update only their own row
 
 **Database schema** (defined in `db/supabase_init.sql`):
-- `profiles` — linked to `auth.users`
-- `verified_plates` — `user_id`, `plate_number` (unique), `is_verified`, `verified_at`
+- `profiles` — linked to `auth.users`; has `is_admin boolean` for admin access; auto-created via DB trigger on signup (no manual insert needed)
+- `verified_plates` — `user_id`, `plate_number` (unique), `is_verified`, `verification_status` (`pending`/`approved`/`rejected`), `verification_code` (generated 6-char code shown to user), `proof_image_url`
 - `messages` — `plate_number`, `message_text`, `created_at`
 - Generated types: `src/types/database.types.ts`
 
+**Plate verification flow**: User claims plate → system generates verification code (format `XX-XXXX`) → user writes code on paper, places behind windshield, photos it → user uploads photo to Supabase Storage bucket `proofs` → admin reviews photo in `/admin` and approves/rejects. Only `is_verified = true` plates unlock message reading.
+
+**Admin authorization**: `/admin` routes check `profiles.is_admin` at the Server Action level. No middleware-level guard exists — admin checks are done inline in each admin Server Action.
+
 **German plate normalization**: All plates go through `src/lib/utils/plateUtils.ts` before any DB query or insert. Supports standard, E-plate, and H-plate formats.
+
+**Forms** use React 19's `useActionState` hook wired to Server Actions. The `dashboard/page.tsx` is a Client Component that fetches data client-side after an auth check (redirects to `/login` if unauthenticated).
 
 ## UI Rules
 
