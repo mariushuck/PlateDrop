@@ -2,9 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 
-export async function approvePlate(
-  plateId: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function approvePlate(plateId: string): Promise<{ success: boolean; error?: string }> {
   // Get authenticated user
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -57,9 +55,7 @@ export async function approvePlate(
   }
 }
 
-export async function rejectPlate(
-  plateId: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function rejectPlate(plateId: string): Promise<{ success: boolean; error?: string }> {
   // Get authenticated user
   const supabase = await createClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();

@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  useActionState,
-  useRef,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { dropMessage } from "./actions";
 import { validateGermanPlate } from "@/lib/utils/plateUtils";
+import { dropMessage } from "./actions";
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -38,7 +32,7 @@ export default function Home() {
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state?.success, state?.error, startTransition]);
+  }, [state?.success, state?.error]);
 
   const isFormValid =
     plateInput.trim() &&
@@ -51,9 +45,7 @@ export default function Home() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            PlateDrop
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             Hinterlasse anonym eine Nachricht für jeden
           </p>
@@ -62,11 +54,7 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="flex flex-1 flex-col px-4 py-8">
-        <form
-          ref={formRef}
-          action={formAction}
-          className="flex flex-1 flex-col gap-6"
-        >
+        <form ref={formRef} action={formAction} className="flex flex-1 flex-col gap-6">
           {/* License Plate Input */}
           <div className="flex flex-col gap-2">
             <label
@@ -95,11 +83,7 @@ export default function Home() {
               )}
             </div>
 
-            {plateError && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {plateError}
-              </p>
-            )}
+            {plateError && <p className="text-sm text-red-600 dark:text-red-400">{plateError}</p>}
 
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Deutsche Kennzeichen im Format KA-AB-1234
@@ -147,9 +131,7 @@ export default function Home() {
           {/* Error Display */}
           {state?.error && (
             <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                {state.error}
-              </p>
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
             </div>
           )}
 

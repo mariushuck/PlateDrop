@@ -1,20 +1,14 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { signUp, signIn } from "@/app/auth/actions";
+import { signIn, signUp } from "@/app/auth/actions";
 
 type AuthMode = "signin" | "signup";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("signin");
-  const [signUpState, signUpAction, isSignUpPending] = useActionState(
-    signUp,
-    null,
-  );
-  const [signInState, signInAction, isSignInPending] = useActionState(
-    signIn,
-    null,
-  );
+  const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, null);
+  const [signInState, signInAction, isSignInPending] = useActionState(signIn, null);
 
   const isPending = isSignUpPending || isSignInPending;
   const currentState = mode === "signup" ? signUpState : signInState;
@@ -25,9 +19,7 @@ export default function LoginPage() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            PlateDrop
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             Kennzeichen verifizieren und Nachrichten lesen
           </p>
@@ -97,9 +89,7 @@ export default function LoginPage() {
                 name="password"
                 type="password"
                 required
-                placeholder={
-                  mode === "signup" ? "Mindestens 6 Zeichen" : "Dein Passwort"
-                }
+                placeholder={mode === "signup" ? "Mindestens 6 Zeichen" : "Dein Passwort"}
                 disabled={isPending}
                 className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
               />

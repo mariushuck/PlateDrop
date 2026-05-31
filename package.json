@@ -7,7 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
     "test": "jest",
     "test:watch": "jest --watch"
   },
