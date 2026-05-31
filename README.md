@@ -20,6 +20,7 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 - Supabase für Auth, Datenbank und Storage
 - Jest und React Testing Library für Tests
 - `sonner` für Toasts
+- Biome für Linting und Formatierung
 
 ## Wichtige Flows
 
@@ -49,16 +50,20 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 ## Entwicklung
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Weitere hilfreiche Scripts:
 
 ```bash
-npm run lint
-npm run test
-npm run build
+pnpm lint
+pnpm check
+pnpm format
+pnpm test
+pnpm test:watch
+pnpm build
+pnpm start
 ```
 
 ## Tests
