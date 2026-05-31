@@ -7,14 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev        # Start development server
-npm run build      # Production build
-npm run lint       # Run ESLint
-npm run test       # Run Jest tests
-npm run test:watch # Jest in watch mode
+pnpm dev           # Start development server
+pnpm build         # Production build
+pnpm lint          # Run Biome linter
+pnpm check         # Run Biome linter + formatter check
+pnpm format        # Auto-format with Biome
+pnpm test          # Run Jest tests
+pnpm test:watch    # Jest in watch mode
 ```
 
-To run a single test file: `npx jest __tests__/utils/plateUtils.test.ts`
+To run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
 
 ## What PlateDrop Is
 
