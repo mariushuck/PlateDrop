@@ -1,4 +1,4 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Impressum | PlateDrop",
@@ -11,9 +11,7 @@ export default function Impressum() {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Impressum
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Impressum</h1>
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             Rechtliche Informationen
           </p>
@@ -71,15 +69,14 @@ export default function Impressum() {
               Haftungsausschluss
             </h2>
             <p className="mb-2">
-              Trotz sorgfältiger inhaltlicher Kontrolle übernehmen wir keine
-              Haftung für die Inhalte externer Links. Für den Inhalt der
-              verlinkten Seiten sind ausschließlich deren Betreiber
-              verantwortlich.
+              Trotz sorgfältiger inhaltlicher Kontrolle übernehmen wir keine Haftung für die Inhalte
+              externer Links. Für den Inhalt der verlinkten Seiten sind ausschließlich deren
+              Betreiber verantwortlich.
             </p>
             <p>
-              Die auf dieser Website angebotenen Dienste und Funktionen werden
-              ohne Gewähr bereitgestellt. Wir haften nicht für unmittelbare oder
-              mittelbare Schäden, die durch die Nutzung entstehen.
+              Die auf dieser Website angebotenen Dienste und Funktionen werden ohne Gewähr
+              bereitgestellt. Wir haften nicht für unmittelbare oder mittelbare Schäden, die durch
+              die Nutzung entstehen.
             </p>
           </section>
 
@@ -89,10 +86,9 @@ export default function Impressum() {
               Urheberrecht
             </h2>
             <p>
-              Alle Inhalte dieser Website, einschließlich Text, Bilder und
-              Design, sind urheberrechtlich geschützt. Eine Vervielfältigung
-              oder Weiterverbreitung bedarf der ausdrücklichen Genehmigung durch
-              PlateDrop GmbH.
+              Alle Inhalte dieser Website, einschließlich Text, Bilder und Design, sind
+              urheberrechtlich geschützt. Eine Vervielfältigung oder Weiterverbreitung bedarf der
+              ausdrücklichen Genehmigung durch PlateDrop GmbH.
             </p>
           </section>
 
@@ -102,12 +98,8 @@ export default function Impressum() {
               Datenschutz
             </h2>
             <p>
-              Informationen zur Verarbeitung personenbezogener Daten finden Sie
-              in unserer{" "}
-              <a
-                href="/datenschutz"
-                className="text-blue-600 hover:underline dark:text-blue-400"
-              >
+              Informationen zur Verarbeitung personenbezogener Daten finden Sie in unserer{" "}
+              <a href="/datenschutz" className="text-blue-600 hover:underline dark:text-blue-400">
                 Datenschutzerklärung
               </a>
               .

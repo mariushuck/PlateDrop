@@ -1,4 +1,4 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Datenschutzerklärung | PlateDrop",
@@ -29,12 +29,11 @@ export default function Datenschutz() {
               1. Datenschutz bei PlateDrop
             </h2>
             <p>
-              Der Schutz deiner Privatsphäre ist uns äußerst wichtig. PlateDrop
-              folgt dem Prinzip der „Shadow-Drop" – einer asymmetrischen
-              Datenschutzarchitektur, die es ermöglicht, Nachrichten anonym zu
-              hinterlassen, ohne ein Benutzerkonto zu erstellen. Nachricht
-              lesen? Dazu brauchst du ein verifiziertes Konto und Zugriff auf
-              das entsprechende Fahrzeug.
+              Der Schutz deiner Privatsphäre ist uns äußerst wichtig. PlateDrop folgt dem Prinzip
+              der „Shadow-Drop" – einer asymmetrischen Datenschutzarchitektur, die es ermöglicht,
+              Nachrichten anonym zu hinterlassen, ohne ein Benutzerkonto zu erstellen. Nachricht
+              lesen? Dazu brauchst du ein verifiziertes Konto und Zugriff auf das entsprechende
+              Fahrzeug.
             </p>
           </section>
 
@@ -44,19 +43,16 @@ export default function Datenschutz() {
               2. Anonyme Nachrichteneinträge (Shadow-Drop)
             </h2>
             <p className="mb-2">
-              <strong>Keine Kontoerstellung erforderlich.</strong> Du kannst
-              anonym eine Nachricht mit einem Kennzeichen hinterlassen, ohne
-              dich anzumelden.
+              <strong>Keine Kontoerstellung erforderlich.</strong> Du kannst anonym eine Nachricht
+              mit einem Kennzeichen hinterlassen, ohne dich anzumelden.
             </p>
             <p className="mb-2">
-              <strong>Gespeicherte Daten:</strong> Jede Nachricht wird mit dem
-              normalisierten Kennzeichen und dem Nachrichtentext in unserer
-              Datenbank gespeichert.
+              <strong>Gespeicherte Daten:</strong> Jede Nachricht wird mit dem normalisierten
+              Kennzeichen und dem Nachrichtentext in unserer Datenbank gespeichert.
             </p>
             <p>
-              <strong>Keine IP-Protokollierung:</strong> Wir protokollieren
-              deine IP-Adresse nicht beim Einreichen von Nachrichten. Du bleibst
-              vollständig anonym.
+              <strong>Keine IP-Protokollierung:</strong> Wir protokollieren deine IP-Adresse nicht
+              beim Einreichen von Nachrichten. Du bleibst vollständig anonym.
             </p>
           </section>
 
@@ -66,21 +62,18 @@ export default function Datenschutz() {
               3. Benutzerkonten und Authentifizierung
             </h2>
             <p className="mb-2">
-              <strong>Optionales Konto:</strong> Um Nachrichten zu lesen, die
-              für dich hinterlassen wurden, musst du ein Konto erstellen und
-              registrieren.
+              <strong>Optionales Konto:</strong> Um Nachrichten zu lesen, die für dich hinterlassen
+              wurden, musst du ein Konto erstellen und registrieren.
             </p>
             <p className="mb-2">
-              <strong>Authentifizierung über Supabase:</strong> Wir nutzen
-              Supabase Auth für sichere Authentifizierung und
-              Benutzerverwaltung. Deine Passwörter werden gehashed und nach den
-              höchsten Sicherheitsstandards behandelt.
+              <strong>Authentifizierung über Supabase:</strong> Wir nutzen Supabase Auth für sichere
+              Authentifizierung und Benutzerverwaltung. Deine Passwörter werden gehashed und nach
+              den höchsten Sicherheitsstandards behandelt.
             </p>
             <p>
-              <strong>Fahrzeugverifikation:</strong> Zum Lesen von Nachrichten
-              musst du nachweisen, dass du der Besitzer des Fahrzeugs bist (z.B.
-              durch Vorlage der Fahrzeugpapiere oder über eine kryptographische
-              Verifikation).
+              <strong>Fahrzeugverifikation:</strong> Zum Lesen von Nachrichten musst du nachweisen,
+              dass du der Besitzer des Fahrzeugs bist (z.B. durch Vorlage der Fahrzeugpapiere oder
+              über eine kryptographische Verifikation).
             </p>
           </section>
 
@@ -90,18 +83,17 @@ export default function Datenschutz() {
               4. Datenspeicherung und Verschlüsselung
             </h2>
             <p className="mb-2">
-              <strong>PostgreSQL-Datenbank:</strong> Alle Daten werden in einer
-              PostgreSQL-Datenbank gehostet von Supabase gespeichert.
+              <strong>PostgreSQL-Datenbank:</strong> Alle Daten werden in einer PostgreSQL-Datenbank
+              gehostet von Supabase gespeichert.
             </p>
             <p className="mb-2">
-              <strong>Verschlüsselte Übertragung:</strong> Alle Daten werden
-              über HTTPS übertragen und sind damit während der Übertragung
-              verschlüsselt.
+              <strong>Verschlüsselte Übertragung:</strong> Alle Daten werden über HTTPS übertragen
+              und sind damit während der Übertragung verschlüsselt.
             </p>
             <p>
-              <strong>Sicherheitsrichtlinien:</strong> Wir setzen Row-Level
-              Security (RLS) ein, um sicherzustellen, dass nur verifizierte
-              Fahrzeugbesitzer ihre eigenen Nachrichten lesen können.
+              <strong>Sicherheitsrichtlinien:</strong> Wir setzen Row-Level Security (RLS) ein, um
+              sicherzustellen, dass nur verifizierte Fahrzeugbesitzer ihre eigenen Nachrichten lesen
+              können.
             </p>
           </section>
 
@@ -112,17 +104,15 @@ export default function Datenschutz() {
             </h2>
             <p className="mb-2">
               <strong>Funktionale Cookies:</strong> Wir verwenden Cookies
-              <strong>nur</strong> für die Authentifizierung und
-              Session-Verwaltung.
+              <strong>nur</strong> für die Authentifizierung und Session-Verwaltung.
             </p>
             <p className="mb-2">
-              <strong>Keine Tracking-Cookies:</strong> Wir setzen keine
-              Analyse-, Werbe- oder Third-Party-Cookies ein.
+              <strong>Keine Tracking-Cookies:</strong> Wir setzen keine Analyse-, Werbe- oder
+              Third-Party-Cookies ein.
             </p>
             <p>
-              <strong>Session-Management:</strong> Authentifizierungs-Token
-              werden in sicheren Cookies gespeichert und verfallen nach einer
-              bestimmten Zeit.
+              <strong>Session-Management:</strong> Authentifizierungs-Token werden in sicheren
+              Cookies gespeichert und verfallen nach einer bestimmten Zeit.
             </p>
           </section>
 
@@ -132,15 +122,13 @@ export default function Datenschutz() {
               6. Datenlöschung
             </h2>
             <p className="mb-2">
-              <strong>Benutzerkonto:</strong> Du kannst dein Benutzerkonto
-              jederzeit löschen. Dies wird alle persönlichen Kontoinformationen
-              entfernen.
+              <strong>Benutzerkonto:</strong> Du kannst dein Benutzerkonto jederzeit löschen. Dies
+              wird alle persönlichen Kontoinformationen entfernen.
             </p>
             <p>
-              <strong>Nachrichten:</strong> Nachrichten werden nach einem
-              bestimmten Zeitraum automatisch gelöscht (bei Bedarf können
-              einzelne Nachrichten als unangemessen gemeldet und manuell
-              gelöscht werden).
+              <strong>Nachrichten:</strong> Nachrichten werden nach einem bestimmten Zeitraum
+              automatisch gelöscht (bei Bedarf können einzelne Nachrichten als unangemessen gemeldet
+              und manuell gelöscht werden).
             </p>
           </section>
 
@@ -149,9 +137,7 @@ export default function Datenschutz() {
             <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
               7. DSGVO und Benutzerrechte
             </h2>
-            <p className="mb-2">
-              PlateDrop ist DSGVO-konform. Als Nutzer hast du das Recht auf:
-            </p>
+            <p className="mb-2">PlateDrop ist DSGVO-konform. Als Nutzer hast du das Recht auf:</p>
             <ul className="mb-4 list-inside list-disc space-y-1">
               <li>Auskunft über deine Daten</li>
               <li>Berichtigung fehlerhafter Daten</li>
@@ -190,8 +176,7 @@ export default function Datenschutz() {
               <br />
               <strong>Telefon:</strong> +49 30 123456789
               <br />
-              <strong>Adresse:</strong> PlateDrop GmbH, Beispielstraße 123,
-              12345 Berlin
+              <strong>Adresse:</strong> PlateDrop GmbH, Beispielstraße 123, 12345 Berlin
             </p>
           </section>
 
@@ -201,8 +186,8 @@ export default function Datenschutz() {
               <strong>Letzte Aktualisierung:</strong> Mai 2026
             </p>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Diese Datenschutzerklärung kann jederzeit ohne vorherige
-              Ankündigung aktualisiert werden.
+              Diese Datenschutzerklärung kann jederzeit ohne vorherige Ankündigung aktualisiert
+              werden.
             </p>
           </div>
         </div>

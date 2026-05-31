@@ -11,7 +11,7 @@ export async function dropMessage(
   const messageText = formData.get("messageText") as string;
 
   // Validate plate
-  if (!plateNumber || !plateNumber.trim()) {
+  if (!plateNumber?.trim()) {
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
@@ -23,7 +23,7 @@ export async function dropMessage(
   }
 
   // Validate message
-  if (!messageText || !messageText.trim()) {
+  if (!messageText?.trim()) {
     return { success: false, error: "Nachricht darf nicht leer sein." };
   }
 
@@ -49,8 +49,7 @@ export async function dropMessage(
       console.error("Supabase insert error:", error);
       return {
         success: false,
-        error:
-          "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",
+        error: "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",
       };
     }
 

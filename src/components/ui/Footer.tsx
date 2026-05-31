@@ -22,9 +22,7 @@ export default function Footer() {
           </Link>
         </div>
 
-        <p className="text-slate-500 dark:text-slate-500">
-          © 2026 PlateDrop. Built with Next.js.
-        </p>
+        <p className="text-slate-500 dark:text-slate-500">© 2026 PlateDrop. Built with Next.js.</p>
       </div>
     </footer>
   );

@@ -1,12 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
+import { createClient } from "@/lib/supabase/server";
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Check for active user session
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
@@ -23,9 +19,7 @@ export default async function DashboardLayout({
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-              PlateDrop
-            </h1>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Dashboard
             </span>

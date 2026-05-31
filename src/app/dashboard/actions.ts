@@ -23,7 +23,7 @@ export async function claimPlate(
   const plateNumber = formData.get("plateNumber") as string;
 
   // Validate plate
-  if (!plateNumber || !plateNumber.trim()) {
+  if (!plateNumber?.trim()) {
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
@@ -137,9 +137,7 @@ export async function uploadProof(
     const fileName = `${plateId}-${timestamp}-${file.name}`;
 
     // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("proofs")
-      .upload(fileName, file);
+    const { error: uploadError } = await supabase.storage.from("proofs").upload(fileName, file);
 
     if (uploadError) {
       console.error("Upload error:", uploadError);

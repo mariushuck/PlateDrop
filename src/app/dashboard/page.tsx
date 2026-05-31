@@ -1,17 +1,17 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+import { AlertCircle, Camera, CheckCircle2, Inbox } from "lucide-react";
 import { useEffect, useState } from "react";
-import { claimPlate, uploadProof } from "./actions";
-import { Inbox, AlertCircle, CheckCircle2, Camera } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
-import { Database } from "@/types/database.types";
+import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/types/database.types";
+import { claimPlate, uploadProof } from "./actions";
 
 type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [_userId, setUserId] = useState<string | null>(null);
   const [allPlates, setAllPlates] = useState<VerifiedPlate[]>([]);
   const [messages, setMessages] = useState<
     Array<{
@@ -21,16 +21,15 @@ export default function DashboardPage() {
       created_at: string;
     }>
   >([]);
-  const [uploadingPlateId, setUploadingPlateId] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [_uploadingPlateId, _setUploadingPlateId] = useState<string | null>(null);
+  const [_uploadError, _setUploadError] = useState<string | null>(null);
 
   const supabase = createClient();
 
   useEffect(() => {
     async function loadData() {
       // Get authenticated user
-      const { data: userData, error: userError } =
-        await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError || !userData.user) {
         window.location.href = "/login";
@@ -54,9 +53,7 @@ export default function DashboardPage() {
       setAllPlates(plates);
 
       // Fetch messages for approved plates
-      const approvedPlateNumbers = plates
-        .filter((p) => p.is_verified)
-        .map((p) => p.plate_number);
+      const approvedPlateNumbers = plates.filter((p) => p.is_verified).map((p) => p.plate_number);
 
       if (approvedPlateNumbers.length > 0) {
         const { data: messagesData, error: messagesError } = await supabase
@@ -112,8 +109,7 @@ export default function DashboardPage() {
           Kennzeichen registrieren
         </h2>
         <p className="mb-6 text-sm text-slate-600 dark:text-slate-400">
-          Registrieren Sie ein deutsches Kennzeichen, um Nachrichten dafür zu
-          lesen.
+          Registrieren Sie ein deutsches Kennzeichen, um Nachrichten dafür zu lesen.
         </p>
         <ClaimPlateForm action={claimPlate} />
       </section>
@@ -145,9 +141,8 @@ export default function DashboardPage() {
                     {plate.verification_code}
                   </p>
                   <p className="mt-4 text-sm text-amber-800 dark:text-amber-200">
-                    Bitte schreibe diesen Code groß auf einen Zettel, lege ihn
-                    gut sichtbar hinter die Windschutzscheibe und mache ein
-                    Foto, auf dem dein Kennzeichen lesbar ist.
+                    Bitte schreibe diesen Code groß auf einen Zettel, lege ihn gut sichtbar hinter
+                    die Windschutzscheibe und mache ein Foto, auf dem dein Kennzeichen lesbar ist.
                   </p>
                 </div>
 
@@ -232,16 +227,13 @@ export default function DashboardPage() {
                             {msg.message_text}
                           </p>
                           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                            {new Date(msg.created_at).toLocaleDateString(
-                              "de-DE",
-                              {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )}
+                            {new Date(msg.created_at).toLocaleDateString("de-DE", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </p>
                         </div>
                       ))}
@@ -289,7 +281,7 @@ function ProofUploadForm({ plateId }: { plateId: string }) {
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } catch (err) {
+    } catch (_err) {
       setError("Ein Fehler ist aufgetreten");
       setIsUploading(false);
     }
@@ -311,13 +303,9 @@ function ProofUploadForm({ plateId }: { plateId: string }) {
       <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 p-4 transition-colors hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/10 dark:hover:border-amber-600">
         <Camera className="h-5 w-5 text-amber-600 dark:text-amber-400" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-            Foto hochladen
-          </p>
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Foto hochladen</p>
           <p className="text-xs text-amber-700 dark:text-amber-200">
-            {isUploading
-              ? "Wird hochgeladen..."
-              : "Klicke hier, um ein Bild zu wählen"}
+            {isUploading ? "Wird hochgeladen..." : "Klicke hier, um ein Bild zu wählen"}
           </p>
         </div>
         <input

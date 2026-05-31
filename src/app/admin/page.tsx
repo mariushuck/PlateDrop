@@ -1,11 +1,11 @@
 "use client";
 
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/types/database.types";
 import { approvePlate, rejectPlate } from "./actions";
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { Database } from "@/types/database.types";
 
 type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
 
@@ -15,9 +15,7 @@ interface PendingVerification extends VerifiedPlate {
 
 export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingVerifications, setPendingVerifications] = useState<
-    PendingVerification[]
-  >([]);
+  const [pendingVerifications, setPendingVerifications] = useState<PendingVerification[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -99,9 +97,7 @@ export default function AdminPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          Admin Dashboard
-        </h1>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
         <p className="mt-2 text-slate-600 dark:text-slate-400">
           Überprüfen und genehmigen Sie ausstehende Kennzeichen-Verifizierungen
         </p>
@@ -112,9 +108,7 @@ export default function AdminPage() {
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
           <div className="flex items-center gap-3">
             <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-sm text-red-800 dark:text-red-200">
-              {actionError}
-            </p>
+            <p className="text-sm text-red-800 dark:text-red-200">{actionError}</p>
           </div>
         </div>
       )}
@@ -157,9 +151,7 @@ export default function AdminPage() {
 
                 {/* Verification Code */}
                 <div className="mb-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Code:
-                  </p>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Code:</p>
                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-white">
                     {verification.verification_code}
                   </p>
@@ -168,6 +160,7 @@ export default function AdminPage() {
                 {/* Action Buttons */}
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => handleApprove(verification.id)}
                     disabled={processingId === verification.id}
                     className="flex-1 rounded-lg border border-green-600 bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-green-700 hover:bg-green-700 disabled:opacity-50 dark:border-green-500 dark:bg-green-500 dark:hover:border-green-600 dark:hover:bg-green-600"
@@ -179,6 +172,7 @@ export default function AdminPage() {
                     )}
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleReject(verification.id)}
                     disabled={processingId === verification.id}
                     className="flex-1 rounded-lg border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-red-700 hover:bg-red-700 disabled:opacity-50 dark:border-red-500 dark:bg-red-500 dark:hover:border-red-600 dark:hover:bg-red-600"

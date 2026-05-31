@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState, useEffect } from "react";
-import { validateGermanPlate } from "@/lib/utils/plateUtils";
 import { CheckCircle2 } from "lucide-react";
+import { useActionState, useEffect, useState } from "react";
+import { validateGermanPlate } from "@/lib/utils/plateUtils";
 
 interface ClaimPlateFormProps {
   action: (
@@ -80,19 +80,13 @@ export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
             )}
           </div>
 
-          {plateError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {plateError}
-            </p>
-          )}
+          {plateError && <p className="text-sm text-red-600 dark:text-red-400">{plateError}</p>}
         </div>
 
         {/* Error Display */}
         {state?.error && (
           <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200">
-              {state.error}
-            </p>
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
           </div>
         )}
 
