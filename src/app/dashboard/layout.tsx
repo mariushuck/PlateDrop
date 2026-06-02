@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,15 +26,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </span>
           </div>
 
-          {/* Logout Button */}
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+          {/* Nav Actions */}
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/settings"
+              className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             >
-              Abmelden
-            </button>
-          </form>
+              Einstellungen
+            </Link>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+              >
+                Abmelden
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

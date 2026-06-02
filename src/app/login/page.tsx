@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { signIn, signUp } from "@/app/auth/actions";
 
 type AuthMode = "signin" | "signup";
@@ -119,6 +120,15 @@ export default function LoginPage() {
                   : "Anmelden"}
             </button>
           </form>
+
+          {/* Forgot Password */}
+          {mode === "signin" && (
+            <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+              <Link href="/forgot-password" className="underline hover:text-slate-900 dark:hover:text-white">
+                Passwort vergessen?
+              </Link>
+            </p>
+          )}
 
           {/* Help Text */}
           <p className="mt-4 text-center text-xs text-slate-600 dark:text-slate-400">

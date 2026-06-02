@@ -162,7 +162,26 @@ CREATE TRIGGER on_auth_user_created
 
 
 -- ==========================================
--- 5) STORAGE BUCKET
+-- 5) SYNC PROFILE EMAIL ON AUTH EMAIL CHANGE
+-- ==========================================
+CREATE OR REPLACE FUNCTION sync_user_email()
+RETURNS trigger AS $$
+BEGIN
+  UPDATE public.profiles SET email = NEW.email WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_email_updated ON auth.users;
+CREATE TRIGGER on_auth_user_email_updated
+  AFTER UPDATE OF email ON auth.users
+  FOR EACH ROW
+  WHEN (OLD.email IS DISTINCT FROM NEW.email)
+  EXECUTE FUNCTION sync_user_email();
+
+
+-- ==========================================
+-- 6) STORAGE BUCKET
 -- ==========================================
 -- Create the proofs bucket (public — URLs in admin page are loaded directly)
 INSERT INTO storage.buckets (id, name, public)
@@ -171,7 +190,7 @@ ON CONFLICT (id) DO NOTHING;
 
 
 -- ==========================================
--- 6) GRANTS
+-- 7) GRANTS
 -- ==========================================
 GRANT INSERT ON messages TO anon, authenticated;
 GRANT SELECT ON profiles TO authenticated;
