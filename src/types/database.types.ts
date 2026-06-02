@@ -35,16 +35,19 @@ export type Database = {
           created_at: string;
           email: string | null;
           id: string;
+          is_admin: boolean;
         };
         Insert: {
           created_at?: string;
           email?: string | null;
           id: string;
+          is_admin?: boolean;
         };
         Update: {
           created_at?: string;
           email?: string | null;
           id?: string;
+          is_admin?: boolean;
         };
         Relationships: [
           {
@@ -63,6 +66,9 @@ export type Database = {
           is_verified: boolean;
           plate_number: string;
           user_id: string;
+          verification_status: "pending" | "approved" | "rejected";
+          verification_code: string;
+          proof_image_url: string | null;
         };
         Insert: {
           created_at?: string;
@@ -70,6 +76,9 @@ export type Database = {
           is_verified?: boolean;
           plate_number: string;
           user_id: string;
+          verification_status?: "pending" | "approved" | "rejected";
+          verification_code: string;
+          proof_image_url?: string | null;
         };
         Update: {
           created_at?: string;
@@ -77,6 +86,9 @@ export type Database = {
           is_verified?: boolean;
           plate_number?: string;
           user_id?: string;
+          verification_status?: "pending" | "approved" | "rejected";
+          verification_code?: string;
+          proof_image_url?: string | null;
         };
         Relationships: [
           {

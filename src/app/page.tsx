@@ -1,15 +1,10 @@
 "use client";
 
-import {
-  useActionState,
-  useRef,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
-import { dropMessage } from "./actions";
+import Link from "next/link";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { validateGermanPlate } from "@/lib/utils/plateUtils";
-import { CheckCircle2 } from "lucide-react";
+import { dropMessage } from "./actions";
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -17,7 +12,6 @@ export default function Home() {
   const [state, formAction, isPending] = useActionState(dropMessage, null);
   const [plateInput, setPlateInput] = useState("");
   const [messageInput, setMessageInput] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -27,25 +21,19 @@ export default function Home() {
       ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
       : "";
 
-  // Reset form on success
+  // Handle success/error with toast notifications
   useEffect(() => {
-    if (!state?.success) return;
-
-    startTransition(() => {
-      setShowSuccess(true);
-      setPlateInput("");
-      setMessageInput("");
-      formRef.current?.reset();
-    });
-
-    const timer = setTimeout(() => {
+    if (state?.success) {
+      toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
-        setShowSuccess(false);
+        setPlateInput("");
+        setMessageInput("");
+        formRef.current?.reset();
       });
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [state?.success, startTransition]);
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state?.success, state?.error]);
 
   const isFormValid =
     plateInput.trim() &&
@@ -57,10 +45,14 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
       {/* Header */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            PlateDrop
-          </h1>
+        <div className="relative flex flex-col items-center gap-1 px-4 py-6">
+          <Link
+            href="/login"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+          >
+            Anmelden
+          </Link>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">
             Hinterlasse anonym eine Nachricht für jeden
           </p>
@@ -69,20 +61,7 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="flex flex-1 flex-col px-4 py-8">
-        {showSuccess && (
-          <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              Nachricht erfolgreich gesendet! 🎉
-            </p>
-          </div>
-        )}
-
-        <form
-          ref={formRef}
-          action={formAction}
-          className="flex flex-1 flex-col gap-6"
-        >
+        <form ref={formRef} action={formAction} className="flex flex-1 flex-col gap-6">
           {/* License Plate Input */}
           <div className="flex flex-col gap-2">
             <label
@@ -111,11 +90,7 @@ export default function Home() {
               )}
             </div>
 
-            {plateError && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {plateError}
-              </p>
-            )}
+            {plateError && <p className="text-sm text-red-600 dark:text-red-400">{plateError}</p>}
 
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Deutsche Kennzeichen im Format KA-AB-1234
@@ -163,9 +138,7 @@ export default function Home() {
           {/* Error Display */}
           {state?.error && (
             <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                {state.error}
-              </p>
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
             </div>
           )}
 
@@ -186,11 +159,6 @@ export default function Home() {
           </button>
         </form>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-        <p>Anonym. Schnell. Sicher.</p>
-      </footer>
     </div>
   );
 }

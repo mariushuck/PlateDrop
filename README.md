@@ -1,38 +1,85 @@
-# PlateDrop 🚗✉️
+# PlateDrop
 
-**PlateDrop** ist der asymmetrische, anonyme Briefkasten für KFZ-Kennzeichen in Deutschland.
+PlateDrop ist eine privacy-first Web-App für deutsche Kennzeichen. Nachrichten können anonym an ein Kennzeichen gesendet werden. Lesen dürfen sie nur angemeldete Nutzer, die das jeweilige Kennzeichen verifiziert haben.
 
-Jeder kennt das Problem: Ein kaputtes Rücklicht, ein plattgedrückter Reifen oder ein blockiertes Garagentor im Vorbeifahren – aber man kann dem Fahrer keine Nachricht zukommen lassen. **PlateDrop** löst dies über einen asymmetrischen Kommunikationsansatz (Shadow-Drop).
+## Kernidee
 
-## 🚀 Das Architektur-Konzept ("The Golden Middle Way")
+PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 
-Um maximale virale Reichweite bei 100%iger DSGVO-Konformität zu erreichen, trennt PlateDrop den Schreib- und Leseprozess strikt:
+1. Öffentlich kann jede Person eine Nachricht an ein Kennzeichen senden, ohne Konto und ohne Login.
+2. Beim Speichern wird das Kennzeichen normalisiert, damit Eingaben wie Leerzeichen, Bindestriche und Kleinbuchstaben konsistent verarbeitet werden.
+3. Lesen ist nur nach Anmeldung und Kennzeichen-Claim möglich. Verifizierte Kennzeichen werden im Dashboard angezeigt.
+4. Ein Admin kann ausstehende Verifizierungen prüfen und freigeben oder ablehnen.
 
-1. **Der Schreiber (Null Reibung):** Sieht ein Auto, geht auf die Web-App, gibt das Kennzeichen ein und schreibt eine Nachricht (z. B. _"Dein rechtes Bremslicht ist defekt"_). **Kein Login oder Account erforderlich.**
-2. **Die Datenbank (Shadow-Drop):** Die Nachricht wird verschlüsselt gespeichert. Niemand im Internet kann diese Nachricht suchen oder einsehen. Sie existiert im "Schatten".
-3. **Der Empfänger (Sicher & Privat):** Der Fahrzeughalter registriert sich, verifiziert sein Kennzeichen (z. B. via Upload des Fahrzeugscheins) und schaltet damit exklusiv seinen privaten Posteingang für dieses Kennzeichen frei.
+## Tech Stack
 
-## 🛠️ Tech Stack
+- Next.js 16 mit App Router
+- React 19
+- TypeScript im Strict Mode
+- Tailwind CSS
+- Supabase für Auth, Datenbank und Storage
+- Jest und React Testing Library für Tests
+- `sonner` für Toasts
+- Biome für Linting und Formatierung
 
-- **Frontend:** Next.js 16 (App Router) & TypeScript
-- **Styling:** Tailwind CSS (Strikt Mobile-First für die spätere native Portierung)
-- **Backend/Datenbank:** Supabase (PostgreSQL mit Row-Level Security)
-- **Mobile-Brücke (Geplant):** Capacitor für die native Kompilierung zu iOS & Android
+## Wichtige Flows
 
-## 🔒 Datenbank & RLS-Logik (Sicherheitskern)
+- Öffentliches Drop-Formular auf `/`: Kennzeichen eingeben, Nachricht senden, Server Action schreibt in `messages`.
+- Anmeldung auf `/login`: Sign-in und Sign-up mit Supabase Auth.
+- Dashboard auf `/dashboard`: Kennzeichen registrieren, Verifizierungsstatus prüfen, Beweisfoto hochladen und Nachrichten der verifizierten Kennzeichen lesen.
+- Admin-Ansicht auf `/admin`: Offene Verifizierungen mit Proof-Bild prüfen.
 
-Die Datensicherheit wird direkt auf PostgreSQL-Ebene über **Row-Level Security (RLS)** erzwungen:
+## Daten- und Sicherheitsmodell
 
-- **Tabelle `messages`:**
-  - `INSERT`-Policy: `true` (Erlaubt anonyme Einwürfe von überall).
-  - `SELECT`-Policy: Erlaubt nur, wenn die `auth.uid()` des aktuellen Nutzers in der Tabelle `verified_plates` mit dem Status `is_verified = true` für dieses Kennzeichen hinterlegt ist.
+- `messages` erlaubt öffentliche Inserts.
+- `messages` ist beim Lesen durch RLS auf verifizierte Kennzeichen begrenzt.
+- `verified_plates` speichert Claims, Verifizierungsstatus und Proof-Upload-Referenzen.
+- Die Kennzeichenlogik liegt in `src/lib/utils/plateUtils.ts` und akzeptiert gängige deutsche Formate inklusive E- und H-Kennzeichen.
 
-## 📦 Installation & Entwicklung
+## Verfügbare Routen
+
+| Route          | Beschreibung                                                 | Zugriff                                            |
+| -------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| `/`            | Anonyme Nachricht an ein Kennzeichen senden                  | Öffentlich                                         |
+| `/login`       | Anmeldung und Registrierung                                  | Öffentlich                                         |
+| `/dashboard`   | Kennzeichen registrieren, Proof hochladen, Nachrichten lesen | Authentifiziert                                    |
+| `/admin`       | Ausstehende Verifizierungen prüfen                           | Authentifiziert, Admin-Logik in den Server Actions |
+| `/impressum`   | Impressum                                                    | Öffentlich                                         |
+| `/datenschutz` | Datenschutzerklärung                                         | Öffentlich                                         |
+
+## Entwicklung
 
 ```bash
-# Abhängigkeiten installieren
-npm install
-
-# Entwicklungsserver starten
-npm run dev
+pnpm install
+pnpm dev
 ```
+
+Weitere hilfreiche Scripts:
+
+```bash
+pnpm lint
+pnpm check
+pnpm format
+pnpm test
+pnpm test:watch
+pnpm build
+pnpm start
+```
+
+## Tests
+
+- `__tests__/utils/plateUtils.test.ts`: Normalisierung und Validierung von Kennzeichen
+- `__tests__/components/ClaimPlateForm.test.tsx`: Claim-Formular und Validierung
+
+## Projektstruktur
+
+- `src/app/actions.ts`: Öffentliche Nachrichtenerstellung
+- `src/app/dashboard/actions.ts`: Kennzeichen-Claim und Proof-Upload
+- `src/app/admin/actions.ts`: Admin-Genehmigung und Ablehnung
+- `src/app/auth/actions.ts`: Sign-in, Sign-up und Sign-out
+- `src/components/features/ClaimPlateForm.tsx`: Formular zum Registrieren eines Kennzeichens
+- `src/lib/utils/plateUtils.ts`: Kennzeichen-Normalisierung und -Validierung
+
+## Status
+
+Die App ist als mobile-first Webanwendung aufgebaut und für den laufenden Ausbau mit Supabase, Server Actions und RLS vorbereitet.
