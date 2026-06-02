@@ -1,17 +1,25 @@
-import { redirect } from "next/navigation";
+import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
+import { BottomNav } from "@/components/ui/BottomNav";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // Check for active user session
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
 
-  // Redirect to login if no user is authenticated
   if (error || !data.user) {
     redirect("/login");
   }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", data.user.id)
+    .single();
+
+  const isAdmin = profile?.is_admin === true;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
@@ -28,12 +36,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
           {/* Nav Actions */}
           <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard/settings"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-            >
-              Einstellungen
-            </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50"
+              >
+                <ShieldAlert size={14} />
+                Admin
+              </Link>
+            )}
             <form action={signOut}>
               <button
                 type="submit"
@@ -47,7 +58,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 pb-20">{children}</main>
+
+      <BottomNav />
     </div>
   );
 }
