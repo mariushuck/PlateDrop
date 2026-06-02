@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exit 2",
+            "asyncRewake": true,
+            "rewakeMessage": "Alle Tasks sind abgeschlossen. Prüfe jetzt einmalig, ob CLAUDE.md oder README.md aufgrund der durchgeführten Änderungen aktualisiert werden müssen, und wende ggf. die nötigen Änderungen an. Falls keine Aktualisierung nötig ist, tue nichts.",
+            "rewakeSummary": "Dokus prüfen (CLAUDE.md / README.md)"
+          }
+        ]
+      }
+    ]
+  }
+}
