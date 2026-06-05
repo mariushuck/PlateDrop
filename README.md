@@ -38,14 +38,17 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 
 ## Verfügbare Routen
 
-| Route          | Beschreibung                                                 | Zugriff                                            |
-| -------------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| `/`            | Anonyme Nachricht an ein Kennzeichen senden                  | Öffentlich                                         |
-| `/login`       | Anmeldung und Registrierung                                  | Öffentlich                                         |
-| `/dashboard`   | Kennzeichen registrieren, Proof hochladen, Nachrichten lesen | Authentifiziert                                    |
-| `/admin`       | Ausstehende Verifizierungen prüfen                           | Authentifiziert, Admin-Logik in den Server Actions |
-| `/impressum`   | Impressum                                                    | Öffentlich                                         |
-| `/datenschutz` | Datenschutzerklärung                                         | Öffentlich                                         |
+| Route                   | Beschreibung                                                 | Zugriff                                            |
+| ----------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| `/`                     | Anonyme Nachricht an ein Kennzeichen senden                  | Öffentlich                                         |
+| `/login`                | Anmeldung und Registrierung                                  | Öffentlich                                         |
+| `/forgot-password`      | Passwort-Reset anfordern                                     | Öffentlich                                         |
+| `/reset-password`       | Neues Passwort setzen (via Reset-Link)                       | Öffentlich                                         |
+| `/dashboard`            | Kennzeichen registrieren, Proof hochladen, Nachrichten lesen | Authentifiziert                                    |
+| `/dashboard/settings`   | E-Mail und Passwort ändern                                   | Authentifiziert                                    |
+| `/admin`                | Ausstehende Verifizierungen prüfen                           | Authentifiziert, Admin-Logik in den Server Actions |
+| `/impressum`            | Impressum                                                    | Öffentlich                                         |
+| `/datenschutz`          | Datenschutzerklärung                                         | Öffentlich                                         |
 
 ## Entwicklung
 
@@ -75,8 +78,10 @@ pnpm start
 
 - `src/app/actions.ts`: Öffentliche Nachrichtenerstellung
 - `src/app/dashboard/actions.ts`: Kennzeichen-Claim und Proof-Upload
+- `src/app/dashboard/settings/actions.ts`: E-Mail- und Passwortänderung
 - `src/app/admin/actions.ts`: Admin-Genehmigung und Ablehnung
 - `src/app/auth/actions.ts`: Sign-in, Sign-up und Sign-out
+- `src/app/forgot-password/actions.ts`: Passwort-Reset-E-Mail versenden
 - `src/components/features/ClaimPlateForm.tsx`: Formular zum Registrieren eines Kennzeichens
 - `src/lib/utils/plateUtils.ts`: Kennzeichen-Normalisierung und -Validierung
 
