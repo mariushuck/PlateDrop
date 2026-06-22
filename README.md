@@ -16,7 +16,7 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 - Next.js 16 mit App Router
 - React 19
 - TypeScript im Strict Mode
-- Tailwind CSS
+- Tailwind CSS 4
 - Supabase für Auth, Datenbank und Storage
 - Jest und React Testing Library für Tests
 - `sonner` für Toasts
@@ -33,7 +33,9 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 
 - `messages` erlaubt öffentliche Inserts.
 - `messages` ist beim Lesen durch RLS auf verifizierte Kennzeichen begrenzt.
+- Das anonyme Senden ist rate-limitiert: pro IP über einen pseudonymisierten, täglich rotierenden SHA-256-Hash (RPC `check_message_rate`) und pro Kennzeichen über einen DB-Trigger (`enforce_message_rate_limit`) als Backstop. DSGVO-konform, da keine Klartext-IP gespeichert wird.
 - `verified_plates` speichert Claims, Verifizierungsstatus und Proof-Upload-Referenzen.
+- Proof-Bilder liegen in einem privaten Supabase-Storage-Bucket (`proofs`); die Admin-Ansicht greift über kurzlebige signierte URLs zu, nie über öffentliche URLs.
 - Die Kennzeichenlogik liegt in `src/lib/utils/plateUtils.ts` und akzeptiert gängige deutsche Formate inklusive E- und H-Kennzeichen.
 
 ## Verfügbare Routen
@@ -55,6 +57,16 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 ```bash
 pnpm install
 pnpm dev
+```
+
+### Environment-Variablen
+
+In `.env.local` werden folgende Variablen benötigt:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+RATE_LIMIT_SALT=          # geheimes Salt zum Hashen der Client-IPs im Nachrichten-Rate-Limiter
 ```
 
 Weitere hilfreiche Scripts:
@@ -84,6 +96,7 @@ pnpm start
 - `src/app/forgot-password/actions.ts`: Passwort-Reset-E-Mail versenden
 - `src/components/features/ClaimPlateForm.tsx`: Formular zum Registrieren eines Kennzeichens
 - `src/lib/utils/plateUtils.ts`: Kennzeichen-Normalisierung und -Validierung
+- `src/lib/utils/rateLimit.ts`: IP-Extraktion und pseudonymisiertes Hashing für den Rate-Limiter
 
 ## Status
 
