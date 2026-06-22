@@ -11,6 +11,7 @@ type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
 
 interface PendingVerification extends VerifiedPlate {
   proof_image_url: string;
+  signedUrl: string;
 }
 
 export default function AdminPage() {
@@ -38,7 +39,33 @@ export default function AdminPage() {
           return;
         }
 
-        setPendingVerifications((data || []) as PendingVerification[]);
+        const rows = (data || []) as VerifiedPlate[];
+        const paths = rows.map((r) => r.proof_image_url).filter((p): p is string => Boolean(p));
+
+        // The proofs bucket is private — mint short-lived signed URLs for display.
+        const { data: signed, error: signError } = await supabase.storage
+          .from("proofs")
+          .createSignedUrls(paths, 60 * 10);
+
+        if (signError) {
+          console.error("Error signing proof URLs:", signError);
+        }
+
+        const urlByPath = new Map(
+          (signed || [])
+            .filter((s) => s.signedUrl && s.path)
+            .map((s) => [s.path as string, s.signedUrl]),
+        );
+
+        const withUrls = rows
+          .filter((r) => r.proof_image_url && urlByPath.has(r.proof_image_url))
+          .map((r) => ({
+            ...r,
+            proof_image_url: r.proof_image_url as string,
+            signedUrl: urlByPath.get(r.proof_image_url as string) as string,
+          }));
+
+        setPendingVerifications(withUrls);
         setIsLoading(false);
       } catch (err) {
         console.error("Unexpected error:", err);
@@ -133,7 +160,7 @@ export default function AdminPage() {
               {/* Image Container: provide explicit width/height/alt to avoid layout shift */}
               <div className="w-full overflow-hidden rounded-t-xl">
                 <Image
-                  src={verification.proof_image_url}
+                  src={verification.signedUrl}
                   alt={`Beweisfoto für ${verification.plate_number}`}
                   width={800}
                   height={800}

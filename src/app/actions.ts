@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
+import { getClientIpHash } from "@/lib/utils/rateLimit";
+
+const RATE_LIMIT_ERROR = "Zu viele Anfragen. Bitte versuchen Sie es in einigen Minuten erneut.";
 
 export async function dropMessage(
   _prevState: { success: boolean; error?: string } | null,
@@ -40,6 +43,25 @@ export async function dropMessage(
   try {
     const supabase = await createClient();
 
+    // Per-IP rate limit (pseudonymized). Allowed when no IP can be determined;
+    // the per-plate DB trigger still applies as a backstop.
+    const ipHash = await getClientIpHash();
+    const { data: allowed, error: rateError } = await supabase.rpc("check_message_rate", {
+      p_ip_hash: ipHash,
+    });
+
+    if (rateError) {
+      console.error("Rate limit check error:", rateError);
+      return {
+        success: false,
+        error: "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",
+      };
+    }
+
+    if (allowed === false) {
+      return { success: false, error: RATE_LIMIT_ERROR };
+    }
+
     const { error } = await supabase.from("messages").insert({
       plate_number: normalizedPlate,
       message_text: messageText.trim(),
@@ -47,6 +69,12 @@ export async function dropMessage(
 
     if (error) {
       console.error("Supabase insert error:", error);
+
+      // Raised by the per-plate rate-limit trigger (SQLSTATE 23514).
+      if (error.code === "23514") {
+        return { success: false, error: RATE_LIMIT_ERROR };
+      }
+
       return {
         success: false,
         error: "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",

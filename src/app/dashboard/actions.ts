@@ -132,12 +132,14 @@ export async function uploadProof(
       };
     }
 
-    // Generate unique filename
+    // Build a user-scoped object path so the bucket's owner RLS matches on the
+    // "<user_id>/" prefix. The bucket is private; the raw path is never public.
     const timestamp = Date.now();
-    const fileName = `${plateId}-${timestamp}-${file.name}`;
+    const extension = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+    const objectPath = `${userData.user.id}/${plateId}-${timestamp}.${extension}`;
 
     // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage.from("proofs").upload(fileName, file);
+    const { error: uploadError } = await supabase.storage.from("proofs").upload(objectPath, file);
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
@@ -147,16 +149,11 @@ export async function uploadProof(
       };
     }
 
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("proofs").getPublicUrl(fileName);
-
-    // Update verified_plates with proof image URL
+    // Store the object path (not a public URL) — proofs are read via signed URLs.
     const { error: updateError } = await supabase
       .from("verified_plates")
       .update({
-        proof_image_url: publicUrl,
+        proof_image_url: objectPath,
       })
       .eq("id", plateId)
       .eq("user_id", userData.user.id);
@@ -169,7 +166,7 @@ export async function uploadProof(
       };
     }
 
-    return { success: true, url: publicUrl };
+    return { success: true, url: objectPath };
   } catch (err) {
     console.error("Unexpected error:", err);
     return {

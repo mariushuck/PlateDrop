@@ -144,6 +144,96 @@ CREATE POLICY "messages_no_delete_public" ON messages
 
 
 -- ==========================================
+-- 3a) SPAM PROTECTION — PER-PLATE RATE LIMIT (TRIGGER, NO PII)
+-- ==========================================
+-- Caps how many messages a single plate can receive per hour. This is the
+-- backstop against targeted flooding and is fully anonymous (no user/IP stored).
+CREATE OR REPLACE FUNCTION enforce_message_rate_limit()
+RETURNS trigger AS $$
+DECLARE
+  recent_count integer;
+  max_per_hour constant integer := 20;
+BEGIN
+  SELECT count(*) INTO recent_count
+  FROM messages
+  WHERE plate_number = NEW.plate_number
+    AND created_at > now() - interval '1 hour';
+
+  IF recent_count >= max_per_hour THEN
+    RAISE EXCEPTION 'message rate limit exceeded for plate'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_enforce_message_rate_limit ON messages;
+CREATE TRIGGER trg_enforce_message_rate_limit
+  BEFORE INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION enforce_message_rate_limit();
+
+-- Trigger functions fire regardless of EXECUTE grant — keep this off the RPC API.
+REVOKE EXECUTE ON FUNCTION enforce_message_rate_limit() FROM PUBLIC, anon, authenticated;
+
+
+-- ==========================================
+-- 3b) SPAM PROTECTION — PER-IP RATE LIMIT (PSEUDONYMIZED)
+-- ==========================================
+-- The Server Action passes a salted SHA-256 hash of the client IP (never the raw
+-- IP). The RPC atomically maintains a rolling window per hash and returns whether
+-- the request is allowed.
+CREATE TABLE IF NOT EXISTS message_throttle (
+  ip_hash text PRIMARY KEY,
+  window_start timestamptz NOT NULL DEFAULT now(),
+  count integer NOT NULL DEFAULT 0
+);
+
+ALTER TABLE IF EXISTS message_throttle ENABLE ROW LEVEL SECURITY;
+-- No policies + no grants: only the SECURITY DEFINER RPC below may touch this table.
+REVOKE ALL ON TABLE message_throttle FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION check_message_rate(p_ip_hash text)
+RETURNS boolean AS $$
+DECLARE
+  max_per_window constant integer := 10;        -- requests ...
+  window_length constant interval := interval '1 minute'; -- ... per minute
+  current_count integer;
+  current_start timestamptz;
+BEGIN
+  IF p_ip_hash IS NULL OR length(p_ip_hash) = 0 THEN
+    RETURN true; -- cannot identify caller; fall back to per-plate trigger
+  END IF;
+
+  INSERT INTO message_throttle (ip_hash, window_start, count)
+  VALUES (p_ip_hash, now(), 0)
+  ON CONFLICT (ip_hash) DO NOTHING;
+
+  SELECT count, window_start INTO current_count, current_start
+  FROM message_throttle
+  WHERE ip_hash = p_ip_hash
+  FOR UPDATE;
+
+  IF current_start < now() - window_length THEN
+    UPDATE message_throttle
+      SET window_start = now(), count = 1
+      WHERE ip_hash = p_ip_hash;
+    RETURN true;
+  END IF;
+
+  IF current_count >= max_per_window THEN
+    RETURN false;
+  END IF;
+
+  UPDATE message_throttle SET count = count + 1 WHERE ip_hash = p_ip_hash;
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+GRANT EXECUTE ON FUNCTION check_message_rate(text) TO anon, authenticated;
+
+
+-- ==========================================
 -- 4) AUTO-CREATE PROFILE ON SIGNUP (TRIGGER)
 -- ==========================================
 CREATE OR REPLACE FUNCTION handle_new_user()
@@ -153,7 +243,11 @@ BEGIN
   VALUES (new.id, new.email, false);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Trigger-only function: not meant to be called as an RPC. Revoke the default
+-- PUBLIC EXECUTE so anon/authenticated cannot invoke it via the Data API.
+REVOKE EXECUTE ON FUNCTION handle_new_user() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -170,7 +264,11 @@ BEGIN
   UPDATE public.profiles SET email = NEW.email WHERE id = NEW.id;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Trigger-only function: not meant to be called as an RPC. Revoke the default
+-- PUBLIC EXECUTE so anon/authenticated cannot invoke it via the Data API.
+REVOKE EXECUTE ON FUNCTION sync_user_email() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS on_auth_user_email_updated ON auth.users;
 CREATE TRIGGER on_auth_user_email_updated
@@ -181,12 +279,37 @@ CREATE TRIGGER on_auth_user_email_updated
 
 
 -- ==========================================
--- 6) STORAGE BUCKET
+-- 6) STORAGE BUCKET (PRIVATE — accessed via signed URLs)
 -- ==========================================
--- Create the proofs bucket (public — URLs in admin page are loaded directly)
+-- Proof photos show real plates and personal context, so the bucket is private.
+-- Objects are keyed by "<user_id>/<...>" and read via short-lived signed URLs.
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('proofs', 'proofs', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('proofs', 'proofs', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
+-- Owners manage only objects under their own "<auth.uid()>/" prefix.
+DROP POLICY IF EXISTS "proofs_owner_all" ON storage.objects;
+CREATE POLICY "proofs_owner_all" ON storage.objects
+  FOR ALL
+  USING (
+    bucket_id = 'proofs'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'proofs'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Admins can read every proof (for the approval dashboard).
+DROP POLICY IF EXISTS "proofs_admin_select" ON storage.objects;
+CREATE POLICY "proofs_admin_select" ON storage.objects
+  FOR SELECT
+  USING (
+    bucket_id = 'proofs'
+    AND EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)
+  );
 
 
 -- ==========================================

@@ -69,4 +69,5 @@ Required in `.env.local`:
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+RATE_LIMIT_SALT=          # secret salt for hashing client IPs in the message rate limiter
 ```
