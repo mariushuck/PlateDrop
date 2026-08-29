@@ -1,25 +1,11 @@
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
 import { BottomNav } from "@/components/ui/BottomNav";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth/session";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-
-  if (error || !data.user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", data.user.id)
-    .single();
-
-  const isAdmin = profile?.is_admin === true;
+  const { isAdmin } = await requireUser();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">

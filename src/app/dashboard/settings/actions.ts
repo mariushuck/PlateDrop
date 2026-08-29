@@ -1,36 +1,67 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { APIError } from "better-auth/api";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth/server";
+import { requireUser } from "@/lib/auth/session";
 
 export async function changePassword(
   _prev: { error: string | null; success: boolean },
-  formData: FormData
+  formData: FormData,
 ) {
+  const currentPassword = formData.get("currentPassword") as string;
   const password = formData.get("password") as string;
   const confirm = formData.get("confirm") as string;
 
+  if (!currentPassword) {
+    return { error: "Bitte geben Sie Ihr aktuelles Passwort ein.", success: false };
+  }
   if (password !== confirm) return { error: "Passwörter stimmen nicht überein.", success: false };
-  if (password.length < 6) return { error: "Passwort muss mindestens 6 Zeichen haben.", success: false };
+  if (password.length < 6) {
+    return { error: "Passwort muss mindestens 6 Zeichen haben.", success: false };
+  }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: "Fehler beim Aktualisieren des Passworts.", success: false };
-  return { error: null, success: true };
+  await requireUser();
+
+  try {
+    // better-auth verlangt das bisherige Passwort. Das ist strenger als zuvor
+    // und verhindert, dass eine übernommene Session das Konto abschließt.
+    await auth.api.changePassword({
+      body: { currentPassword, newPassword: password, revokeOtherSessions: true },
+      headers: await headers(),
+    });
+    return { error: null, success: true };
+  } catch (err) {
+    if (err instanceof APIError) {
+      return { error: "Aktuelles Passwort ist nicht korrekt.", success: false };
+    }
+    console.error("Fehler beim Aktualisieren des Passworts:", err);
+    return { error: "Fehler beim Aktualisieren des Passworts.", success: false };
+  }
 }
 
 export async function changeEmail(
   _prev: { error: string | null; success: boolean },
-  formData: FormData
+  formData: FormData,
 ) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   if (!email) return { error: "E-Mail-Adresse erforderlich.", success: false };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser(
-    { email },
-    { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard` }
-  );
-  if (error) return { error: "Fehler beim Aktualisieren der E-Mail-Adresse.", success: false };
-  // Supabase sends a confirmation email to the new address before the change takes effect
-  return { error: null, success: true };
+  await requireUser();
+
+  try {
+    // Die Bestätigung geht an die BISHERIGE Adresse; erst danach wird die
+    // Änderung wirksam (src/lib/auth/server.ts).
+    await auth.api.changeEmail({
+      body: { newEmail: email, callbackURL: "/dashboard" },
+      headers: await headers(),
+    });
+    return { error: null, success: true };
+  } catch (err) {
+    if (err instanceof APIError) {
+      return { error: "Fehler beim Aktualisieren der E-Mail-Adresse.", success: false };
+    }
+    console.error("Fehler beim Aktualisieren der E-Mail-Adresse:", err);
+    return { error: "Fehler beim Aktualisieren der E-Mail-Adresse.", success: false };
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { changePassword, changeEmail } from "./actions";
+import { changeEmail, changePassword } from "./actions";
 
 const pwInit = { error: null as string | null, success: false };
 const emailInit = { error: null as string | null, success: false };
@@ -29,11 +29,33 @@ export default function SettingsPage() {
           <form action={pwAction} className="flex flex-col gap-4">
             {pwState.error && (
               <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200">{pwState.error}</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                  {pwState.error}
+                </p>
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <label htmlFor="pw-new" className="text-sm font-semibold text-slate-900 dark:text-white">
+              <label
+                htmlFor="pw-current"
+                className="text-sm font-semibold text-slate-900 dark:text-white"
+              >
+                Aktuelles Passwort
+              </label>
+              <input
+                id="pw-current"
+                name="currentPassword"
+                type="password"
+                required
+                autoComplete="current-password"
+                disabled={pwPending}
+                className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="pw-new"
+                className="text-sm font-semibold text-slate-900 dark:text-white"
+              >
                 Neues Passwort
               </label>
               <input
@@ -49,7 +71,10 @@ export default function SettingsPage() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label htmlFor="pw-confirm" className="text-sm font-semibold text-slate-900 dark:text-white">
+              <label
+                htmlFor="pw-confirm"
+                className="text-sm font-semibold text-slate-900 dark:text-white"
+              >
                 Passwort bestätigen
               </label>
               <input
@@ -79,23 +104,28 @@ export default function SettingsPage() {
           E-Mail-Adresse ändern
         </h2>
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Wir senden eine Bestätigungs-E-Mail an die neue Adresse.
+          Wir senden eine Bestätigungs-E-Mail an deine bisherige Adresse.
         </p>
         {emailState.success ? (
           <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
             <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              Bestätigungs-E-Mail gesendet. Bitte prüfe dein Postfach.
+              Bestätigungs-E-Mail an deine bisherige Adresse gesendet.
             </p>
           </div>
         ) : (
           <form action={emailAction} className="flex flex-col gap-4">
             {emailState.error && (
               <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200">{emailState.error}</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                  {emailState.error}
+                </p>
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <label htmlFor="email" className="text-sm font-semibold text-slate-900 dark:text-white">
+              <label
+                htmlFor="email"
+                className="text-sm font-semibold text-slate-900 dark:text-white"
+              >
                 Neue E-Mail-Adresse
               </label>
               <input
