@@ -17,6 +17,7 @@
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
     "db:migrate": "node scripts/migrate.mjs",
     "db:set-admin": "node scripts/set-admin.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
