@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!src/types/database.types.ts", "!src/app/globals.css"]
+    "includes": ["**", "!src/app/globals.css"]
   },
   "formatter": {
     "enabled": true,
