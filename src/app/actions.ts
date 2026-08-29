@@ -1,10 +1,11 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { checkMessageRate, insertMessage, PlateRateLimitError } from "@/lib/db/queries";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
 
 const RATE_LIMIT_ERROR = "Zu viele Anfragen. Bitte versuchen Sie es in einigen Minuten erneut.";
+const GENERIC_ERROR = "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.";
 
 export async function dropMessage(
   _prevState: { success: boolean; error?: string } | null,
@@ -37,56 +38,23 @@ export async function dropMessage(
     };
   }
 
-  // Normalize plate and insert
   const normalizedPlate = normalizePlate(plateNumber);
 
   try {
-    const supabase = await createClient();
-
-    // Per-IP rate limit (pseudonymized). Allowed when no IP can be determined;
-    // the per-plate DB trigger still applies as a backstop.
-    const ipHash = await getClientIpHash();
-    const { data: allowed, error: rateError } = await supabase.rpc("check_message_rate", {
-      p_ip_hash: ipHash,
-    });
-
-    if (rateError) {
-      console.error("Rate limit check error:", rateError);
-      return {
-        success: false,
-        error: "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",
-      };
-    }
-
-    if (allowed === false) {
+    // Limit je Absender (pseudonymisiert). Ohne bestimmbare IP wird durch-
+    // gelassen; der Deckel je Kennzeichen greift dann als Backstop.
+    const allowed = await checkMessageRate(await getClientIpHash());
+    if (!allowed) {
       return { success: false, error: RATE_LIMIT_ERROR };
     }
 
-    const { error } = await supabase.from("messages").insert({
-      plate_number: normalizedPlate,
-      message_text: messageText.trim(),
-    });
-
-    if (error) {
-      console.error("Supabase insert error:", error);
-
-      // Raised by the per-plate rate-limit trigger (SQLSTATE 23514).
-      if (error.code === "23514") {
-        return { success: false, error: RATE_LIMIT_ERROR };
-      }
-
-      return {
-        success: false,
-        error: "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.",
-      };
-    }
-
+    await insertMessage(normalizedPlate, messageText.trim());
     return { success: true };
   } catch (err) {
-    console.error("Unexpected error:", err);
-    return {
-      success: false,
-      error: "Ein unerwarteter Fehler ist aufgetreten.",
-    };
+    if (err instanceof PlateRateLimitError) {
+      return { success: false, error: RATE_LIMIT_ERROR };
+    }
+    console.error("Fehler beim Speichern der Nachricht:", err);
+    return { success: false, error: GENERIC_ERROR };
   }
 }
