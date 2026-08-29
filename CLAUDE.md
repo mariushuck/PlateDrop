@@ -7,16 +7,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev           # Start development server
-pnpm build         # Production build
-pnpm lint          # Run Biome linter
-pnpm check         # Run Biome linter + formatter check
-pnpm format        # Auto-format with Biome
-pnpm test          # Run Jest tests
-pnpm test:watch    # Jest in watch mode
+pnpm dev              # Start development server
+pnpm build            # Production build
+pnpm lint             # Run Biome linter
+pnpm check            # Run Biome linter + formatter check
+pnpm format           # Auto-format with Biome
+pnpm typecheck        # TypeScript, no emit
+pnpm test             # Jest unit tests (no Docker needed)
+pnpm test:db:up       # Throwaway Postgres + Mailpit for integration tests
+pnpm test:integration # Integration tests against real Postgres
+pnpm test:db:down     # Tear the test containers down
+pnpm smoke            # End-to-end HTTP test against a running `docker compose up`
+pnpm db:migrate       # Apply db/migrations/*.sql
 ```
 
-To run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
+Run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
+
+Run the whole stack: `docker compose up -d` (app on :3000, Mailpit on :8025).
 
 ## What PlateDrop Is
 
@@ -24,34 +31,86 @@ To run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
 
 ## Architecture
 
-**Stack**: Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS 4 · Supabase (Postgres + Auth)
+**Stack**: Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS 4 · PostgreSQL 18 via `pg` · better-auth · nodemailer · Docker Compose
 
 **Key path alias**: `@/*` → `src/*`
 
-**Supabase clients**:
-- `src/lib/supabase/client.ts` — browser client (for Client Components)
-- `src/lib/supabase/server.ts` — server client (for Server Components and Actions)
+**Everything runs locally.** There is no managed backend. The app talks to its own Postgres over a `pg` pool, better-auth stores users and sessions in that same database, proof photos live in a Docker volume, and mail goes out over SMTP (Mailpit in development).
 
-**Server Actions** are the exclusive mechanism for mutations (message submission, plate claims, admin approvals). No API routes.
+### Database access
 
-**Database security via RLS** (never bypass):
-- `messages`: public `INSERT`; `SELECT` only if `auth.uid()` matches `user_id` on the requester's `verified_plates` row for that `plate_number`
-- `verified_plates`: users manage only their own rows; admins can update `is_verified`
-- `profiles`: users read/update only their own row
+- `src/lib/db/pool.ts` — the `pg` pool (one per process, survives dev hot-reload)
+- `src/lib/db/context.ts` — `withUser(userId, fn)` / `withAnon(fn)`: opens a transaction and sets the requesting user as a **transaction-local** session variable
+- `src/lib/db/queries.ts` — **every** SQL statement in the application. Never query the database from anywhere else.
+- `src/lib/db/types.ts` — hand-written row types matching `db/migrations/0003_app_tables.sql`
 
-**Database schema** (defined in `db/supabase_init.sql`):
-- `profiles` — linked to `auth.users`; has `is_admin boolean` for admin access; auto-created via DB trigger on signup (no manual insert needed)
-- `verified_plates` — `user_id`, `plate_number` (unique), `is_verified`, `verification_status` (`pending`/`approved`/`rejected`), `verification_code` (generated 6-char code shown to user), `proof_image_url`
-- `messages` — `plate_number`, `message_text`, `created_at`
-- Generated types: `src/types/database.types.ts`
+Client Components cannot reach the database. Pages that need data are Server Components; interactive parts are small Client Components underneath them.
 
-**Plate verification flow**: User claims plate → system generates verification code (format `XX-XXXX`) → user writes code on paper, places behind windshield, photos it → user uploads photo to Supabase Storage bucket `proofs` → admin reviews photo in `/admin` and approves/rejects. Only `is_verified = true` plates unlock message reading.
+### Authorization — two independent layers, keep both
 
-**Admin authorization**: `/admin` routes check `profiles.is_admin` at the Server Action level. No middleware-level guard exists — admin checks are done inline in each admin Server Action.
+1. **Row Level Security.** The app connects as `platedrop_app`: not an owner, no `BYPASSRLS`, minimal grants — so the policies genuinely apply. Policies read the current user via `app.current_user_id()`, which returns the transaction-local `app.user_id` set by `withUser()`. Transaction-local matters: the value dies with COMMIT/ROLLBACK and cannot leak to the next request that reuses the pooled connection.
+2. **Application layer.** Every function in `queries.ts` also filters explicitly by `user_id`, and admin Server Actions check the session's `isAdmin` before touching the database.
 
-**German plate normalization**: All plates go through `src/lib/utils/plateUtils.ts` before any DB query or insert. Supports standard, E-plate, and H-plate formats.
+A vulnerability requires both layers to fail. When adding a query, add both.
 
-**Forms** use React 19's `useActionState` hook wired to Server Actions. The `dashboard/page.tsx` is a Client Component that fetches data client-side after an auth check (redirects to `/login` if unauthenticated).
+The RLS invariants are covered by `__tests__/integration/rls.test.ts`. Changing `db/migrations/0004_policies.sql` without running that suite is not acceptable.
+
+### Auth
+
+- `src/lib/auth/server.ts` — better-auth instance (email/password, required email verification, password reset, email change)
+- `src/lib/auth/session.ts` — `getSessionUser()`, `requireUser()`, `requireAdmin()`
+- `src/lib/auth/client.ts` — client for Client Components
+- `src/app/api/auth/[...all]/route.ts` — better-auth endpoints; the links in verification and reset mails point here
+
+`is_admin` is a column on the better-auth `users` table, declared `input: false` — no request payload can set it. There is no `profiles` table. Admin rights are granted only via `scripts/set-admin.mjs` with owner credentials.
+
+### Database schema
+
+Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.mjs` (tracked in `schema_migrations`, each file in its own transaction). Never edit an already-applied file — add a new one.
+
+- `0001` roles and `app.current_user_id()`
+- `0002` better-auth tables (`users`, `sessions`, `accounts`, `verifications`) — generated by `scripts/generate-auth-schema.mjs`, regenerate on a better-auth upgrade. Deliberately without RLS: better-auth must create users and sessions before any user context exists.
+- `0003` `verified_plates`, `messages`, `message_throttle`
+- `0004` RLS policies and grants — the security model
+- `0005` both rate limits
+
+### Storage
+
+Proof photos go to `PROOFS_DIR` under `<userId>/<plateId>-<timestamp>.<ext>`, handled by `src/lib/storage/proofs.ts`. The path is validated against a strict pattern before any filesystem access, and the extension comes from the content type, never from the submitted filename.
+
+**Plate verification flow**: User claims plate → system generates verification code (format `XX-XXXX`) → user writes code on paper, places behind windshield, photos it → user uploads photo → admin reviews it in `/admin` and approves/rejects. Only `is_verified = true` plates unlock message reading.
+
+### Mutations and routes
+
+**Server Actions are the exclusive mechanism for mutations** (message submission, plate claims, admin approvals, all auth forms). Do not add API routes for writes.
+
+Exactly two route handlers exist, and both are deliberate exceptions:
+
+- `src/app/api/auth/[...all]/route.ts` — required by better-auth; the links in its e-mails have to hit a URL.
+- `src/app/api/proofs/[...path]/route.ts` — **GET only, mutates nothing**. An `<img>` tag needs a URL, not a Server Action. It re-checks session and authorization on every single request, which replaced Supabase's pre-issued signed URLs: access ends the moment a plate is rejected or deleted, rather than when a signature expires.
+
+**German plate normalization**: All plates go through `src/lib/utils/plateUtils.ts` before any DB query or insert. `normalizePlate` strips hyphens and spaces and upper-cases, so the stored form is e.g. `KAAB1234`. Write and read paths must use it identically or the join in `listMessagesForUser` stops matching.
+
+**Rate limiting**: per sender via a salted, daily-rotating SHA-256 hash of the IP (`check_message_rate`, 10/minute) and per plate via a DB trigger (`enforce_message_rate_limit`, 20/hour). The raw IP is never stored.
+
+**Forms** use React 19's `useActionState` wired to Server Actions.
+
+## Docker
+
+- `docker-compose.yml` — base: `db`, one-shot `migrate`, `web`, optional `proxy` (profile `proxy`)
+- `docker-compose.override.yml` — development, loaded automatically: hot reload plus Mailpit
+- `docker-compose.prod.yml` — production: standalone build, database not exposed
+- `docker-compose.test.yml` — throwaway Postgres and Mailpit for the integration tests
+
+`web` and `migrate` share one image (the `runner` stage); the standalone output already contains `pg`.
+
+Note: since `postgres:18` the data volume mounts at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.
+
+## Testing
+
+New behavior is written test-first. For anything touching authorization, verify the test actually catches a regression by temporarily breaking the policy or check and watching it fail — several tests in this repo were only made meaningful that way.
+
+Integration tests need `pnpm test:db:up` first. They run serially against one database and reset it between tests.
 
 ## UI Rules
 
@@ -65,9 +124,4 @@ To run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
 
 ## Environment Variables
 
-Required in `.env.local`:
-```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-RATE_LIMIT_SALT=          # secret salt for hashing client IPs in the message rate limiter
-```
+See `.env.example` for the full annotated list. Required: `DATABASE_URL`, `DATABASE_ADMIN_URL`, `POSTGRES_*`, `APP_DB_PASSWORD`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SMTP_*`, `MAIL_FROM`, `PROOFS_DIR`, `RATE_LIMIT_SALT`, and `DOMAIN` for the proxy profile.
