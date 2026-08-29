@@ -1,0 +1,17 @@
+# Produktion:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Mit TLS-Proxy zusätzlich `--profile proxy`.
+services:
+  db:
+    # Nicht nach außen exponieren – nur das Compose-Netz erreicht die DB.
+    ports: !reset []
+
+  web:
+    build:
+      target: runner
+    environment:
+      NODE_ENV: production
+    # Kein Port-Mapping: der Zugriff läuft über den proxy-Service.
+    # Ohne Proxy hier `ports: ["3000:3000"]` ergänzen.
+    volumes:
+      - proofs:/data/proofs
