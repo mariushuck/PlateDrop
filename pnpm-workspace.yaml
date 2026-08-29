@@ -1,3 +1,5 @@
 allowBuilds:
+  # Von @swc/jest benötigt (Transformation der Integrationstests).
+  '@swc/core': true
   sharp: true
   unrs-resolver: true

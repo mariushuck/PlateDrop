@@ -1,0 +1,210 @@
+import "server-only";
+import { withAnon, withUser } from "./context";
+import type { Message, VerifiedPlate } from "./types";
+
+/** SQLSTATE 23505 – unique_violation. */
+const UNIQUE_VIOLATION = "23505";
+/** SQLSTATE 23514 – check_violation, ausgelöst vom Kennzeichen-Rate-Limit-Trigger. */
+const CHECK_VIOLATION = "23514";
+
+/** Das Kennzeichen hat sein Stundenlimit an Nachrichten erreicht. */
+export class PlateRateLimitError extends Error {
+  constructor() {
+    super("Nachrichtenlimit für dieses Kennzeichen erreicht.");
+    this.name = "PlateRateLimitError";
+  }
+}
+
+/** Das Kennzeichen ist bereits von jemandem beansprucht. */
+export class PlateAlreadyClaimedError extends Error {
+  constructor() {
+    super("Dieses Kennzeichen ist bereits registriert.");
+    this.name = "PlateAlreadyClaimedError";
+  }
+}
+
+function hasSqlState(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === code;
+}
+
+// ---------------------------------------------------------------------------
+// Öffentlich – ohne angemeldeten Nutzer
+// ---------------------------------------------------------------------------
+
+/**
+ * Speichert eine anonyme Nachricht. Das Kennzeichen muss bereits normalisiert
+ * sein (siehe src/lib/utils/plateUtils.ts).
+ *
+ * @throws {PlateRateLimitError} wenn der Stunden-Deckel des Kennzeichens greift.
+ */
+export async function insertMessage(plateNumber: string, messageText: string): Promise<void> {
+  try {
+    await withAnon((client) =>
+      client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
+        plateNumber,
+        messageText,
+      ]),
+    );
+  } catch (error) {
+    if (hasSqlState(error, CHECK_VIOLATION)) throw new PlateRateLimitError();
+    throw error;
+  }
+}
+
+/**
+ * Fragt das Absender-Limit ab und zählt den Versuch mit. `null` steht für einen
+ * nicht bestimmbaren Absender — dann greift nur der Deckel je Kennzeichen.
+ */
+export async function checkMessageRate(ipHash: string | null): Promise<boolean> {
+  return withAnon(async (client) => {
+    const { rows } = await client.query<{ allowed: boolean }>(
+      "SELECT check_message_rate($1) AS allowed",
+      [ipHash],
+    );
+    return rows[0].allowed;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Angemeldeter Nutzer
+// ---------------------------------------------------------------------------
+
+/**
+ * Alle Kennzeichen des Nutzers, neueste zuerst.
+ *
+ * Der `user_id`-Filter ist bewusst redundant: die RLS-Policy schränkt bereits
+ * auf eigene Zeilen ein. Beides zusammen heißt, dass weder ein vergessener
+ * Filter noch eine fehlerhafte Policy allein zum Datenleck führt.
+ */
+export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<VerifiedPlate>(
+      "SELECT * FROM verified_plates WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId],
+    );
+    return rows;
+  });
+}
+
+/** Nachrichten an die verifizierten Kennzeichen des Nutzers, neueste zuerst. */
+export function listMessagesForUser(userId: string): Promise<Message[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<Message>(
+      `SELECT m.id, m.plate_number, m.message_text, m.created_at
+         FROM messages m
+         JOIN verified_plates vp ON vp.plate_number = m.plate_number
+        WHERE vp.user_id = $1
+          AND vp.is_verified = true
+        ORDER BY m.created_at DESC`,
+      [userId],
+    );
+    return rows;
+  });
+}
+
+/**
+ * Legt einen Kennzeichen-Claim an. Immer unverifiziert und `pending` — die
+ * Freigabe erfolgt ausschließlich durch einen Admin.
+ *
+ * @throws {PlateAlreadyClaimedError} wenn das Kennzeichen schon vergeben ist.
+ */
+export async function claimPlate(
+  userId: string,
+  plateNumber: string,
+  verificationCode: string,
+): Promise<VerifiedPlate> {
+  try {
+    return await withUser(userId, async (client) => {
+      const { rows } = await client.query<VerifiedPlate>(
+        `INSERT INTO verified_plates
+           (user_id, plate_number, is_verified, verification_status, verification_code)
+         VALUES ($1, $2, false, 'pending', $3)
+         RETURNING *`,
+        [userId, plateNumber, verificationCode],
+      );
+      return rows[0];
+    });
+  } catch (error) {
+    if (hasSqlState(error, UNIQUE_VIOLATION)) throw new PlateAlreadyClaimedError();
+    throw error;
+  }
+}
+
+/**
+ * Hinterlegt den Objektpfad des Beweisfotos.
+ *
+ * @returns `false`, wenn das Kennzeichen dem Nutzer nicht gehört.
+ */
+export function setProofPath(
+  userId: string,
+  plateId: string,
+  objectPath: string,
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const result = await client.query(
+      "UPDATE verified_plates SET proof_image_url = $1 WHERE id = $2 AND user_id = $3",
+      [objectPath, plateId, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  });
+}
+
+/**
+ * Darf der Nutzer dieses Beweisfoto sehen? Die Antwort kommt aus den Policies:
+ * ein Halter sieht nur seine eigene Zeile, ein Admin jede — findet die Abfrage
+ * nichts, ist der Zugriff nicht erlaubt.
+ */
+export function canReadProof(userId: string, objectPath: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      "SELECT 1 FROM verified_plates WHERE proof_image_url = $1",
+      [objectPath],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin
+// ---------------------------------------------------------------------------
+
+/**
+ * Offene Verifizierungen, die tatsächlich prüfbar sind – also nur solche mit
+ * hochgeladenem Beweisfoto. Für Nicht-Admins liefert die RLS-Policy eine leere
+ * Liste; die Admin-Prüfung in der Server Action bleibt trotzdem die erste
+ * Verteidigungslinie.
+ */
+export function listPendingVerifications(userId: string): Promise<VerifiedPlate[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<VerifiedPlate>(
+      `SELECT * FROM verified_plates
+        WHERE verification_status = 'pending'
+          AND proof_image_url IS NOT NULL
+        ORDER BY created_at ASC`,
+    );
+    return rows;
+  });
+}
+
+/**
+ * Gibt ein Kennzeichen frei oder lehnt es ab.
+ *
+ * @returns `false`, wenn nichts geändert wurde – etwa weil der Aufrufer kein
+ *          Admin ist oder das Kennzeichen nicht existiert.
+ */
+export function setPlateVerification(
+  userId: string,
+  plateId: string,
+  approved: boolean,
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const result = await client.query(
+      `UPDATE verified_plates
+          SET is_verified = $1,
+              verification_status = $2
+        WHERE id = $3`,
+      [approved, approved ? "approved" : "rejected", plateId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  });
+}
