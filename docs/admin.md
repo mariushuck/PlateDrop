@@ -450,17 +450,42 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "DELETE FROM users WHERE lower(email) = 'person@example.com';"
 
-# 4. Beweisfotos entfernen — die bleiben sonst verwaist im Volume liegen
-docker compose exec -T web rm -rf /data/proofs/<nutzer-id>
+# 4. Beweisfotos entfernen — die Kaskade erreicht das Dateisystem nicht
+docker compose run --rm migrate node scripts/prune-proofs.mjs --delete
 ```
+
+Schritt 4 räumt alle Dateien ab, auf die keine Zeile mehr zeigt — nicht nur die dieses Kontos. Ohne
+`--delete` zeigt das Skript zunächst nur an, was es entfernen würde. Mehr dazu unter
+[Regelmäßige Wartung](#b9-regelmäßige-wartung).
 
 **Warum die Schritte 2 und 4 nötig sind:**
 
 - `messages` hat bewusst keinen Bezug zum Konto, nur das Kennzeichen. Das schützt die Anonymität der
   Absender — heißt aber, dass Nachrichten eine Kontolöschung überdauern und nur über das Kennzeichen
   adressierbar sind.
-- Die Bilddateien liegen im Dateisystem, nicht in der Datenbank. Es gibt keinen Code, der sie
-  aufräumt; die Fremdschlüssel-Kaskade erreicht sie nicht.
+- Die Bilddateien liegen im Dateisystem, nicht in der Datenbank. Die Fremdschlüssel-Kaskade erreicht
+  sie nicht, deshalb das Aufräumskript.
 
 Bei Schritt 2 abwägen: Das Kennzeichen könnte später von jemand anderem beansprucht werden, der die
 alten Nachrichten dann läse. Für eine Löschanfrage ist das Entfernen die richtige Wahl.
+
+## B9 Regelmäßige Wartung
+
+### Verwaiste Beweisfotos entfernen
+
+```bash
+# nur anzeigen
+docker compose run --rm migrate node scripts/prune-proofs.mjs
+
+# tatsächlich löschen
+docker compose run --rm migrate node scripts/prune-proofs.mjs --delete
+```
+
+Das Skript vergleicht die Dateien unter `PROOFS_DIR` mit den `proof_image_url`-Werten und meldet
+alles, worauf keine Zeile mehr zeigt. Solche Dateien entstehen vor allem, wenn ein Konto per SQL
+gelöscht wurde — die Kaskade räumt die Datenbankzeilen ab, das Dateisystem erreicht sie nicht.
+
+Es verbindet sich bewusst als Owner: Die App-Rolle sähe wegen RLS nur die Zeilen eines einzelnen
+Nutzers und hielte deshalb sämtliche fremden Fotos für verwaist.
+
+Ein sinnvoller Rhythmus ist monatlich, und nach jeder Kontolöschung.

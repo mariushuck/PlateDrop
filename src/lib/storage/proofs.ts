@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 
 /**
@@ -118,6 +118,26 @@ export async function readProof(
     return { bytes, contentType: EXTENSION_TO_TYPE[extension] };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/**
+ * Entfernt ein Beweisfoto. Wird gebraucht, sobald ein Foto ersetzt wird — sonst
+ * bliebe die alte Datei als personenbezogenes Material im Volume liegen.
+ *
+ * Eine fehlende Datei ist kein Fehler: Der Aufrufer soll nicht jedes Mal selbst
+ * prüfen müssen, ob noch etwas da ist.
+ *
+ * @throws {InvalidProofPathError} bei einem Pfad, der nicht in das Verzeichnis gehört.
+ */
+export async function deleteProof(objectPath: string): Promise<void> {
+  const absolute = resolveObjectPath(objectPath);
+
+  try {
+    await unlink(absolute);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
 }
