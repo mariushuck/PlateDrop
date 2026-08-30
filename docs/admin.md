@@ -322,6 +322,18 @@ docker run --rm \
 > Die Bilder enthalten Kennzeichen und damit personenbezogene Daten. Backups verschlüsselt ablegen
 > und die Aufbewahrungsfrist begrenzen.
 
+**Beides in einem Schritt (mit Aufräumen alter Sicherungen)**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --profile backup run --rm backup
+```
+
+`scripts/backup.sh` läuft in einem `postgres:18-alpine`-Container (passende `pg_dump`-Version),
+schreibt `platedrop-<Datum>.sql.gz` und `proofs-<Datum>.tar.gz` in das `backups`-Volume und löscht
+Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Für einen Zeitplan siehe
+[Regelmäßige Wartung](#b9-regelmäßige-wartung).
+
 ## B5 Zurückspielen
 
 **Datenbank**
@@ -511,4 +523,25 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 ```cron
 # sonntags um 4 Uhr aufräumen
 0 4 * * 0 cd /pfad/zu/platedrop && docker compose run --rm migrate node scripts/prune-sessions.mjs
+```
+
+### Veraltete Rate-Limit-Zeilen und optionale Nachrichten-Frist
+
+- `scripts/prune-throttle.mjs` löscht Zeilen aus `message_throttle`, deren Tages-Hash nie wieder
+  getroffen wird (Standard: älter als 2 Tage, `THROTTLE_RETAIN_DAYS`).
+- `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
+  Ohne gesetzte Variable passiert nichts – ob Nachrichten befristet aufbewahrt werden, ist eine
+  Produktentscheidung. Ist eine Frist gesetzt, nennt die Datenschutzerklärung sie als Speicherdauer.
+
+### Alles zusammen per Cron
+
+`scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-throttle`,
+`prune-messages` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
+Schritte nicht.
+
+```cron
+# täglich 03:30 – Datenpflege
+30 3 * * * cd /pfad/zu/platedrop && docker compose run --rm migrate node scripts/maintenance.mjs
+# täglich 04:00 – Sicherung inkl. Aufräumen alter Backups
+0 4 * * * cd /pfad/zu/platedrop && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile backup run --rm backup
 ```

@@ -218,8 +218,9 @@ export default function Datenschutz() {
             <ul className="list-inside list-disc space-y-1">
               <li>
                 <strong>Nachrichten:</strong> werden gespeichert, bis die Halter:in oder der Betrieb
-                sie entfernt. Eine automatische Löschung nach fester Frist ist derzeit nicht
-                eingerichtet.
+                sie entfernt. Eine automatische Löschung nach fester Frist greift nur, wenn der
+                Betreiber eine Speicherdauer festgelegt hat ({PLACEHOLDER} – Frist eintragen oder
+                diesen Zusatz streichen).
               </li>
               <li>
                 <strong>Konto- und Verifizierungsdaten:</strong> für die Dauer des Kontos; nach
