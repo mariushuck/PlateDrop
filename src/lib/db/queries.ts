@@ -158,6 +158,43 @@ export async function claimPlate(
   }
 }
 
+export interface UserDataExport {
+  plates: Array<{
+    plate_number: string;
+    verification_status: string;
+    is_verified: boolean;
+    created_at: Date;
+  }>;
+  messages: Array<{ plate_number: string; message_text: string; created_at: Date }>;
+}
+
+/**
+ * Sammelt die personenbezogenen Daten des Nutzers für eine Auskunft/Kopie
+ * nach Art. 15/20 DSGVO: seine Kennzeichen und die Nachrichten an seine
+ * VERIFIZIERTEN Kennzeichen. Die Kontostammdaten (E-Mail, Anlage) legt der
+ * Aufrufer aus der Session dazu.
+ */
+export function exportUserData(userId: string): Promise<UserDataExport> {
+  return withUser(userId, async (client) => {
+    const plates = await client.query<UserDataExport["plates"][number]>(
+      `SELECT plate_number, verification_status, is_verified, created_at
+         FROM verified_plates
+        WHERE user_id = $1
+        ORDER BY created_at`,
+      [userId],
+    );
+    const messages = await client.query<UserDataExport["messages"][number]>(
+      `SELECT m.plate_number, m.message_text, m.created_at
+         FROM messages m
+         JOIN verified_plates vp ON vp.plate_number = m.plate_number
+        WHERE vp.user_id = $1 AND vp.is_verified = true
+        ORDER BY m.created_at`,
+      [userId],
+    );
+    return { plates: plates.rows, messages: messages.rows };
+  });
+}
+
 /**
  * Gehört dieses Kennzeichen dem Nutzer? Vorabprüfung, damit für ein fremdes
  * `plateId` gar keine Datei geschrieben wird. `setProofPath` filtert danach

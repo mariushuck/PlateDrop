@@ -184,6 +184,36 @@ describe("claimPlate", () => {
   });
 });
 
+describe("exportUserData", () => {
+  beforeEach(migrateFresh);
+
+  it("liefert nur die Kennzeichen und Nachrichten des Nutzers", async () => {
+    const { exportUserData } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedPlate(stranger, "M-XY-9999", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "für den Halter");
+    await seedMessage("M-XY-9999", "für jemand anderen");
+
+    const data = await exportUserData(owner);
+
+    expect(data.plates.map((p) => p.plate_number)).toEqual(["KA-AB-1234"]);
+    expect(data.messages.map((m) => m.message_text)).toEqual(["für den Halter"]);
+  });
+
+  it("liefert keine Nachrichten an noch unverifizierte Kennzeichen", async () => {
+    const { exportUserData } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: false });
+    await seedMessage("KA-AB-1234", "noch nicht lesbar");
+
+    const data = await exportUserData(owner);
+
+    expect(data.messages).toEqual([]);
+  });
+});
+
 describe("plateBelongsToUser", () => {
   beforeEach(migrateFresh);
 

@@ -167,3 +167,25 @@ describe("deleteProof", () => {
     );
   });
 });
+
+describe("deleteAllProofsForUser", () => {
+  it("entfernt das gesamte Verzeichnis des Nutzers", async () => {
+    const { saveProof, deleteAllProofsForUser, readProof } = await loadProofs();
+    const objectPath = await saveProof(OWNER, PLATE, jpeg());
+
+    await deleteAllProofsForUser(OWNER);
+
+    await expect(readProof(objectPath)).resolves.toBeNull();
+    await expect(access(join(root, OWNER))).rejects.toThrow();
+  });
+
+  it("verträgt einen Nutzer ohne Fotos", async () => {
+    const { deleteAllProofsForUser } = await loadProofs();
+    await expect(deleteAllProofsForUser(OWNER)).resolves.toBeUndefined();
+  });
+
+  it("weist eine Nutzer-ID zurück, die keine UUID ist", async () => {
+    const { deleteAllProofsForUser, InvalidProofPathError } = await loadProofs();
+    await expect(deleteAllProofsForUser("../etc")).rejects.toBeInstanceOf(InvalidProofPathError);
+  });
+});

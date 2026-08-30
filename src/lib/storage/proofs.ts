@@ -1,6 +1,9 @@
 import "server-only";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
+
+/** Nutzer-ID = better-auth-UUID. Alles andere darf nie zu einem Pfad werden. */
+const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
  * Beweisfotos liegen im Dateisystem statt in einem Objektspeicher — ein
@@ -196,4 +199,18 @@ export async function deleteProof(objectPath: string): Promise<void> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
+}
+
+/**
+ * Entfernt das gesamte Beweisfoto-Verzeichnis eines Nutzers. Wird bei einer
+ * Kontolöschung aufgerufen — die FK-Kaskade räumt die Datenbank ab, das
+ * Dateisystem erreicht sie nicht.
+ *
+ * @throws {InvalidProofPathError} wenn `userId` keine better-auth-UUID ist.
+ */
+export async function deleteAllProofsForUser(userId: string): Promise<void> {
+  if (!USER_ID_PATTERN.test(userId)) {
+    throw new InvalidProofPathError();
+  }
+  await rm(join(proofsRoot(), userId), { recursive: true, force: true });
 }

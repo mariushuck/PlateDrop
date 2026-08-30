@@ -433,6 +433,13 @@ dcp ps                 # Was läuft, was ist gesund
 > sofort; abgelaufene Sitzungen räumt `prune-sessions.mjs` ab (siehe
 > [Regelmäßige Wartung](#b9-regelmäßige-wartung)). Ohne diesen Lauf bleiben sie liegen.
 
+> Selbstbedienung: In den Kontoeinstellungen (`/dashboard/settings`) kann jede angemeldete
+> Person ihre Daten als JSON exportieren und ihr Konto samt Kennzeichen und Beweisfotos
+> löschen (Passwortbestätigung). Der `beforeDelete`-Hook in `src/lib/auth/server.ts` räumt
+> dabei das Foto-Verzeichnis im Volume ab; die FK-Kaskade den Rest. Nachrichten an fremde
+> Kennzeichen bleiben – sie haben keinen Bezug zum Konto. Die folgenden manuellen Wege sind
+> für Anträge per E-Mail bzw. Sonderfälle.
+
 ### Auskunft erteilen
 
 ```bash

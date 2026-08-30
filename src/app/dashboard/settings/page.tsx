@@ -1,15 +1,37 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
-import { changeEmail, changePassword } from "./actions";
+import { changeEmail, changePassword, deleteAccount, exportMyData } from "./actions";
 
 const pwInit = { error: null as string | null, success: false };
 const emailInit = { error: null as string | null, success: false };
+const deleteInit = { error: null as string | null };
 
 export default function SettingsPage() {
   const [pwState, pwAction, pwPending] = useActionState(changePassword, pwInit);
   const [emailState, emailAction, emailPending] = useActionState(changeEmail, emailInit);
+  const [deleteState, deleteAction, deletePending] = useActionState(deleteAccount, deleteInit);
+  const [exportPending, setExportPending] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function handleExport() {
+    setExportError(null);
+    setExportPending(true);
+    try {
+      const { filename, json } = await exportMyData();
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Export fehlgeschlagen. Bitte später erneut versuchen.");
+    } finally {
+      setExportPending(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-10 px-4 py-8">
@@ -149,6 +171,72 @@ export default function SettingsPage() {
             </button>
           </form>
         )}
+      </section>
+
+      {/* Datenexport (DSGVO Art. 15/20) */}
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
+          Meine Daten exportieren
+        </h2>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+          Lädt deine Kontodaten, Kennzeichen und die Nachrichten an deine verifizierten Kennzeichen
+          als JSON-Datei herunter.
+        </p>
+        {exportError && (
+          <div className="mb-4 rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">{exportError}</p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exportPending}
+          className="self-start rounded-lg bg-slate-900 px-6 py-2 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
+        >
+          {exportPending ? "Wird erstellt…" : "Export herunterladen"}
+        </button>
+      </section>
+
+      {/* Konto löschen */}
+      <section className="rounded-lg border border-red-300 bg-white p-6 shadow-sm dark:border-red-800 dark:bg-slate-800">
+        <h2 className="mb-1 text-lg font-semibold text-red-700 dark:text-red-400">Konto löschen</h2>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+          Entfernt dein Konto, deine Kennzeichen und die dazugehörigen Beweisfotos unwiderruflich.
+          Anonyme Nachrichten an fremde Kennzeichen bleiben erhalten.
+        </p>
+        <form action={deleteAction} className="flex flex-col gap-4">
+          {deleteState.error && (
+            <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                {deleteState.error}
+              </p>
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="delete-password"
+              className="text-sm font-semibold text-slate-900 dark:text-white"
+            >
+              Passwort zur Bestätigung
+            </label>
+            <input
+              id="delete-password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              disabled={deletePending}
+              className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={deletePending}
+            className="self-start rounded-lg bg-red-600 px-6 py-2 font-semibold text-white transition-all hover:bg-red-700 disabled:bg-red-300"
+          >
+            {deletePending ? "Wird gelöscht…" : "Konto endgültig löschen"}
+          </button>
+        </form>
       </section>
     </div>
   );

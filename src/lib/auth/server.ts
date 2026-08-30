@@ -7,6 +7,7 @@ import { pool } from "@/lib/db/pool";
 import { sendMail } from "@/lib/email/mailer";
 import { emailChangeEmail, passwordResetEmail, verificationEmail } from "@/lib/email/templates";
 import { requireEnv } from "@/lib/env";
+import { deleteAllProofsForUser } from "@/lib/storage/proofs";
 
 /**
  * better-auth verwaltet Nutzer, Sessions, Konten und Verifizierungs-Token in
@@ -68,6 +69,16 @@ export const auth = betterAuth({
         // Die Bestätigung geht an die bisherige Adresse, damit eine
         // übernommene Session die E-Mail nicht unbemerkt umhängen kann.
         await sendMail({ to: user.email, ...mail });
+      },
+    },
+    deleteUser: {
+      enabled: true,
+      // Die FK-Kaskade räumt sessions/accounts/verified_plates ab; die
+      // Beweisfoto-Dateien im Volume muss dieser Hook selbst entfernen.
+      // Nachrichten an fremde Kennzeichen bleiben bewusst erhalten (anonym,
+      // ohne Personenbezug zum gelöschten Konto).
+      beforeDelete: async (user) => {
+        await deleteAllProofsForUser(user.id);
       },
     },
   },
