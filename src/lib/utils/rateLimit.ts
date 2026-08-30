@@ -3,17 +3,39 @@ import { headers } from "next/headers";
 import { requireEnv } from "@/lib/env";
 
 /**
- * Extract the client IP from the incoming request headers.
- * Behind a proxy/CDN the real client is the first entry of `x-forwarded-for`.
- * Returns `null` when no IP can be determined.
+ * Anzahl vertrauenswürdiger Proxy-Hops vor der App (Standard: 1 – der
+ * Caddy-Reverse-Proxy aus docker-compose). Jeder Hop hängt eine IP hinten an
+ * `X-Forwarded-For` an; die echte Client-IP steht deshalb an Position
+ * `länge - hops`, NICHT am Anfang – dort kann ein Client beliebig fälschen.
+ * `TRUSTED_PROXY_HOPS=0` schaltet das Vertrauen in `X-Forwarded-For` ab.
+ */
+function trustedProxyHops(): number {
+  const raw = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? "1", 10);
+  return Number.isNaN(raw) || raw < 0 ? 1 : raw;
+}
+
+/**
+ * Ermittelt die Client-IP aus den Request-Headern – nur so weit, wie den
+ * eigenen Proxys zu trauen ist. Gibt `null` zurück, wenn keine belastbare IP
+ * bestimmbar ist (dann greift nur der Deckel je Kennzeichen).
  */
 export async function getClientIp(): Promise<string | null> {
+  const hops = trustedProxyHops();
+  if (hops === 0) return null;
+
   const headersList = await headers();
   const forwardedFor = headersList.get("x-forwarded-for");
   if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
+    const parts = forwardedFor
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    // parts = [ ...vom Client gesetzt/gefälscht..., <von Proxy 1>, ... <von Proxy N> ]
+    const index = parts.length - hops;
+    if (index >= 0 && parts[index]) return parts[index];
   }
+
+  // Fallback: ein einzelner, vom Proxy gesetzter Wert.
   return headersList.get("x-real-ip")?.trim() || null;
 }
 
