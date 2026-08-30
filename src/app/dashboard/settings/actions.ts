@@ -2,6 +2,7 @@
 
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 import { requireUser } from "@/lib/auth/session";
 
@@ -17,8 +18,11 @@ export async function changePassword(
     return { error: "Bitte geben Sie Ihr aktuelles Passwort ein.", success: false };
   }
   if (password !== confirm) return { error: "Passwörter stimmen nicht überein.", success: false };
-  if (password.length < 6) {
-    return { error: "Passwort muss mindestens 6 Zeichen haben.", success: false };
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      error: `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`,
+      success: false,
+    };
   }
 
   await requireUser();

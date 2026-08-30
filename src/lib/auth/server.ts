@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { pool } from "@/lib/db/pool";
 import { sendMail } from "@/lib/email/mailer";
 import { emailChangeEmail, passwordResetEmail, verificationEmail } from "@/lib/email/templates";
@@ -15,16 +16,22 @@ import { requireEnv } from "@/lib/env";
  * `is_admin` liegt als Zusatzfeld direkt auf der Nutzertabelle; eine eigene
  * `profiles`-Tabelle wie unter Supabase gibt es nicht mehr.
  */
+const BASE_URL = requireEnv("BETTER_AUTH_URL");
+const IS_HTTPS = BASE_URL.startsWith("https://");
+
 export const auth = betterAuth({
   database: pool,
   // Beide Pflicht: ohne Secret keine gültigen Tokens, ohne echte baseURL
   // degradieren Origin-Prüfung und secure Cookies still.
   secret: requireEnv("BETTER_AUTH_SECRET"),
-  baseURL: requireEnv("BETTER_AUTH_URL"),
+  baseURL: BASE_URL,
+
+  // Origin-/CSRF-Prüfung explizit an die konfigurierte Domain binden.
+  trustedOrigins: [new URL(BASE_URL).origin],
 
   emailAndPassword: {
     enabled: true,
-    minPasswordLength: 6,
+    minPasswordLength: MIN_PASSWORD_LENGTH,
     // Lesen von Nachrichten setzt ein bestätigtes Konto voraus.
     requireEmailVerification: true,
     sendResetPassword: async ({ user, url }) => {
@@ -72,6 +79,16 @@ export const auth = betterAuth({
   advanced: {
     database: {
       generateId: () => randomUUID(),
+    },
+    // Explizit statt „automatisch, wenn https": secure Cookies (+ `__Secure-`-
+    // Präfix) hängen sonst still an einer korrekt gesetzten baseURL.
+    useSecureCookies: IS_HTTPS,
+    defaultCookieAttributes: {
+      httpOnly: true,
+      // Nicht „strict": die Bestätigungs- und Reset-Links aus den E-Mails sind
+      // Top-Level-Navigationen von einer fremden Herkunft; „strict" würde die
+      // Session dort nicht mitsenden und einen zweiten Klick erzwingen.
+      sameSite: "lax",
     },
   },
 

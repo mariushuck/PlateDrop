@@ -3,6 +3,7 @@
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 
 const UNEXPECTED_ERROR = "Ein unerwarteter Fehler ist aufgetreten.";
@@ -18,10 +19,10 @@ export async function signUp(
     return { success: false, error: "E-Mail und Passwort erforderlich." };
   }
 
-  if (password.length < 6) {
+  if (password.length < MIN_PASSWORD_LENGTH) {
     return {
       success: false,
-      error: "Passwort muss mindestens 6 Zeichen lang sein.",
+      error: `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein.`,
     };
   }
 
