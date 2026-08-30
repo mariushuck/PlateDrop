@@ -190,10 +190,11 @@ async function main() {
 
   // Claim und Upload laufen über Server Actions; für den Rauchtest legen wir
   // Zeile und Datei direkt an und prüfen dann die Ausliefer-Route.
+  const plateNumber = `KA-SM-${String(STAMP).slice(-4)}`;
   const plate = await pool.query(
     `INSERT INTO verified_plates (user_id, plate_number, verification_code)
      VALUES ($1, $2, 'PD-SMOK') RETURNING id`,
-    [ownerId, `KA-SM-${String(STAMP).slice(-4)}`],
+    [ownerId, plateNumber],
   );
   const plateId = plate.rows[0].id;
   const objectPath = `${ownerId}/${plateId}-${STAMP}.png`;
@@ -272,6 +273,49 @@ async function main() {
     `Status ${resetPage.status}`,
   );
   check("Formularseite enthält das Token-Feld", (await resetPage.text()).includes('name="token"'));
+
+  step("8) Eine Ablehnung führt nicht in die Sackgasse");
+  // Der Halter muss ein abgelehntes Kennzeichen wiederfinden und ein neues Foto
+  // nachreichen können. Die Query-Logik selbst deckt die Integrationssuite ab;
+  // hier zählt, was der Halter und der Admin tatsächlich zu sehen bekommen.
+  await pool.query("UPDATE verified_plates SET verification_status = 'rejected' WHERE id = $1", [
+    plateId,
+  ]);
+  await pool.query("UPDATE users SET is_admin = true WHERE id = $1", [ownerId]);
+
+  const rejectedView = await (
+    await fetch(`${APP_URL}/dashboard`, { headers: { cookie: cookies } })
+  ).text();
+  check("Abgelehntes Kennzeichen erscheint im Dashboard", rejectedView.includes(plateNumber));
+  check(
+    "Der Halter sieht den Ablehnungs-Hinweis",
+    rejectedView.includes("Die Prüfung war nicht erfolgreich"),
+  );
+  check("Das Upload-Feld steht wieder bereit", rejectedView.includes("Foto hochladen"));
+  check(
+    "Es steht nicht mehr fälschlich \u201Ewird geprüft\u201C da",
+    !rejectedView.includes("Wird vom Admin geprüft"),
+  );
+
+  const adminBefore = await (
+    await fetch(`${APP_URL}/admin`, { headers: { cookie: cookies } })
+  ).text();
+  check(
+    "Abgelehntes Kennzeichen ist beim Admin nicht gelistet",
+    !adminBefore.includes(plateNumber),
+  );
+
+  // Nachgereichtes Foto: derselbe Effekt, den setProofPath erzeugt.
+  await pool.query(
+    `UPDATE verified_plates
+        SET proof_image_url = $1, verification_status = 'pending'
+      WHERE id = $2`,
+    [objectPath, plateId],
+  );
+  const adminAfter = await (
+    await fetch(`${APP_URL}/admin`, { headers: { cookie: cookies } })
+  ).text();
+  check("Nach dem Nachreichen ist es beim Admin wieder gelistet", adminAfter.includes(plateNumber));
 
   // --- Aufräumen ------------------------------------------------------------
   await pool.query("DELETE FROM users WHERE email = ANY($1)", [[OWNER_EMAIL, STRANGER_EMAIL]]);
