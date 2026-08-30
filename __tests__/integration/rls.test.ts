@@ -258,3 +258,35 @@ describe("RLS: verified_plates", () => {
     expect(visible.rows).toHaveLength(0);
   });
 });
+
+describe("Grants: users.is_admin", () => {
+  beforeEach(migrateFresh);
+
+  it("lässt die App-Rolle is_admin nicht setzen", async () => {
+    const plain = await seedUser("user-plain", "plain@example.com", false);
+
+    await expect(
+      asUser(plain, (client) =>
+        client.query("UPDATE users SET is_admin = true WHERE id = $1", [plain]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+
+    const stored = await withAdmin((client) =>
+      client.query<{ is_admin: boolean }>("SELECT is_admin FROM users WHERE id = $1", [plain]),
+    );
+    expect(stored.rows).toEqual([{ is_admin: false }]);
+  });
+
+  it("lässt die App-Rolle weiterhin unkritische Profilfelder schreiben", async () => {
+    const plain = await seedUser("user-plain", "plain@example.com", false);
+
+    await asUser(plain, (client) =>
+      client.query("UPDATE users SET name = $2 WHERE id = $1", [plain, "Neuer Name"]),
+    );
+
+    const stored = await withAdmin((client) =>
+      client.query<{ name: string }>("SELECT name FROM users WHERE id = $1", [plain]),
+    );
+    expect(stored.rows).toEqual([{ name: "Neuer Name" }]);
+  });
+});
