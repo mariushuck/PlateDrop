@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/auth/session";
 import { canReadProof } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 import { InvalidProofPathError, readProof } from "@/lib/storage/proofs";
 
 /**
@@ -32,7 +33,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/proofs/[...
   try {
     allowed = await canReadProof(user.id, objectPath);
   } catch (err) {
-    console.error("Fehler bei der Zugriffsprüfung für ein Beweisfoto:", err);
+    logger.error("Fehler bei der Zugriffsprüfung für ein Beweisfoto:", err);
     return new Response("Fehler beim Laden des Bildes.", { status: 500 });
   }
 
@@ -60,7 +61,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/proofs/[...
     if (err instanceof InvalidProofPathError) {
       return new Response("Nicht gefunden.", { status: 404 });
     }
-    console.error("Fehler beim Laden des Beweisfotos:", err);
+    logger.error("Fehler beim Laden des Beweisfotos:", err);
     return new Response("Fehler beim Laden des Bildes.", { status: 500 });
   }
 }

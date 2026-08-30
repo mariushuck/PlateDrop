@@ -3,6 +3,7 @@
 import { APIError } from "better-auth/api";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
+import { logger } from "@/lib/logger";
 
 /**
  * Setzt das Passwort über den Token aus der Reset-E-Mail neu.
@@ -39,7 +40,7 @@ export async function resetPassword(
     if (err instanceof APIError) {
       return { error: "Der Link ist ungültig oder abgelaufen.", success: false };
     }
-    console.error("Fehler beim Zurücksetzen des Passworts:", err);
+    logger.error("Fehler beim Zurücksetzen des Passworts:", err);
     return { error: "Fehler beim Zurücksetzen des Passworts.", success: false };
   }
 }

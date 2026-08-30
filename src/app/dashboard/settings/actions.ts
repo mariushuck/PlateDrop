@@ -7,6 +7,7 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 import { requireUser } from "@/lib/auth/session";
 import { exportUserData } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 
 export async function changePassword(
   _prev: { error: string | null; success: boolean },
@@ -41,7 +42,7 @@ export async function changePassword(
     if (err instanceof APIError) {
       return { error: "Aktuelles Passwort ist nicht korrekt.", success: false };
     }
-    console.error("Fehler beim Aktualisieren des Passworts:", err);
+    logger.error("Fehler beim Aktualisieren des Passworts:", err);
     return { error: "Fehler beim Aktualisieren des Passworts.", success: false };
   }
 }
@@ -67,7 +68,7 @@ export async function changeEmail(
     if (err instanceof APIError) {
       return { error: "Fehler beim Aktualisieren der E-Mail-Adresse.", success: false };
     }
-    console.error("Fehler beim Aktualisieren der E-Mail-Adresse:", err);
+    logger.error("Fehler beim Aktualisieren der E-Mail-Adresse:", err);
     return { error: "Fehler beim Aktualisieren der E-Mail-Adresse.", success: false };
   }
 }
@@ -94,7 +95,7 @@ export async function deleteAccount(
     if (err instanceof APIError) {
       return { error: "Passwort ist nicht korrekt." };
     }
-    console.error("Fehler beim Löschen des Kontos:", err);
+    logger.error("Fehler beim Löschen des Kontos:", err);
     return { error: "Das Konto konnte nicht gelöscht werden." };
   }
 
