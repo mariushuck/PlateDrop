@@ -8,6 +8,7 @@ import {
   plateBelongsToUser,
   setProofPath,
 } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
 import { generateVerificationCode } from "@/lib/utils/verificationCode";
@@ -43,7 +44,7 @@ export async function claimPlate(
     if (err instanceof PlateAlreadyClaimedError) {
       return { success: false, error: "Dieses Kennzeichen ist bereits registriert." };
     }
-    console.error("Fehler beim Registrieren des Kennzeichens:", err);
+    logger.error("Fehler beim Registrieren des Kennzeichens:", err);
     return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };
   }
 }
@@ -90,7 +91,7 @@ export async function uploadProof(
       await deleteProof(previousPath).catch((err: unknown) => {
         // Ein verwaistes Altbild ist ärgerlich, aber kein Grund, den Upload
         // scheitern zu lassen. prune-proofs.mjs räumt es später ab.
-        console.error("Ersetztes Beweisfoto konnte nicht entfernt werden:", err);
+        logger.error("Ersetztes Beweisfoto konnte nicht entfernt werden:", err);
       });
     }
 
@@ -103,7 +104,7 @@ export async function uploadProof(
         error: "Nicht unterstütztes Bildformat. Erlaubt sind JPEG, PNG, WebP und HEIC.",
       };
     }
-    console.error("Fehler beim Hochladen des Bildes:", err);
+    logger.error("Fehler beim Hochladen des Bildes:", err);
     return { success: false, error: "Fehler beim Hochladen des Bildes." };
   }
 }

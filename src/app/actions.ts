@@ -1,6 +1,7 @@
 "use server";
 
 import { checkMessageRate, insertMessage, PlateRateLimitError } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
 
@@ -54,7 +55,7 @@ export async function dropMessage(
     if (err instanceof PlateRateLimitError) {
       return { success: false, error: RATE_LIMIT_ERROR };
     }
-    console.error("Fehler beim Speichern der Nachricht:", err);
+    logger.error("Fehler beim Speichern der Nachricht:", err);
     return { success: false, error: GENERIC_ERROR };
   }
 }

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
+import { logger } from "@/lib/logger";
 
 const UNEXPECTED_ERROR = "Ein unerwarteter Fehler ist aufgetreten.";
 
@@ -38,10 +39,10 @@ export async function signUp(
     if (err instanceof APIError) {
       // Keine Rückmeldung darüber, ob die Adresse bereits existiert –
       // das wäre eine Auskunft über fremde Konten.
-      console.error("Registrierung fehlgeschlagen:", err.message);
+      logger.error("Registrierung fehlgeschlagen", err);
       return { success: false, error: "Registrierung nicht möglich." };
     }
-    console.error("Unerwarteter Fehler bei der Registrierung:", err);
+    logger.error("Unerwarteter Fehler bei der Registrierung:", err);
     return { success: false, error: UNEXPECTED_ERROR };
   }
 }
@@ -65,7 +66,7 @@ export async function signIn(
       // Meldung, damit sich Konten nicht durchprobieren lassen.
       return { success: false, error: "Ungültige E-Mail oder Passwort." };
     }
-    console.error("Unerwarteter Fehler bei der Anmeldung:", err);
+    logger.error("Unerwarteter Fehler bei der Anmeldung:", err);
     return { success: false, error: UNEXPECTED_ERROR };
   }
 
@@ -77,7 +78,7 @@ export async function signOut() {
   try {
     await auth.api.signOut({ headers: await headers() });
   } catch (err) {
-    console.error("Fehler beim Abmelden:", err);
+    logger.error("Fehler beim Abmelden:", err);
   }
   redirect("/");
 }

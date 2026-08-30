@@ -91,10 +91,11 @@ Proof photos go to `PROOFS_DIR` under `<userId>/<plateId>-<timestamp>.<ext>`, ha
 
 **Server Actions are the exclusive mechanism for mutations** (message submission, plate claims, admin approvals, all auth forms). Do not add API routes for writes.
 
-Exactly two route handlers exist, and both are deliberate exceptions:
+Exactly three route handlers exist, and all are deliberate exceptions:
 
 - `src/app/api/auth/[...all]/route.ts` — required by better-auth; the links in its e-mails have to hit a URL.
 - `src/app/api/proofs/[...path]/route.ts` — **GET only, mutates nothing**. An `<img>` tag needs a URL, not a Server Action. It re-checks session and authorization on every single request, which replaced Supabase's pre-issued signed URLs: access ends the moment a plate is rejected or deleted, rather than when a signature expires.
+- `src/app/api/health/route.ts` — **GET only, mutates nothing**. A container healthcheck / uptime monitor needs a URL. Runs `SELECT 1`, returns 200/503.
 
 **German plate normalization**: All plates go through `src/lib/utils/plateUtils.ts` before any DB query or insert. `normalizePlate` strips hyphens and spaces and upper-cases, so the stored form is e.g. `KAAB1234`. Write and read paths must use it identically or the join in `listMessagesForUser` stops matching.
 

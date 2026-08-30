@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth/server";
+import { logger } from "@/lib/logger";
 
 export async function requestPasswordReset(
   _prev: { error: string | null; success: boolean },
@@ -16,7 +17,7 @@ export async function requestPasswordReset(
   } catch (err) {
     // Auch im Fehlerfall Erfolg melden: eine Unterscheidung würde verraten,
     // welche Adressen registriert sind.
-    console.error("Fehler beim Senden der Reset-E-Mail:", err);
+    logger.error("Fehler beim Senden der Reset-E-Mail:", err);
   }
 
   return { error: null, success: true };

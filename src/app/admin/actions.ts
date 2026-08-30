@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/session";
 import { setPlateVerification } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 
 const NOT_ALLOWED = "Sie haben keine Berechtigung für diese Aktion.";
 
@@ -36,7 +37,7 @@ async function setVerification(
     revalidatePath("/admin");
     return { success: true };
   } catch (err) {
-    console.error("Fehler beim Aktualisieren der Verifizierung:", err);
+    logger.error("Fehler beim Aktualisieren der Verifizierung:", err);
     return {
       success: false,
       error: approved
