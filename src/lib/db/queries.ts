@@ -201,15 +201,21 @@ export function setProofPath(
 }
 
 /**
- * Darf der Nutzer dieses Beweisfoto sehen? Die Antwort kommt aus den Policies:
- * ein Halter sieht nur seine eigene Zeile, ein Admin jede — findet die Abfrage
- * nichts, ist der Zugriff nicht erlaubt.
+ * Darf der Nutzer dieses Beweisfoto sehen? Ein Halter sieht nur seine eigene
+ * Zeile, ein Admin jede — findet die Abfrage nichts, ist der Zugriff nicht
+ * erlaubt.
+ *
+ * Der `user_id`/`is_admin`-Filter im SQL ist bewusst redundant zu den
+ * Policies: weder ein vergessener Filter noch eine fehlerhafte Policy allein
+ * darf ein fremdes Foto freigeben.
  */
 export function canReadProof(userId: string, objectPath: string): Promise<boolean> {
   return withUser(userId, async (client) => {
     const { rowCount } = await client.query(
-      "SELECT 1 FROM verified_plates WHERE proof_image_url = $1",
-      [objectPath],
+      `SELECT 1 FROM verified_plates
+        WHERE proof_image_url = $1
+          AND (user_id = $2 OR app.is_admin())`,
+      [objectPath, userId],
     );
     return (rowCount ?? 0) > 0;
   });
@@ -221,15 +227,18 @@ export function canReadProof(userId: string, objectPath: string): Promise<boolea
 
 /**
  * Offene Verifizierungen, die tatsächlich prüfbar sind – also nur solche mit
- * hochgeladenem Beweisfoto. Für Nicht-Admins liefert die RLS-Policy eine leere
- * Liste; die Admin-Prüfung in der Server Action bleibt trotzdem die erste
- * Verteidigungslinie.
+ * hochgeladenem Beweisfoto.
+ *
+ * Drei Schichten: die Admin-Prüfung in der Server Action, die RLS-Policy
+ * `verified_plates_select_admin` und der `app.is_admin()`-Filter hier. Für
+ * einen Nicht-Admin liefert die Abfrage in jedem Fall eine leere Liste.
  */
 export function listPendingVerifications(userId: string): Promise<VerifiedPlate[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<VerifiedPlate>(
       `SELECT * FROM verified_plates
-        WHERE verification_status = 'pending'
+        WHERE app.is_admin()
+          AND verification_status = 'pending'
           AND proof_image_url IS NOT NULL
         ORDER BY created_at ASC`,
     );
@@ -239,6 +248,9 @@ export function listPendingVerifications(userId: string): Promise<VerifiedPlate[
 
 /**
  * Gibt ein Kennzeichen frei oder lehnt es ab.
+ *
+ * Der `app.is_admin()`-Filter im UPDATE ist bewusst redundant zur RLS-Policy
+ * `verified_plates_update_admin` und zur Admin-Prüfung in der Server Action.
  *
  * @returns `false`, wenn nichts geändert wurde – etwa weil der Aufrufer kein
  *          Admin ist oder das Kennzeichen nicht existiert.
@@ -253,7 +265,8 @@ export function setPlateVerification(
       `UPDATE verified_plates
           SET is_verified = $1,
               verification_status = $2
-        WHERE id = $3`,
+        WHERE id = $3
+          AND app.is_admin()`,
       [approved, approved ? "approved" : "rejected", plateId],
     );
     return (result.rowCount ?? 0) > 0;
