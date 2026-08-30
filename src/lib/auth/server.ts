@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { pool } from "@/lib/db/pool";
 import { sendMail } from "@/lib/email/mailer";
 import { emailChangeEmail, passwordResetEmail, verificationEmail } from "@/lib/email/templates";
+import { requireEnv } from "@/lib/env";
 
 /**
  * better-auth verwaltet Nutzer, Sessions, Konten und Verifizierungs-Token in
@@ -16,8 +17,10 @@ import { emailChangeEmail, passwordResetEmail, verificationEmail } from "@/lib/e
  */
 export const auth = betterAuth({
   database: pool,
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  // Beide Pflicht: ohne Secret keine gültigen Tokens, ohne echte baseURL
+  // degradieren Origin-Prüfung und secure Cookies still.
+  secret: requireEnv("BETTER_AUTH_SECRET"),
+  baseURL: requireEnv("BETTER_AUTH_URL"),
 
   emailAndPassword: {
     enabled: true,

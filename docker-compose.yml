@@ -54,7 +54,7 @@ services:
     environment:
       <<: *db-env
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET fehlt}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL fehlt}
       RATE_LIMIT_SALT: ${RATE_LIMIT_SALT:?RATE_LIMIT_SALT fehlt}
       PROOFS_DIR: /data/proofs
       SMTP_HOST: ${SMTP_HOST:-mailpit}
