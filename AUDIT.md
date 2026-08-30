@@ -8,6 +8,51 @@ Bewertung je Punkt: ✅ erfüllt · ⚠️ teilweise/unklar · ❌ nicht erfüll
 
 ---
 
+## Stand der Umsetzung (2026-08-30)
+
+Alle Findings wurden bearbeitet (Branch `dev`, 15 Commits). Unit-Tests, Typecheck,
+Lint und `next build` sind grün. Die Integrationstests (`pnpm test:db:up &&
+pnpm test:integration`) brauchen Docker und **müssen noch lokal ausgeführt werden** –
+neu bzw. angepasst: `rls.test.ts` (is_admin-Grant), `queries.test.ts`
+(Code-Kollision, `exportUserData`, `plateBelongsToUser`), `migrate.test.ts` (0006/0007),
+`pruneThrottle.test.ts`, `pruneMessages.test.ts`.
+
+| ID | Thema | Umsetzung | Commit |
+|----|-------|-----------|--------|
+| C1 | Impressum | ⚠️ Struktur nach § 5 DDG, Werte bleiben laut Vorgabe Platzhalter → vor Go-Live durch echte Daten ersetzen | `0a36904` |
+| C2 | Datenschutzerklärung | ✅ an den echten Stack angepasst; Betreiber-Platzhalter (Verantwortlicher, Hosting, Behörde) füllen | `3f56703` |
+| C3 / W16 | Security-Header / HSTS | ✅ CSP + Header in `next.config.ts`, HSTS am Caddy | `cbe894d` |
+| C4 / W4 | `RATE_LIMIT_SALT` / `BETTER_AUTH_URL` Fail-Fast | ✅ `requireEnv`, Compose-Guard | `15f1c8e` |
+| W1 | Verifizierungscode | ✅ `crypto.randomInt`, UNIQUE (Migration 0006), Kollisions-Retry | `93aa4d5` |
+| W2 | `users.is_admin`-Grant | ✅ spaltenscharfes UPDATE (Migration 0007) | `c10153b` |
+| W3 | Query-Schicht-Redundanz | ✅ `app.is_admin()` in setPlateVerification / canReadProof / listPendingVerifications | `a53ab99` |
+| W5 | Cookie-Flags / trustedOrigins | ✅ explizit gesetzt | `2dea7f7` |
+| W6 | Löschung / Datenexport | ✅ Self-Service in den Einstellungen + `beforeDelete`-Foto-Cleanup | `8734cc9` |
+| W7 | Retention / Automatik | ✅ `prune-throttle`, opt-in `prune-messages`, `maintenance.mjs`, Cron-Doku | `bf3e512` |
+| W8 | Rate-Limit-IP | ✅ Trusted-Proxy-Hops statt erstem XFF-Token | `a38086a` |
+| W9 | CI / Dependabot / Secret-Scan | ✅ `.github/workflows/ci.yml`, `dependabot.yml` | `b1d0401` |
+| W10 | Logging / Health-Check | ✅ `src/lib/logger.ts`, `/api/health`, Compose-Healthcheck. Offen: Fehler-Aggregation (Sentry/GlitchTip) | `7389f32` |
+| W11 | Backup-Automatik | ✅ `scripts/backup.sh` + `backup`-Profil in `docker-compose.prod.yml` | `bf3e512` |
+| W12 | Proof-Upload | ✅ Ownership-Check vor Schreiben, Magic-Byte-Prüfung | `b8ee4fd` |
+| W13 | E-Mail-HTML-Escaping | ✅ `escapeHtml` in den Templates | `f215272` |
+| W14 | `minPasswordLength` | ✅ zentral auf 12 (`passwordPolicy.ts`) | `2dea7f7` |
+| W15 | `lucide-react@1.16.0` | ✅ verifiziert – echtes Paket (lucide-icons), gültige Integrity, React-19-Peer | — |
+| W17 | Doppelter Footer | ✅ in Impressum und Datenschutz entfernt | `0a36904` / `3f56703` |
+
+**Vor Go-Live noch offen (nicht im Code lösbar):**
+
+1. Echte Firmendaten ins Impressum (C1) und die Betreiber-Platzhalter in der
+   Datenschutzerklärung (C2) eintragen, danach juristisch prüfen lassen.
+2. AV-Verträge mit SMTP-Anbieter und Hosting-Provider schließen.
+3. Produktions-`.env` mit echten, zufälligen Secrets füllen; `TRUSTED_PROXY_HOPS`
+   an das tatsächliche Proxy-Setup anpassen.
+4. Cron-Jobs für `scripts/maintenance.mjs` und `scripts/backup.sh` einrichten
+   (siehe `docs/admin.md` B9).
+5. Optional: Fehler-Aggregation (Sentry/GlitchTip) an `src/lib/logger.ts` andocken.
+6. `pnpm test:db:up && pnpm test:integration` einmal lokal grün laufen lassen.
+
+---
+
 ## 1. Executive Summary
 
 Der anwendungssichere Kern von PlateDrop ist solide: Das asymmetrische Privacy-Modell
