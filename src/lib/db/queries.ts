@@ -4,6 +4,10 @@ import type { Message, VerifiedPlate } from "./types";
 
 /** SQLSTATE 23505 – unique_violation. */
 const UNIQUE_VIOLATION = "23505";
+/** Name des UNIQUE-Constraints auf verified_plates.plate_number. */
+const PLATE_UNIQUE_CONSTRAINT = "verified_plates_plate_unique";
+/** Name des UNIQUE-Constraints auf verified_plates.verification_code. */
+const VERIFICATION_CODE_UNIQUE_CONSTRAINT = "verified_plates_verification_code_key";
 /** SQLSTATE 23514 – check_violation, ausgelöst vom Kennzeichen-Rate-Limit-Trigger. */
 const CHECK_VIOLATION = "23514";
 
@@ -25,6 +29,12 @@ export class PlateAlreadyClaimedError extends Error {
 
 function hasSqlState(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === code;
+}
+
+function constraintName(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null
+    ? (error as { constraint?: string }).constraint
+    : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,27 +116,45 @@ export function listMessagesForUser(userId: string): Promise<Message[]> {
  * Legt einen Kennzeichen-Claim an. Immer unverifiziert und `pending` — die
  * Freigabe erfolgt ausschließlich durch einen Admin.
  *
+ * `makeVerificationCode` wird pro Versuch aufgerufen: kollidiert der erzeugte
+ * Code mit einem bestehenden (astronomisch selten), wird bis zu fünfmal neu
+ * gewürfelt.
+ *
  * @throws {PlateAlreadyClaimedError} wenn das Kennzeichen schon vergeben ist.
  */
 export async function claimPlate(
   userId: string,
   plateNumber: string,
-  verificationCode: string,
+  makeVerificationCode: () => string,
 ): Promise<VerifiedPlate> {
-  try {
-    return await withUser(userId, async (client) => {
-      const { rows } = await client.query<VerifiedPlate>(
-        `INSERT INTO verified_plates
-           (user_id, plate_number, is_verified, verification_status, verification_code)
-         VALUES ($1, $2, false, 'pending', $3)
-         RETURNING *`,
-        [userId, plateNumber, verificationCode],
-      );
-      return rows[0];
-    });
-  } catch (error) {
-    if (hasSqlState(error, UNIQUE_VIOLATION)) throw new PlateAlreadyClaimedError();
-    throw error;
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await withUser(userId, async (client) => {
+        const { rows } = await client.query<VerifiedPlate>(
+          `INSERT INTO verified_plates
+             (user_id, plate_number, is_verified, verification_status, verification_code)
+           VALUES ($1, $2, false, 'pending', $3)
+           RETURNING *`,
+          [userId, plateNumber, makeVerificationCode()],
+        );
+        return rows[0];
+      });
+    } catch (error) {
+      if (hasSqlState(error, UNIQUE_VIOLATION)) {
+        const constraint = constraintName(error);
+        // Code-Kollision: begrenzt neu würfeln.
+        if (constraint === VERIFICATION_CODE_UNIQUE_CONSTRAINT && attempt < MAX_ATTEMPTS) {
+          continue;
+        }
+        // Kennzeichen schon vergeben. `undefined` (kein Constraint-Name im
+        // Fehler) fällt bewusst hierher – so wie vor 0006.
+        if (constraint === PLATE_UNIQUE_CONSTRAINT || constraint === undefined) {
+          throw new PlateAlreadyClaimedError();
+        }
+      }
+      throw error;
+    }
   }
 }
 

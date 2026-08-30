@@ -9,22 +9,10 @@ import {
 } from "@/lib/db/queries";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
+import { generateVerificationCode } from "@/lib/utils/verificationCode";
 
 /** Maximale Größe eines Beweisfotos. */
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
-
-/**
- * Generate a random 6-character verification code in format "XX-XXXX"
- * Example: "PD-8X4A"
- */
-function generateVerificationCode(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `${code.slice(0, 2)}-${code.slice(2)}`;
-}
 
 export async function claimPlate(
   _prevState: { success: boolean; error?: string } | null,
@@ -47,7 +35,7 @@ export async function claimPlate(
   const normalizedPlate = normalizePlate(plateNumber);
 
   try {
-    await claimPlateQuery(user.id, normalizedPlate, generateVerificationCode());
+    await claimPlateQuery(user.id, normalizedPlate, generateVerificationCode);
     revalidatePath("/dashboard");
     return { success: true };
   } catch (err) {
