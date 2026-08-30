@@ -4,6 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 @AGENTS.md
 
+## Further documentation
+
+- `docs/architecture.md` — system layout, data model, every RLS policy in prose, sequence diagrams, test strategy
+- `docs/admin.md` — operator runbook: granting admin rights, approvals, backup and restore, updates, troubleshooting, GDPR deletion
+
+Keep them current when the behaviour they describe changes; the README deliberately stays short and links into both.
+
 ## Commands
 
 ```bash
