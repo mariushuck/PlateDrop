@@ -264,8 +264,9 @@ export default function Datenschutz() {
               >
                 privacy@platedrop.de
               </a>
-              . Anträge werden manuell durch den Betrieb bearbeitet; eine Selbstbedienungs-Löschung
-              im Konto steht derzeit noch nicht zur Verfügung.
+              . In den Kontoeinstellungen kannst du deine Daten außerdem selbst als Datei
+              exportieren und dein Konto löschen; darüber hinausgehende Anträge bearbeitet der
+              Betrieb manuell.
             </p>
             <p>
               Außerdem besteht ein Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde,
