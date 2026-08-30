@@ -158,6 +158,21 @@ export async function claimPlate(
   }
 }
 
+/**
+ * Gehört dieses Kennzeichen dem Nutzer? Vorabprüfung, damit für ein fremdes
+ * `plateId` gar keine Datei geschrieben wird. `setProofPath` filtert danach
+ * ohnehin noch einmal über `user_id`.
+ */
+export function plateBelongsToUser(userId: string, plateId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      "SELECT 1 FROM verified_plates WHERE id = $1 AND user_id = $2",
+      [plateId, userId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
 export interface SetProofPathResult {
   /** `false`, wenn das Kennzeichen dem Nutzer nicht gehört. */
   updated: boolean;

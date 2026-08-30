@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import {
   claimPlate as claimPlateQuery,
   PlateAlreadyClaimedError,
+  plateBelongsToUser,
   setProofPath,
 } from "@/lib/db/queries";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
@@ -66,11 +67,16 @@ export async function uploadProof(
     return { success: false, error: "Die Datei ist zu groß. Maximum 5MB." };
   }
 
+  // Erst die Eigentümerschaft prüfen, dann schreiben — für ein fremdes oder
+  // erfundenes `plateId` landet keine Datei im Volume.
+  if (!(await plateBelongsToUser(user.id, plateId))) {
+    return { success: false, error: "Kennzeichen nicht gefunden." };
+  }
+
   try {
-    // Erst die Datei ablegen, dann den Pfad eintragen. Gehört das Kennzeichen
-    // dem Nutzer nicht, greift die Policy und der Eintrag unterbleibt — dann
-    // muss die gerade geschriebene Datei wieder weg.
     const objectPath = await saveProof(user.id, plateId, file);
+    // setProofPath filtert weiterhin über `user_id` und die RLS-Policy greift –
+    // ein Fehlschlag hier ist also der Rennen-Fall und die Datei muss wieder weg.
     const { updated, previousPath } = await setProofPath(user.id, plateId, objectPath);
 
     if (!updated) {
