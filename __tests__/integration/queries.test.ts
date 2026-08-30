@@ -147,7 +147,7 @@ describe("claimPlate", () => {
     const { claimPlate } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
 
-    const plate = await claimPlate(owner, "KA-AB-1234", "PD-8X4A");
+    const plate = await claimPlate(owner, "KA-AB-1234", () => "PD-8X4A");
 
     expect(plate).toMatchObject({
       plate_number: "KA-AB-1234",
@@ -158,13 +158,27 @@ describe("claimPlate", () => {
     });
   });
 
+  it("würfelt den Verifizierungscode bei einer Kollision neu", async () => {
+    const { claimPlate } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+
+    // Erster Claim belegt den Code; der zweite Aufruf liefert denselben Code
+    // einmal und muss danach auf einen freien ausweichen.
+    await claimPlate(owner, "KA-AB-1000", () => "PD-DUPL");
+
+    const codes = ["PD-DUPL", "PD-DUPL", "PD-FREE"];
+    const plate = await claimPlate(owner, "KA-AB-2000", () => codes.shift() ?? "PD-XXXX");
+
+    expect(plate.verification_code).toBe("PD-FREE");
+  });
+
   it("meldet ein bereits vergebenes Kennzeichen als PlateAlreadyClaimedError", async () => {
     const { claimPlate, PlateAlreadyClaimedError } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
     const stranger = await seedUser("user-stranger", "stranger@example.com");
     await seedPlate(owner, "KA-AB-1234");
 
-    await expect(claimPlate(stranger, "KA-AB-1234", "PD-0000")).rejects.toBeInstanceOf(
+    await expect(claimPlate(stranger, "KA-AB-1234", () => "PD-0000")).rejects.toBeInstanceOf(
       PlateAlreadyClaimedError,
     );
   });

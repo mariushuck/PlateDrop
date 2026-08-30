@@ -37,6 +37,7 @@ describe("scripts/migrate.mjs", () => {
       "0003_app_tables.sql",
       "0004_policies.sql",
       "0005_rate_limit.sql",
+      "0006_verification_code_unique.sql",
     ]);
   });
 
