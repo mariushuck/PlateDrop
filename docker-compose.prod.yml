@@ -15,3 +15,28 @@ services:
     # Ohne Proxy hier `ports: ["3000:3000"]` ergänzen.
     volumes:
       - proofs:/data/proofs
+
+  # Datensicherung. Läuft in postgres:18-alpine, damit pg_dump zur Serverversion
+  # passt. Kein Dauerbetrieb – per Cron einmal täglich aufrufen:
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  #     --profile backup run --rm backup
+  backup:
+    image: postgres:18-alpine
+    profiles: [backup]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-platedrop_owner}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
+      PROOFS_DIR: /data/proofs
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    volumes:
+      - proofs:/data/proofs:ro
+      - backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+
+volumes:
+  backups:
