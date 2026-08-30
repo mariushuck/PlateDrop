@@ -416,8 +416,10 @@ dcp ps                 # Was läuft, was ist gesund
 | Volume `proofs` | Fotos, auf denen Kennzeichen und Umfeld zu sehen sind |
 
 > Wichtig zur Einordnung: Der Nachrichten-Rate-Limiter speichert die IP **nie** im Klartext.
-> better-auth legt dagegen in `sessions."ipAddress"` sehr wohl die Klartext-IP der Anmeldung ab.
-> Diese Zeilen verschwinden mit dem Ablauf der Sitzung oder dem Löschen des Kontos.
+> better-auth legt dagegen in `sessions."ipAddress"` sehr wohl die Klartext-IP der Anmeldung ab —
+> sie ist der Schlüssel seiner Anmeldebremse. Mit dem Löschen des Kontos verschwindet die Zeile
+> sofort; abgelaufene Sitzungen räumt `prune-sessions.mjs` ab (siehe
+> [Regelmäßige Wartung](#b9-regelmäßige-wartung)). Ohne diesen Lauf bleiben sie liegen.
 
 ### Auskunft erteilen
 
@@ -489,3 +491,24 @@ Es verbindet sich bewusst als Owner: Die App-Rolle sähe wegen RLS nur die Zeile
 Nutzers und hielte deshalb sämtliche fremden Fotos für verwaist.
 
 Ein sinnvoller Rhythmus ist monatlich, und nach jeder Kontolöschung.
+
+### Abgelaufene Sitzungen entfernen
+
+```bash
+docker compose run --rm migrate node scripts/prune-sessions.mjs
+```
+
+better-auth räumt abgelaufene Sitzungen nicht von selbst weg — ohne dieses Skript bleiben sie
+unbegrenzt in der Tabelle stehen, samt der darin gespeicherten IP-Adresse.
+
+**Warum die IP überhaupt gespeichert wird:** better-auth nutzt sie, um Anmeldeversuche zu bremsen.
+Ohne sie verlöre der eingebaute Schutz gegen das Durchprobieren von Passwörtern seinen Schlüssel.
+Begrenzt wird deshalb nicht die Erhebung, sondern die Aufbewahrung: Abgelaufene Sitzungen sind
+ohnehin wertlos — sie taugen weder zur Anmeldung noch zur Auswertung.
+
+Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintrag an:
+
+```cron
+# sonntags um 4 Uhr aufräumen
+0 4 * * 0 cd /pfad/zu/platedrop && docker compose run --rm migrate node scripts/prune-sessions.mjs
+```
