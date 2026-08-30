@@ -77,16 +77,72 @@ function resolveObjectPath(objectPath: string): string {
 }
 
 /**
+ * Erkennt das Bildformat an der Byte-Signatur. Client-`file.type` und
+ * Dateiname sind frei wählbar, die Signatur nicht.
+ *
+ * @returns erkannter MIME-Typ oder `null`.
+ */
+function sniffImageType(bytes: Buffer): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.toString("ascii", 0, 4) === "RIFF" &&
+    bytes.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  // ISO-BMFF: `....ftyp<brand>` – HEIC/HEIF und Varianten (typisch von iPhones).
+  if (bytes.length >= 12 && bytes.toString("ascii", 4, 8) === "ftyp") {
+    const brand = bytes.toString("ascii", 8, 12);
+    const heicBrands = [
+      "heic",
+      "heix",
+      "heim",
+      "heis",
+      "hevc",
+      "hevx",
+      "hevm",
+      "hevs",
+      "mif1",
+      "msf1",
+    ];
+    if (heicBrands.includes(brand)) {
+      return "image/heic";
+    }
+  }
+  return null;
+}
+
+/**
  * Speichert ein Beweisfoto unter dem Präfix des Nutzers.
  *
  * @returns Objektpfad relativ zum proofs-Verzeichnis. Der gehört in
  *          `verified_plates.proof_image_url`.
- * @throws {UnsupportedProofTypeError} bei einem nicht erlaubten Bildformat.
+ * @throws {UnsupportedProofTypeError} wenn die Byte-Signatur kein erlaubtes
+ *         Bildformat ergibt.
  */
 export async function saveProof(userId: string, plateId: string, file: File): Promise<string> {
-  // Die Endung kommt aus dem Content-Type, nie aus dem übermittelten
-  // Dateinamen — der stammt vom Client und ist frei wählbar.
-  const extension = ALLOWED_TYPES[file.type];
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Endung und Typ kommen aus der Byte-Signatur — nicht aus dem Client-
+  // Content-Type und erst recht nicht aus dem Dateinamen.
+  const detectedType = sniffImageType(buffer);
+  const extension = detectedType ? ALLOWED_TYPES[detectedType] : undefined;
   if (!extension) {
     throw new UnsupportedProofTypeError();
   }
@@ -95,7 +151,7 @@ export async function saveProof(userId: string, plateId: string, file: File): Pr
   const absolute = resolveObjectPath(objectPath);
 
   await mkdir(join(proofsRoot(), userId), { recursive: true });
-  await writeFile(absolute, Buffer.from(await file.arrayBuffer()));
+  await writeFile(absolute, buffer);
 
   return objectPath;
 }

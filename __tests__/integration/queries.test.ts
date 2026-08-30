@@ -184,6 +184,23 @@ describe("claimPlate", () => {
   });
 });
 
+describe("plateBelongsToUser", () => {
+  beforeEach(migrateFresh);
+
+  it("erkennt das eigene Kennzeichen und weist ein fremdes ab", async () => {
+    const { plateBelongsToUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234");
+
+    await expect(plateBelongsToUser(owner, plateId)).resolves.toBe(true);
+    await expect(plateBelongsToUser(stranger, plateId)).resolves.toBe(false);
+    await expect(plateBelongsToUser(owner, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")).resolves.toBe(
+      false,
+    );
+  });
+});
+
 describe("setProofPath", () => {
   beforeEach(migrateFresh);
 
