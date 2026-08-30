@@ -199,6 +199,32 @@ describe("RLS: verified_plates", () => {
     expect(stored.rows).toEqual([{ proof_image_url: "user-owner/proof.jpg" }]);
   });
 
+  // Nach einer Ablehnung muss der Halter ein neues Foto nachreichen können,
+  // sonst ist das Kennzeichen dauerhaft blockiert – die Nummer bleibt durch den
+  // Unique-Constraint belegt.
+  it("erlaubt dem Halter, nach einer Ablehnung ein neues Foto nachzureichen", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { status: "rejected" });
+
+    await asUser(owner, (client) =>
+      client.query(
+        `UPDATE verified_plates
+            SET proof_image_url = $1, verification_status = 'pending'
+          WHERE id = $2`,
+        ["user-owner/zweiter-versuch.jpg", plateId],
+      ),
+    );
+
+    const stored = await withAdmin((client) =>
+      client.query<{ verification_status: string; proof_image_url: string }>(
+        "SELECT verification_status, proof_image_url FROM verified_plates",
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { verification_status: "pending", proof_image_url: "user-owner/zweiter-versuch.jpg" },
+    ]);
+  });
+
   it("lässt einen Admin alle offenen Verifizierungen sehen und freigeben", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     const admin = await seedUser("user-admin", "admin@example.com", true);

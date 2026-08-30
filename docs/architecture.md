@@ -264,7 +264,7 @@ Alle aus [`0004_policies.sql`](../db/migrations/0004_policies.sql).
 | `verified_plates_select_own` | Ein Nutzer sieht nur Zeilen mit seiner eigenen `user_id`. Anonyme sehen nichts. |
 | `verified_plates_select_admin` | Admins sehen alle Zeilen — Grundlage der Freigabe-Ansicht. |
 | `verified_plates_insert_own` | Anlegen nur auf eigenen Namen **und** nur mit `is_verified = false` und Status `pending`. Ohne die letzten beiden Bedingungen könnte sich jemand beim Anlegen selbst freischalten. |
-| `verified_plates_update_proof_only` | Ändern nur an eigenen Zeilen, und das Ergebnis muss weiterhin unverifiziert sein mit Status `pending` oder `rejected`. Praktisch bleibt damit nur das Nachreichen des Fotos. Anmerkung: Die Policy erlaubt das auch nach einer Ablehnung, die Oberfläche bietet es derzeit aber nicht an — siehe [Admin-Anleitung, A3](admin.md#eine-ablehnung-ist-derzeit-eine-sackgasse). |
+| `verified_plates_update_proof_only` | Ändern nur an eigenen Zeilen, und das Ergebnis muss weiterhin unverifiziert sein mit Status `pending` oder `rejected`. Praktisch bleibt damit nur das Nachreichen des Fotos. Das gilt auch nach einer Ablehnung: Der Halter kann ein neues Foto nachreichen, wodurch der Status auf `pending` zurückspringt und das Kennzeichen wieder beim Admin erscheint. |
 | `verified_plates_update_admin` | Admins dürfen freigeben und ablehnen. |
 | `verified_plates_delete_own` | Ein Nutzer darf eigene Kennzeichen entfernen. |
 

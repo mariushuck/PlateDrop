@@ -80,12 +80,11 @@ export async function uploadProof(
 
   try {
     // Erst die Datei ablegen, dann den Pfad eintragen. Gehört das Kennzeichen
-    // dem Nutzer nicht, greift die Policy und der Eintrag unterbleibt – die
-    // Datei bleibt dann verwaist, gibt aber nichts preis.
+    // dem Nutzer nicht, greift die Policy und der Eintrag unterbleibt.
     const objectPath = await saveProof(user.id, plateId, file);
-    const stored = await setProofPath(user.id, plateId, objectPath);
+    const { updated } = await setProofPath(user.id, plateId, objectPath);
 
-    if (!stored) {
+    if (!updated) {
       return { success: false, error: "Kennzeichen nicht gefunden." };
     }
 
