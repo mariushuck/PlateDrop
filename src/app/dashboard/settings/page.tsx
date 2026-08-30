@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { changeEmail, changePassword } from "./actions";
 
 const pwInit = { error: null as string | null, success: false };
@@ -63,8 +64,8 @@ export default function SettingsPage() {
                 name="password"
                 type="password"
                 required
-                minLength={6}
-                placeholder="Mindestens 6 Zeichen"
+                minLength={MIN_PASSWORD_LENGTH}
+                placeholder={`Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`}
                 autoComplete="new-password"
                 disabled={pwPending}
                 className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"

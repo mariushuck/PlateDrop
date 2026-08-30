@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { signIn, signUp } from "@/app/auth/actions";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 
 type AuthMode = "signin" | "signup";
 
@@ -103,7 +104,11 @@ export default function LoginPage() {
                   name="password"
                   type="password"
                   required
-                  placeholder={mode === "signup" ? "Mindestens 6 Zeichen" : "Dein Passwort"}
+                  placeholder={
+                    mode === "signup"
+                      ? `Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`
+                      : "Dein Passwort"
+                  }
                   disabled={isPending}
                   className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
                 />

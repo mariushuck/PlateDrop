@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 import { resetPassword } from "@/app/reset-password/actions";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 
 const initialState = { error: null as string | null, success: false };
 
@@ -45,8 +46,8 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           name="password"
           type="password"
           required
-          minLength={6}
-          placeholder="Mindestens 6 Zeichen"
+          minLength={MIN_PASSWORD_LENGTH}
+          placeholder={`Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`}
           autoComplete="new-password"
           disabled={pending}
           className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"

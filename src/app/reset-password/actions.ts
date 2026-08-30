@@ -1,6 +1,7 @@
 "use server";
 
 import { APIError } from "better-auth/api";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 
 /**
@@ -24,8 +25,11 @@ export async function resetPassword(
   if (password !== confirm) {
     return { error: "Passwörter stimmen nicht überein.", success: false };
   }
-  if (password.length < 6) {
-    return { error: "Passwort muss mindestens 6 Zeichen haben.", success: false };
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      error: `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`,
+      success: false,
+    };
   }
 
   try {
