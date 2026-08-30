@@ -107,3 +107,46 @@ describe("readProof", () => {
     );
   });
 });
+
+describe("deleteProof", () => {
+  it("entfernt eine abgelegte Datei", async () => {
+    const { saveProof, deleteProof, readProof } = await loadProofs();
+    const file = new File([new Uint8Array([7])], "beweis.jpg", { type: "image/jpeg" });
+    const objectPath = await saveProof(OWNER, PLATE, file);
+
+    await deleteProof(objectPath);
+
+    await expect(readProof(objectPath)).resolves.toBeNull();
+  });
+
+  it("verträgt eine bereits fehlende Datei", async () => {
+    const { deleteProof } = await loadProofs();
+
+    // Ein zweiter Aufruf darf nicht scheitern – sonst bräuchte jeder Aufrufer
+    // eine eigene Existenzprüfung.
+    await expect(deleteProof(`${OWNER}/${PLATE}-1.jpg`)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ["Verzeichniswechsel", `${OWNER}/../../etc/passwd`],
+    ["absoluter Pfad", "/etc/passwd"],
+    ["fehlendes Nutzerpräfix", "beweis.jpg"],
+  ])("weist %s zurück", async (_label, badPath) => {
+    const { deleteProof, InvalidProofPathError } = await loadProofs();
+
+    await expect(deleteProof(badPath)).rejects.toBeInstanceOf(InvalidProofPathError);
+  });
+
+  it("löscht nichts außerhalb des proofs-Verzeichnisses", async () => {
+    const { deleteProof, InvalidProofPathError } = await loadProofs();
+    await mkdir(join(root, "..", "geheim"), { recursive: true });
+    await writeFile(join(root, "..", "geheim", "secret.jpg"), "streng geheim");
+
+    await expect(deleteProof(`${OWNER}/../geheim/secret.jpg`)).rejects.toBeInstanceOf(
+      InvalidProofPathError,
+    );
+    await expect(readFile(join(root, "..", "geheim", "secret.jpg"), "utf8")).resolves.toBe(
+      "streng geheim",
+    );
+  });
+});

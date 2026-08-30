@@ -7,7 +7,7 @@ import {
   PlateAlreadyClaimedError,
   setProofPath,
 } from "@/lib/db/queries";
-import { saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
+import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
 import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
 
 /** Maximale Größe eines Beweisfotos. */
@@ -80,12 +80,24 @@ export async function uploadProof(
 
   try {
     // Erst die Datei ablegen, dann den Pfad eintragen. Gehört das Kennzeichen
-    // dem Nutzer nicht, greift die Policy und der Eintrag unterbleibt.
+    // dem Nutzer nicht, greift die Policy und der Eintrag unterbleibt — dann
+    // muss die gerade geschriebene Datei wieder weg.
     const objectPath = await saveProof(user.id, plateId, file);
-    const { updated } = await setProofPath(user.id, plateId, objectPath);
+    const { updated, previousPath } = await setProofPath(user.id, plateId, objectPath);
 
     if (!updated) {
+      await deleteProof(objectPath);
       return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+
+    // Das ersetzte Foto entfernen. Erst nach dem erfolgreichen Eintrag, damit
+    // ein Fehlschlag nicht das alte Bild mitnimmt.
+    if (previousPath && previousPath !== objectPath) {
+      await deleteProof(previousPath).catch((err: unknown) => {
+        // Ein verwaistes Altbild ist ärgerlich, aber kein Grund, den Upload
+        // scheitern zu lassen. prune-proofs.mjs räumt es später ab.
+        console.error("Ersetztes Beweisfoto konnte nicht entfernt werden:", err);
+      });
     }
 
     revalidatePath("/dashboard");

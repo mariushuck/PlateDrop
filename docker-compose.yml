@@ -37,6 +37,11 @@ services:
     environment:
       DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-platedrop_owner}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD fehlt}
+      PROOFS_DIR: /data/proofs
+    volumes:
+      # Für die Wartungsskripte, die neben der Datenbank auch die Dateien
+      # brauchen (scripts/prune-proofs.mjs).
+      - proofs:/data/proofs
     depends_on:
       db:
         condition: service_healthy
