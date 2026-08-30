@@ -4,6 +4,14 @@
 {$DOMAIN:localhost} {
 	encode zstd gzip
 
+	header {
+		# Caddy terminiert TLS – HSTS gehört an den Rand. Ersetzt einen evtl.
+		# vom Upstream gesetzten Wert, damit der Client nur einen bekommt.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		# Server-Version nicht preisgeben.
+		-Server
+	}
+
 	# Beweisfotos sind auf 5 MB begrenzt – etwas Luft für den Multipart-Overhead.
 	request_body {
 		max_size 8MB
