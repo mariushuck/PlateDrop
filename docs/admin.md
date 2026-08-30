@@ -105,44 +105,39 @@ Code und Kennzeichen nicht zusammenpassen.
 Mit der Freigabe wird `is_verified` gesetzt, und erst dann kann der Halter die Nachrichten an sein
 Kennzeichen lesen.
 
-### Eine Ablehnung ist derzeit eine Sackgasse
+### Was bei einer Ablehnung passiert
 
-Wichtig zu wissen, bevor du ablehnst: Eine Ablehnung setzt den Status auf `rejected` — und danach
-passiert von selbst nichts mehr.
+Eine Ablehnung setzt den Status auf `rejected`. Der Halter sieht das Kennzeichen daraufhin in seinem
+Dashboard mit einem deutlichen Hinweis und einem Feld für ein neues Foto. Lädt er eines hoch, springt
+der Status zurück auf `pending`, und das Kennzeichen erscheint wieder in deiner Liste unter `/admin`.
 
-- Das Kennzeichen **verschwindet aus dem Dashboard des Halters**. Dort werden nur Kennzeichen mit
-  Status `pending` angezeigt; er sieht weder eine Begründung noch eine Möglichkeit, ein neues Foto
-  hochzuladen.
-- Es **verschwindet auch aus `/admin`**, denn die Liste zeigt ebenfalls nur `pending`.
-- Die Kennzeichennummer **bleibt trotzdem belegt**. `verified_plates` hat einen Unique-Constraint auf
-  `plate_number`; ein erneuter Versuch — auch durch denselben Halter — scheitert mit „Dieses
-  Kennzeichen ist bereits registriert."
+Du musst dafür nichts tun — der Ablauf läuft ohne Eingriff.
 
-Auf Datenbankebene wäre das Nachreichen erlaubt: Die Policy `verified_plates_update_proof_only` lässt
-Änderungen bei Status `pending` **und** `rejected` zu. Die Oberfläche bietet den Weg nur derzeit
-nicht an.
+**Was der Halter nicht erfährt:** Es gibt kein Feld für eine Begründung. Er liest nur, dass die
+Prüfung nicht erfolgreich war und dass Code und Kennzeichen gut lesbar sein müssen. Bei einem
+Sonderfall, den dieser Text nicht abdeckt, ist eine kurze E-Mail hilfreicher als eine wortlose
+Ablehnung.
 
-**Soll der Halter es erneut versuchen können, musst du eingreifen:**
+**Wenn ein Anspruch liegen bleibt:** Solange die Zeile existiert, ist die Kennzeichennummer durch den
+Unique-Constraint belegt — auch bei Status `rejected`. Meldet sich jemand, weil er sein Kennzeichen
+nicht registrieren kann, hilft ein Blick auf den bestehenden Anspruch:
 
 ```bash
-# Variante A – zurück in die Warteschlange, Foto verwerfen
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
-  "UPDATE verified_plates
-      SET verification_status = 'pending', proof_image_url = NULL
-    WHERE plate_number = 'KAAB1234';"
+  "SELECT u.email, vp.verification_status, vp.created_at
+     FROM verified_plates vp JOIN users u ON u.id = vp.user_id
+    WHERE vp.plate_number = 'KAAB1234';"
+```
 
-# Variante B – Anspruch ganz entfernen, damit die Nummer wieder frei ist
+Ist der Anspruch eindeutig verwaist, entfernst du ihn und gibst die Nummer frei:
+
+```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "DELETE FROM verified_plates WHERE plate_number = 'KAAB1234';"
 ```
 
-Nach Variante A erscheint das Kennzeichen wieder im Dashboard des Halters, samt Bestätigungscode und
-Upload-Feld. Die alte Bilddatei im Volume bleibt dabei liegen und sollte entfernt werden — den Pfad
-vorher aus `proof_image_url` notieren.
-
-Solange die Oberfläche das nicht selbst abbildet, ist es in der Praxis meist freundlicher, den Halter
-per E-Mail auf das Problem hinzuweisen und das Kennzeichen mit Variante A zurückzusetzen, statt es
-abzulehnen.
+Das dazugehörige Beweisfoto bleibt dabei im Volume liegen und muss separat entfernt werden — den
+Pfad vorher aus `proof_image_url` notieren.
 
 ## A4 In der Datenbank nachschlagen
 
@@ -399,8 +394,7 @@ dcp ps                 # Was läuft, was ist gesund
 | Bestätigungsmail kommt nicht an | Relay lehnt ab, oder `MAIL_FROM` ist nicht zugelassen | Logs des Relays; Absenderadresse muss zur authentifizierten Domain passen |
 | Login schlägt trotz richtigem Passwort fehl | Adresse ist noch nicht bestätigt — beide Fälle liefern absichtlich dieselbe Meldung | `SELECT email, "emailVerified" FROM users WHERE email='…';` |
 | `/admin` leitet nach `/dashboard` um | Konto hat keine Admin-Rechte | `SELECT is_admin FROM users WHERE email='…';`, dann A2 |
-| Halter meldet, sein Kennzeichen sei verschwunden | Es wurde abgelehnt; `rejected` wird nirgends angezeigt | `SELECT verification_status FROM verified_plates WHERE plate_number='…';`, dann A3 |
-| „Dieses Kennzeichen ist bereits registriert" beim eigenen Kennzeichen | Ein früherer, abgelehnter Anspruch belegt die Nummer noch | `SELECT * FROM verified_plates WHERE plate_number='…';`, dann A3 |
+| „Dieses Kennzeichen ist bereits registriert" beim eigenen Kennzeichen | Ein bestehender Anspruch belegt die Nummer — auch ein abgelehnter, den niemand weiterverfolgt | `SELECT * FROM verified_plates WHERE plate_number='…';`, dann A3 |
 | Beweisfoto liefert 404 | Datei fehlt im Volume, oder das Kennzeichen gehört jemand anderem | `dcp exec web ls /data/proofs/<nutzer-id>/`; 404 statt 403 ist Absicht und verrät nichts über fremde Pfade |
 | Beweisfoto liefert 401 | keine gültige Session | erneut anmelden |
 | App startet nicht, Fehler zur Datenbank | `APP_DB_PASSWORD` und das Passwort in `DATABASE_URL` weichen voneinander ab | beide Werte in `.env` vergleichen, dann `dcp up -d` |

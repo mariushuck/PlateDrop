@@ -130,22 +130,45 @@ export async function claimPlate(
   }
 }
 
+export interface SetProofPathResult {
+  /** `false`, wenn das Kennzeichen dem Nutzer nicht gehört. */
+  updated: boolean;
+  /** Bisher hinterlegter Pfad, damit der Aufrufer die alte Datei entfernen kann. */
+  previousPath: string | null;
+}
+
 /**
- * Hinterlegt den Objektpfad des Beweisfotos.
+ * Hinterlegt den Objektpfad des Beweisfotos und stellt das Kennzeichen zurück
+ * in die Warteschlange.
  *
- * @returns `false`, wenn das Kennzeichen dem Nutzer nicht gehört.
+ * Der Rücksprung auf `pending` ist wesentlich: Nach einer Ablehnung steht die
+ * Zeile auf `rejected`, und die Admin-Liste zeigt ausschließlich `pending`.
+ * Ohne ihn bliebe ein nachgereichtes Foto für den Admin unsichtbar, während die
+ * Kennzeichennummer durch den Unique-Constraint weiter belegt wäre.
  */
 export function setProofPath(
   userId: string,
   plateId: string,
   objectPath: string,
-): Promise<boolean> {
+): Promise<SetProofPathResult> {
   return withUser(userId, async (client) => {
-    const result = await client.query(
-      "UPDATE verified_plates SET proof_image_url = $1 WHERE id = $2 AND user_id = $3",
+    // RETURNING liefert nur die neue Zeile, deshalb den alten Pfad vorab per CTE
+    // sichern – der Aufrufer braucht ihn, um die ersetzte Datei zu löschen.
+    const { rows } = await client.query<{ previous_path: string | null }>(
+      `WITH vorher AS (
+         SELECT proof_image_url FROM verified_plates WHERE id = $2 AND user_id = $3
+       )
+       UPDATE verified_plates
+          SET proof_image_url = $1,
+              verification_status = 'pending'
+        WHERE id = $2 AND user_id = $3
+       RETURNING (SELECT proof_image_url FROM vorher) AS previous_path`,
       [objectPath, plateId, userId],
     );
-    return (result.rowCount ?? 0) > 0;
+
+    return rows.length > 0
+      ? { updated: true, previousPath: rows[0].previous_path }
+      : { updated: false, previousPath: null };
   });
 }
 

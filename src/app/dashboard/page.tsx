@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Inbox } from "lucide-react";
+import { AlertCircle, CheckCircle2, Inbox, XCircle } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
 import ProofUploadForm from "@/components/features/ProofUploadForm";
 import { requireUser } from "@/lib/auth/session";
@@ -28,8 +28,13 @@ export default async function DashboardPage() {
   }
 
   const verifiedPlates = allPlates.filter((p) => p.is_verified);
-  const pendingPlates = allPlates.filter(
-    (p) => !p.is_verified && p.verification_status === "pending",
+  // Abgelehnte Kennzeichen gehören mit in diese Liste. Sonst verschwinden sie
+  // spurlos: Sie tauchen beim Admin nicht mehr auf, belegen die Nummer aber
+  // weiterhin, und der Halter hätte keinen Weg, ein neues Foto nachzureichen.
+  const openPlates = allPlates.filter(
+    (p) =>
+      !p.is_verified &&
+      (p.verification_status === "pending" || p.verification_status === "rejected"),
   );
   const totalApprovedMessages = messages.length;
 
@@ -49,14 +54,14 @@ export default async function DashboardPage() {
       </section>
 
       {/* Section B: Pending Plates with Photo Challenge */}
-      {pendingPlates.length > 0 && (
+      {openPlates.length > 0 && (
         <section className="mb-8 rounded-lg border-2 border-amber-300 bg-amber-50 p-6 shadow-sm dark:border-amber-700 dark:bg-amber-900/20">
           <h2 className="mb-4 text-lg font-bold text-amber-900 dark:text-amber-100">
             Verifizierung erforderlich
           </h2>
 
           <div className="space-y-6">
-            {pendingPlates.map((plate) => (
+            {openPlates.map((plate) => (
               <div
                 key={plate.id}
                 className="rounded-lg border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-slate-800"
@@ -65,6 +70,21 @@ export default async function DashboardPage() {
                 <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
                   {plate.plate_number}
                 </div>
+
+                {plate.verification_status === "rejected" && (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                    <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                        Die Prüfung war nicht erfolgreich
+                      </p>
+                      <p className="mt-1 text-sm text-red-800 dark:text-red-200">
+                        Bitte lade ein neues Foto hoch, auf dem sowohl der Bestätigungscode als auch
+                        das Kennzeichen gut lesbar sind.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Instructions */}
                 <div className="mb-6 rounded-lg bg-amber-100 p-4 dark:bg-amber-900/30">
@@ -80,8 +100,9 @@ export default async function DashboardPage() {
                   </p>
                 </div>
 
-                {/* Photo Upload */}
-                {plate.proof_image_url ? (
+                {/* Photo Upload — bei einer Ablehnung liegt der alte Pfad noch in der
+                    Zeile, trotzdem muss hier wieder das Upload-Feld stehen. */}
+                {plate.proof_image_url && plate.verification_status === "pending" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-green-100 p-4 dark:bg-green-900/30">
                     <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                     <p className="text-sm font-medium text-green-800 dark:text-green-200">

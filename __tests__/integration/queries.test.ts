@@ -178,7 +178,10 @@ describe("setProofPath", () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     const plateId = await seedPlate(owner, "KA-AB-1234");
 
-    await expect(setProofPath(owner, plateId, "user-owner/proof.jpg")).resolves.toBe(true);
+    await expect(setProofPath(owner, plateId, "user-owner/proof.jpg")).resolves.toEqual({
+      updated: true,
+      previousPath: null,
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ proof_image_url: string }>("SELECT proof_image_url FROM verified_plates"),
@@ -192,7 +195,10 @@ describe("setProofPath", () => {
     const stranger = await seedUser("user-stranger", "stranger@example.com");
     const plateId = await seedPlate(owner, "KA-AB-1234");
 
-    await expect(setProofPath(stranger, plateId, "user-stranger/fremd.jpg")).resolves.toBe(false);
+    await expect(setProofPath(stranger, plateId, "user-stranger/fremd.jpg")).resolves.toEqual({
+      updated: false,
+      previousPath: null,
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ proof_image_url: string | null }>(
@@ -200,6 +206,60 @@ describe("setProofPath", () => {
       ),
     );
     expect(stored.rows).toEqual([{ proof_image_url: null }]);
+  });
+
+  it("gibt den bisherigen Pfad zurück, damit die alte Datei entfernt werden kann", async () => {
+    const { setProofPath } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/alt.jpg" });
+
+    await expect(setProofPath(owner, plateId, "user-owner/neu.jpg")).resolves.toEqual({
+      updated: true,
+      previousPath: "user-owner/alt.jpg",
+    });
+  });
+
+  // Ohne diesen Rücksprung bliebe ein neu hochgeladenes Foto für den Admin
+  // unsichtbar – dessen Liste zeigt ausschließlich Kennzeichen mit Status
+  // "pending".
+  it("stellt ein abgelehntes Kennzeichen wieder in die Warteschlange", async () => {
+    const { setProofPath } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", {
+      status: "rejected",
+      proofPath: "user-owner/abgelehnt.jpg",
+    });
+
+    await expect(setProofPath(owner, plateId, "user-owner/zweiter-versuch.jpg")).resolves.toEqual({
+      updated: true,
+      previousPath: "user-owner/abgelehnt.jpg",
+    });
+
+    const stored = await withAdmin((client) =>
+      client.query<{ verification_status: string; proof_image_url: string }>(
+        "SELECT verification_status, proof_image_url FROM verified_plates",
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { verification_status: "pending", proof_image_url: "user-owner/zweiter-versuch.jpg" },
+    ]);
+  });
+
+  it("lässt ein abgelehntes Kennzeichen danach wieder beim Admin auftauchen", async () => {
+    const { setProofPath, listPendingVerifications } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    const plateId = await seedPlate(owner, "KA-AB-1234", {
+      status: "rejected",
+      proofPath: "user-owner/abgelehnt.jpg",
+    });
+
+    await expect(listPendingVerifications(admin)).resolves.toEqual([]);
+
+    await setProofPath(owner, plateId, "user-owner/zweiter-versuch.jpg");
+
+    const pending = await listPendingVerifications(admin);
+    expect(pending.map((p) => p.plate_number)).toEqual(["KA-AB-1234"]);
   });
 });
 
