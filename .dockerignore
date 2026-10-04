@@ -3,6 +3,7 @@
 .vscode
 .claude
 node_modules
+.pnpm-store
 .next
 coverage
 __tests__

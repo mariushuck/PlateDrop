@@ -38,6 +38,12 @@ docker compose up -d
 
 Die Migrationen spielt der One-shot-Service `migrate` vor dem Start der App ein.
 
+**Nach einer Änderung an den Abhängigkeiten** (`package.json`, `pnpm-lock.yaml`) mit
+`docker compose up -d --build --renew-anon-volumes` starten. Der Dev-Container hält `node_modules`
+in einem anonymen Volume, das ein normaler Neubau behält. `pnpm dev` würde dann die veralteten
+Pakete bemerken, neu installieren wollen und ohne Terminal mit
+`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` in einer Neustartschleife hängen.
+
 **Erstes Admin-Konto anlegen:** registrieren, Bestätigungsmail in Mailpit öffnen, dann
 
 ```bash
