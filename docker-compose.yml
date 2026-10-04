@@ -1,0 +1,109 @@
+# Basis-Konfiguration. `docker compose up` lädt zusätzlich automatisch
+# docker-compose.override.yml (Entwicklung). Für Produktion:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+name: platedrop
+
+x-db-env: &db-env
+  DATABASE_URL: postgres://platedrop_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-platedrop}
+      POSTGRES_USER: ${POSTGRES_USER:-platedrop_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+    volumes:
+      # Seit postgres:18 gehört der Mount auf /var/lib/postgresql selbst –
+      # die Daten liegen dort in einem versionsbenannten Unterverzeichnis.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-platedrop_owner} -d ${POSTGRES_DB:-platedrop}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot: legt die App-Rolle an und spielt db/migrations/*.sql ein.
+  # Verbindet sich als Owner, nicht als App-Rolle.
+  migrate:
+    build:
+      context: .
+      target: runner
+    command: ["node", "scripts/migrate.mjs"]
+    restart: "no"
+    environment:
+      DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-platedrop_owner}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD fehlt}
+      PROOFS_DIR: /data/proofs
+    volumes:
+      # Für die Wartungsskripte, die neben der Datenbank auch die Dateien
+      # brauchen (scripts/prune-proofs.mjs).
+      - proofs:/data/proofs
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    environment:
+      <<: *db-env
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET fehlt}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL fehlt}
+      RATE_LIMIT_SALT: ${RATE_LIMIT_SALT:?RATE_LIMIT_SALT fehlt}
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      PROOFS_DIR: /data/proofs
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-PlateDrop <noreply@platedrop.local>}
+    volumes:
+      - proofs:/data/proofs
+    healthcheck:
+      # Node 22 bringt global `fetch` mit – kein curl im Alpine-Image nötig.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Optional: `docker compose --profile proxy up`
+  proxy:
+    image: caddy:2-alpine
+    profiles: [proxy]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  proofs:
+  caddy_data:
+  caddy_config:

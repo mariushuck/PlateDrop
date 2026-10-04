@@ -1,0 +1,43 @@
+# Produktion:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Mit TLS-Proxy zusätzlich `--profile proxy`.
+services:
+  db:
+    # Nicht nach außen exponieren – nur das Compose-Netz erreicht die DB.
+    ports: !reset []
+
+  web:
+    build:
+      target: runner
+    environment:
+      NODE_ENV: production
+    # Kein Port-Mapping: der Zugriff läuft über den proxy-Service.
+    # Ohne Proxy hier `ports: ["3000:3000"]` ergänzen und in .env
+    # TRUSTED_PROXY_HOPS=0 setzen – sonst ist X-Forwarded-For frei fälschbar.
+    volumes:
+      - proofs:/data/proofs
+
+  # Datensicherung. Läuft in postgres:18-alpine, damit pg_dump zur Serverversion
+  # passt. Kein Dauerbetrieb – per Cron einmal täglich aufrufen:
+  #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  #     --profile backup run --rm backup
+  backup:
+    image: postgres:18-alpine
+    profiles: [backup]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-platedrop_owner}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
+      PROOFS_DIR: /data/proofs
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    volumes:
+      - proofs:/data/proofs:ro
+      - backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+
+volumes:
+  backups:

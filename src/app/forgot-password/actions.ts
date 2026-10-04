@@ -1,20 +1,24 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth/server";
+import { logger } from "@/lib/logger";
 
 export async function requestPasswordReset(
   _prev: { error: string | null; success: boolean },
-  formData: FormData
+  formData: FormData,
 ) {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   if (!email) return { error: "E-Mail-Adresse erforderlich.", success: false };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/reset-password`,
-  });
+  try {
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "/reset-password" },
+    });
+  } catch (err) {
+    // Auch im Fehlerfall Erfolg melden: eine Unterscheidung würde verraten,
+    // welche Adressen registriert sind.
+    logger.error("Fehler beim Senden der Reset-E-Mail:", err);
+  }
 
-  if (error) return { error: "Fehler beim Senden der E-Mail.", success: false };
-  // Always return success to avoid email enumeration
   return { error: null, success: true };
 }

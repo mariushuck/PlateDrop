@@ -1,101 +1,41 @@
-"use client";
-
-import { AlertCircle, Camera, CheckCircle2, Inbox } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertCircle, CheckCircle2, Inbox, XCircle } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
-import { createClient } from "@/lib/supabase/client";
-import type { Database } from "@/types/database.types";
-import { claimPlate, uploadProof } from "./actions";
+import ProofUploadForm from "@/components/features/ProofUploadForm";
+import { requireUser } from "@/lib/auth/session";
+import { listMessagesForUser, listPlatesForUser } from "@/lib/db/queries";
+import type { Message } from "@/lib/db/types";
+import { isCanonicalPlate } from "@/lib/utils/plateUtils";
+import { claimPlate } from "./actions";
 
-type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
+/**
+ * Server Component. Unter Supabase lief diese Seite als Client Component und
+ * hat per PostgREST selbst abgefragt – ohne PostgREST gibt es keinen
+ * Datenbankzugang aus dem Browser mehr. Die Daten kommen jetzt beim Rendern
+ * aus dem Data-Access-Modul, interaktiv bleiben nur die beiden Formulare.
+ */
+export default async function DashboardPage() {
+  const user = await requireUser();
 
-export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [_userId, setUserId] = useState<string | null>(null);
-  const [allPlates, setAllPlates] = useState<VerifiedPlate[]>([]);
-  const [messages, setMessages] = useState<
-    Array<{
-      id: string;
-      plate_number: string;
-      message_text: string;
-      created_at: string;
-    }>
-  >([]);
-  const [_uploadingPlateId, _setUploadingPlateId] = useState<string | null>(null);
-  const [_uploadError, _setUploadError] = useState<string | null>(null);
+  const [allPlates, messages] = await Promise.all([
+    listPlatesForUser(user.id),
+    listMessagesForUser(user.id),
+  ]);
 
-  const supabase = createClient();
-
-  useEffect(() => {
-    async function loadData() {
-      // Get authenticated user
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !userData.user) {
-        window.location.href = "/login";
-        return;
-      }
-
-      setUserId(userData.user.id);
-
-      // Fetch all plates for this user
-      const { data: platesData, error: platesError } = await supabase
-        .from("verified_plates")
-        .select("*")
-        .eq("user_id", userData.user.id)
-        .order("created_at", { ascending: false });
-
-      if (platesError) {
-        console.error("Error fetching plates:", platesError);
-      }
-
-      const plates = platesData || [];
-      setAllPlates(plates);
-
-      // Fetch messages for approved plates
-      const approvedPlateNumbers = plates.filter((p) => p.is_verified).map((p) => p.plate_number);
-
-      if (approvedPlateNumbers.length > 0) {
-        const { data: messagesData, error: messagesError } = await supabase
-          .from("messages")
-          .select("id, plate_number, message_text, created_at")
-          .in("plate_number", approvedPlateNumbers)
-          .order("created_at", { ascending: false });
-
-        if (messagesError) {
-          console.error("Error fetching messages:", messagesError);
-        } else {
-          setMessages(messagesData || []);
-        }
-      }
-
-      setIsLoading(false);
-    }
-
-    loadData();
-  }, [supabase]);
-
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <div className="flex items-center justify-center rounded-lg bg-slate-50 py-12 dark:bg-slate-700">
-          <p className="text-slate-600 dark:text-slate-400">Wird geladen...</p>
-        </div>
-      </div>
-    );
+  const messagesByPlate: Record<string, Message[]> = {};
+  for (const msg of messages) {
+    const bucket = messagesByPlate[msg.plate_number] ?? [];
+    bucket.push(msg);
+    messagesByPlate[msg.plate_number] = bucket;
   }
 
-  const messagesByPlate: Record<string, typeof messages> = {};
-  messages.forEach((msg) => {
-    if (!messagesByPlate[msg.plate_number]) {
-      messagesByPlate[msg.plate_number] = [];
-    }
-    messagesByPlate[msg.plate_number].push(msg);
-  });
-
   const verifiedPlates = allPlates.filter((p) => p.is_verified);
-  const pendingPlates = allPlates.filter(
-    (p) => !p.is_verified && p.verification_status === "pending",
+  // Abgelehnte Kennzeichen gehören mit in diese Liste. Sonst verschwinden sie
+  // spurlos: Sie tauchen beim Admin nicht mehr auf, belegen die Nummer aber
+  // weiterhin, und der Halter hätte keinen Weg, ein neues Foto nachzureichen.
+  const openPlates = allPlates.filter(
+    (p) =>
+      !p.is_verified &&
+      (p.verification_status === "pending" || p.verification_status === "rejected"),
   );
   const totalApprovedMessages = messages.length;
 
@@ -115,14 +55,14 @@ export default function DashboardPage() {
       </section>
 
       {/* Section B: Pending Plates with Photo Challenge */}
-      {pendingPlates.length > 0 && (
+      {openPlates.length > 0 && (
         <section className="mb-8 rounded-lg border-2 border-amber-300 bg-amber-50 p-6 shadow-sm dark:border-amber-700 dark:bg-amber-900/20">
           <h2 className="mb-4 text-lg font-bold text-amber-900 dark:text-amber-100">
             Verifizierung erforderlich
           </h2>
 
           <div className="space-y-6">
-            {pendingPlates.map((plate) => (
+            {openPlates.map((plate) => (
               <div
                 key={plate.id}
                 className="rounded-lg border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-slate-800"
@@ -131,6 +71,21 @@ export default function DashboardPage() {
                 <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
                   {plate.plate_number}
                 </div>
+
+                {plate.verification_status === "rejected" && (
+                  <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                    <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                        Die Prüfung war nicht erfolgreich
+                      </p>
+                      <p className="mt-1 text-sm text-red-800 dark:text-red-200">
+                        Bitte lade ein neues Foto hoch, auf dem sowohl der Bestätigungscode als auch
+                        das Kennzeichen gut lesbar sind.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Instructions */}
                 <div className="mb-6 rounded-lg bg-amber-100 p-4 dark:bg-amber-900/30">
@@ -146,8 +101,19 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                {/* Photo Upload */}
-                {plate.proof_image_url ? (
+                {/* Photo Upload — bei einer Ablehnung liegt der alte Pfad noch in der
+                    Zeile, trotzdem muss hier wieder das Upload-Feld stehen. Altzeilen
+                    ohne Trennstriche (vor Migration 0008) ordnet der Admin zu; ein
+                    neues Foto würde dort an der Formatprüfung scheitern. */}
+                {!isCanonicalPlate(plate.plate_number) ? (
+                  <div className="flex items-start gap-2 rounded-lg bg-slate-100 p-4 dark:bg-slate-700">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      Dieses Kennzeichen wurde vor einer Formatumstellung gespeichert und wird vom
+                      Admin anhand deines Fotos neu zugeordnet. Du musst nichts tun.
+                    </p>
+                  </div>
+                ) : plate.proof_image_url && plate.verification_status === "pending" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-green-100 p-4 dark:bg-green-900/30">
                     <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                     <p className="text-sm font-medium text-green-800 dark:text-green-200">
@@ -171,6 +137,11 @@ export default function DashboardPage() {
             Nachrichten ({totalApprovedMessages})
           </h2>
         </div>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Angezeigt werden Nachrichten ab 30 Tage vor der Registrierung des jeweiligen Kennzeichens.
+          Ältere Nachrichten können an eine frühere Halterin oder einen früheren Halter gerichtet
+          sein.
+        </p>
 
         {hasNoContent ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 py-12 dark:bg-slate-700">
@@ -245,83 +216,6 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function ProofUploadForm({ plateId }: { plateId: string }) {
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      const formData = new FormData();
-      formData.append("proof", file);
-
-      const result = await uploadProof(plateId, formData);
-
-      if (!result.success) {
-        setError(result.error || "Fehler beim Hochladen");
-        setIsUploading(false);
-        return;
-      }
-
-      setSuccess(true);
-      setIsUploading(false);
-
-      // Reload page after successful upload
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-    } catch (_err) {
-      setError("Ein Fehler ist aufgetreten");
-      setIsUploading(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg bg-green-100 p-4 dark:bg-green-900/30">
-        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-        <p className="text-sm font-medium text-green-800 dark:text-green-200">
-          Bild erfolgreich hochgeladen!
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 p-4 transition-colors hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/10 dark:hover:border-amber-600">
-        <Camera className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Foto hochladen</p>
-          <p className="text-xs text-amber-700 dark:text-amber-200">
-            {isUploading ? "Wird hochgeladen..." : "Klicke hier, um ein Bild zu wählen"}
-          </p>
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleUpload}
-          disabled={isUploading}
-          className="hidden"
-        />
-      </label>
-
-      {error && (
-        <div className="rounded-lg bg-red-100 p-3 dark:bg-red-900/30">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-        </div>
-      )}
     </div>
   );
 }

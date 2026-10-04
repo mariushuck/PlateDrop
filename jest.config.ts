@@ -11,6 +11,9 @@ const customJestConfig = {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
   testMatch: ["**/__tests__/**/*.test.ts", "**/__tests__/**/*.test.tsx"],
+  // Integrationstests brauchen ein laufendes Postgres und laufen separat
+  // über `pnpm test:integration` (jest.integration.config.ts).
+  testPathIgnorePatterns: ["<rootDir>/__tests__/integration/"],
 };
 
 export default createJestConfig(customJestConfig);

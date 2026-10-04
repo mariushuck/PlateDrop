@@ -2,7 +2,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
-import { validateGermanPlate } from "@/lib/utils/plateUtils";
+import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 
 interface ClaimPlateFormProps {
   action: (
@@ -17,10 +17,9 @@ export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
   const [showSuccess, setShowSuccess] = useState(false);
 
   // Compute plate error synchronously
+  const parsedPlate = parsePlate(plateInput);
   const plateError =
-    plateInput.trim() && !validateGermanPlate(plateInput)
-      ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
-      : "";
+    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
 
   const isFormValid = plateInput.trim() && !plateError;
 

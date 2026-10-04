@@ -1,3 +1,10 @@
 allowBuilds:
+  # Dateibeobachter von jest-haste-map. Das Install-Skript baut nur aus dem
+  # Quellcode, wenn kein vorkompiliertes Binary passt; für alle genutzten
+  # Plattformen (macOS, linux-glibc in der CI, linux-musl im Alpine-Image)
+  # liegen fertige Binaries als optionale Abhängigkeit bei.
+  '@parcel/watcher': false
+  # Von @swc/jest benötigt (Transformation der Integrationstests).
+  '@swc/core': true
   sharp: true
   unrs-resolver: true

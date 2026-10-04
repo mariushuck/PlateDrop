@@ -1,20 +1,20 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
+import { revalidatePath } from "next/cache";
+import { requireUser } from "@/lib/auth/session";
+import {
+  claimPlate as claimPlateQuery,
+  PlateAlreadyClaimedError,
+  plateBelongsToUser,
+  setProofPath,
+} from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
+import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
+import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
+import { generateVerificationCode } from "@/lib/utils/verificationCode";
 
-/**
- * Generate a random 6-character verification code in format "XX-XXXX"
- * Example: "PD-8X4A"
- */
-function generateVerificationCode(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `${code.slice(0, 2)}-${code.slice(2)}`;
-}
+/** Maximale Größe eines Beweisfotos. */
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
 export async function claimPlate(
   _prevState: { success: boolean; error?: string } | null,
@@ -22,70 +22,28 @@ export async function claimPlate(
 ): Promise<{ success: boolean; error?: string }> {
   const plateNumber = formData.get("plateNumber") as string;
 
-  // Validate plate
   if (!plateNumber?.trim()) {
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
-  if (!validateGermanPlate(plateNumber)) {
-    return {
-      success: false,
-      error: "Ungültiges deutsches Kennzeichen. Beispiel: KA-AB-1234",
-    };
+  const parsedPlate = parsePlate(plateNumber);
+  if (!parsedPlate.ok) {
+    return { success: false, error: plateErrorMessage(parsedPlate.reason) };
   }
 
-  // Get authenticated user
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !userData.user) {
-    return {
-      success: false,
-      error: "Sie müssen angemeldet sein.",
-    };
-  }
-
-  // Normalize plate
-  const normalizedPlate = normalizePlate(plateNumber);
+  const user = await requireUser();
+  const normalizedPlate = parsedPlate.plate;
 
   try {
-    // Generate verification code
-    const verificationCode = generateVerificationCode();
-
-    // Insert into verified_plates with pending status
-    const { error } = await supabase.from("verified_plates").insert({
-      user_id: userData.user.id,
-      plate_number: normalizedPlate,
-      is_verified: false,
-      verification_status: "pending",
-      verification_code: verificationCode,
-      proof_image_url: null,
-    });
-
-    if (error) {
-      console.error("Supabase insert error:", error);
-
-      // Handle unique constraint violation
-      if (error.code === "23505") {
-        return {
-          success: false,
-          error: "Dieses Kennzeichen ist bereits registriert.",
-        };
-      }
-
-      return {
-        success: false,
-        error: "Fehler beim Registrieren des Kennzeichens.",
-      };
-    }
-
+    await claimPlateQuery(user.id, normalizedPlate, generateVerificationCode);
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (err) {
-    console.error("Unexpected error:", err);
-    return {
-      success: false,
-      error: "Ein unerwarteter Fehler ist aufgetreten.",
-    };
+    if (err instanceof PlateAlreadyClaimedError) {
+      return { success: false, error: "Dieses Kennzeichen ist bereits registriert." };
+    }
+    logger.error("Fehler beim Registrieren des Kennzeichens:", err);
+    return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };
   }
 }
 
@@ -93,88 +51,58 @@ export async function uploadProof(
   plateId: string,
   formData: FormData,
 ): Promise<{ success: boolean; error?: string; url?: string }> {
-  // Get authenticated user
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const user = await requireUser();
 
-  if (userError || !userData.user) {
-    return {
-      success: false,
-      error: "Sie müssen angemeldet sein.",
-    };
+  const file = formData.get("proof");
+  if (!(file instanceof File) || file.size === 0) {
+    return { success: false, error: "Bitte wählen Sie ein Bild aus." };
+  }
+
+  if (!file.type.startsWith("image/")) {
+    return { success: false, error: "Bitte wählen Sie ein gültiges Bildformat." };
+  }
+
+  if (file.size > MAX_PROOF_BYTES) {
+    return { success: false, error: "Die Datei ist zu groß. Maximum 5MB." };
+  }
+
+  // Erst die Eigentümerschaft prüfen, dann schreiben — für ein fremdes oder
+  // erfundenes `plateId` landet keine Datei im Volume.
+  if (!(await plateBelongsToUser(user.id, plateId))) {
+    return { success: false, error: "Kennzeichen nicht gefunden." };
   }
 
   try {
-    // Extract file from form data
-    const file = formData.get("proof") as File;
+    const objectPath = await saveProof(user.id, plateId, file);
+    // setProofPath filtert weiterhin über `user_id` und die RLS-Policy greift –
+    // ein Fehlschlag hier ist also der Rennen-Fall und die Datei muss wieder weg.
+    const { updated, previousPath } = await setProofPath(user.id, plateId, objectPath);
 
-    if (!file) {
-      return {
-        success: false,
-        error: "Bitte wählen Sie ein Bild aus.",
-      };
+    if (!updated) {
+      await deleteProof(objectPath);
+      return { success: false, error: "Kennzeichen nicht gefunden." };
     }
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      return {
-        success: false,
-        error: "Bitte wählen Sie ein gültiges Bildformat.",
-      };
+    // Das ersetzte Foto entfernen. Erst nach dem erfolgreichen Eintrag, damit
+    // ein Fehlschlag nicht das alte Bild mitnimmt.
+    if (previousPath && previousPath !== objectPath) {
+      await deleteProof(previousPath).catch((err: unknown) => {
+        // Ein verwaistes Altbild ist ärgerlich, aber kein Grund, den Upload
+        // scheitern zu lassen. prune-proofs.mjs räumt es später ab.
+        logger.error("Ersetztes Beweisfoto konnte nicht entfernt werden:", err);
+      });
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return {
-        success: false,
-        error: "Die Datei ist zu groß. Maximum 5MB.",
-      };
-    }
-
-    // Generate unique filename
-    const timestamp = Date.now();
-    const fileName = `${plateId}-${timestamp}-${file.name}`;
-
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage.from("proofs").upload(fileName, file);
-
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      return {
-        success: false,
-        error: "Fehler beim Hochladen des Bildes.",
-      };
-    }
-
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("proofs").getPublicUrl(fileName);
-
-    // Update verified_plates with proof image URL
-    const { error: updateError } = await supabase
-      .from("verified_plates")
-      .update({
-        proof_image_url: publicUrl,
-      })
-      .eq("id", plateId)
-      .eq("user_id", userData.user.id);
-
-    if (updateError) {
-      console.error("Update error:", updateError);
-      return {
-        success: false,
-        error: "Fehler beim Speichern der Bildadresse.",
-      };
-    }
-
-    return { success: true, url: publicUrl };
+    revalidatePath("/dashboard");
+    return { success: true, url: objectPath };
   } catch (err) {
-    console.error("Unexpected error:", err);
-    return {
-      success: false,
-      error: "Ein unerwarteter Fehler ist aufgetreten.",
-    };
+    if (err instanceof UnsupportedProofTypeError) {
+      return {
+        success: false,
+        error: "Nicht unterstütztes Bildformat. Erlaubt sind JPEG, PNG, WebP und HEIC.",
+      };
+    }
+    logger.error("Fehler beim Hochladen des Bildes:", err);
+    return { success: false, error: "Fehler beim Hochladen des Bildes." };
   }
 }

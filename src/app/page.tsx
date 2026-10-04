@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { validateGermanPlate } from "@/lib/utils/plateUtils";
+import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { dropMessage } from "./actions";
 
 const MAX_MESSAGE_LENGTH = 500;
@@ -16,10 +16,9 @@ export default function Home() {
   const formRef = useRef<HTMLFormElement>(null);
 
   // Compute plate error synchronously (no effect needed)
+  const parsedPlate = parsePlate(plateInput);
   const plateError =
-    plateInput.trim() && !validateGermanPlate(plateInput)
-      ? "Ungültiges Kennzeichen (z.B. KA-AB-1234)"
-      : "";
+    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
 
   // Handle success/error with toast notifications
   useEffect(() => {

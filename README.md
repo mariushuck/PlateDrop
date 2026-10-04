@@ -1,85 +1,121 @@
 # PlateDrop
 
-PlateDrop ist eine privacy-first Web-App für deutsche Kennzeichen. Nachrichten können anonym an ein Kennzeichen gesendet werden. Lesen dürfen sie nur angemeldete Nutzer, die das jeweilige Kennzeichen verifiziert haben.
+PlateDrop ist eine privacy-first Web-App für deutsche Kennzeichen. Nachrichten können anonym an ein
+Kennzeichen gesendet werden. Lesen dürfen sie nur angemeldete Nutzer, die das jeweilige Kennzeichen
+verifiziert haben.
+
+Die Anwendung läuft vollständig selbst betrieben — eigener Postgres, eigene Auth, eigener
+Dateispeicher, eigener Mailversand, je ein Container und ein optionaler Reverse Proxy.
 
 ## Kernidee
 
 PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 
 1. Öffentlich kann jede Person eine Nachricht an ein Kennzeichen senden, ohne Konto und ohne Login.
-2. Beim Speichern wird das Kennzeichen normalisiert, damit Eingaben wie Leerzeichen, Bindestriche und Kleinbuchstaben konsistent verarbeitet werden.
-3. Lesen ist nur nach Anmeldung und Kennzeichen-Claim möglich. Verifizierte Kennzeichen werden im Dashboard angezeigt.
-4. Ein Admin kann ausstehende Verifizierungen prüfen und freigeben oder ablehnen.
+2. Beim Speichern wird das Kennzeichen normalisiert, damit Leerzeichen, Bindestriche und
+   Kleinbuchstaben konsistent verarbeitet werden.
+3. Lesen ist nur nach Anmeldung und Kennzeichen-Verifizierung möglich.
+4. Ein Admin prüft die Verifizierungen und gibt sie frei oder lehnt sie ab.
+
+Diese Asymmetrie ist die zentrale Entwurfsvorgabe. Wie sie durchgesetzt wird, steht in der
+[technischen Dokumentation](docs/architecture.md#5-sicherheitsmodell).
 
 ## Tech Stack
 
-- Next.js 16 mit App Router
-- React 19
-- TypeScript im Strict Mode
-- Tailwind CSS
-- Supabase für Auth, Datenbank und Storage
-- Jest und React Testing Library für Tests
-- `sonner` für Toasts
-- Biome für Linting und Formatierung
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL 18 über `pg` ·
+better-auth · nodemailer · Docker Compose · Jest · Biome
 
-## Wichtige Flows
-
-- Öffentliches Drop-Formular auf `/`: Kennzeichen eingeben, Nachricht senden, Server Action schreibt in `messages`.
-- Anmeldung auf `/login`: Sign-in und Sign-up mit Supabase Auth.
-- Dashboard auf `/dashboard`: Kennzeichen registrieren, Verifizierungsstatus prüfen, Beweisfoto hochladen und Nachrichten der verifizierten Kennzeichen lesen.
-- Admin-Ansicht auf `/admin`: Offene Verifizierungen mit Proof-Bild prüfen.
-
-## Daten- und Sicherheitsmodell
-
-- `messages` erlaubt öffentliche Inserts.
-- `messages` ist beim Lesen durch RLS auf verifizierte Kennzeichen begrenzt.
-- `verified_plates` speichert Claims, Verifizierungsstatus und Proof-Upload-Referenzen.
-- Die Kennzeichenlogik liegt in `src/lib/utils/plateUtils.ts` und akzeptiert gängige deutsche Formate inklusive E- und H-Kennzeichen.
-
-## Verfügbare Routen
-
-| Route          | Beschreibung                                                 | Zugriff                                            |
-| -------------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| `/`            | Anonyme Nachricht an ein Kennzeichen senden                  | Öffentlich                                         |
-| `/login`       | Anmeldung und Registrierung                                  | Öffentlich                                         |
-| `/dashboard`   | Kennzeichen registrieren, Proof hochladen, Nachrichten lesen | Authentifiziert                                    |
-| `/admin`       | Ausstehende Verifizierungen prüfen                           | Authentifiziert, Admin-Logik in den Server Actions |
-| `/impressum`   | Impressum                                                    | Öffentlich                                         |
-| `/datenschutz` | Datenschutzerklärung                                         | Öffentlich                                         |
-
-## Entwicklung
+## Schnellstart
 
 ```bash
+cp .env.example .env      # Passwörter und Secrets eintragen
+docker compose up -d
+```
+
+- App: <http://localhost:3000>
+- Postfach (Mailpit): <http://localhost:8025> — hier landen in der Entwicklung alle E-Mails
+- Postgres: `localhost:5432`
+
+Die Migrationen spielt der One-shot-Service `migrate` vor dem Start der App ein.
+
+**Nach einer Änderung an den Abhängigkeiten** (`package.json`, `pnpm-lock.yaml`) mit
+`docker compose up -d --build --renew-anon-volumes` starten. Der Dev-Container hält `node_modules`
+in einem anonymen Volume, das ein normaler Neubau behält. `pnpm dev` würde dann die veralteten
+Pakete bemerken, neu installieren wollen und ohne Terminal mit
+`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` in einer Neustartschleife hängen.
+
+**Erstes Admin-Konto anlegen:** registrieren, Bestätigungsmail in Mailpit öffnen, dann
+
+```bash
+docker compose run --rm migrate node scripts/set-admin.mjs deine@mail.de
+```
+
+Ausführlich in der [Admin-Anleitung](docs/admin.md#a1-das-erste-admin-konto-anlegen).
+
+### Ohne Docker entwickeln
+
+```bash
+docker compose up -d db mailpit
+# In .env.local `db`/`mailpit` durch `localhost` ersetzen und PROOFS_DIR auf ./.data/proofs setzen
 pnpm install
+node --env-file=.env.local scripts/migrate.mjs
 pnpm dev
 ```
 
-Weitere hilfreiche Scripts:
+`pnpm dev` liest `.env.local` selbst, die Skripte unter `scripts/` dagegen nicht — sie brauchen die
+Variablen aus der Umgebung, daher `node --env-file=…`. Das gilt auch für `pnpm db:migrate`,
+`db:set-admin` und `db:prune`.
 
-```bash
-pnpm lint
-pnpm check
-pnpm format
-pnpm test
-pnpm test:watch
-pnpm build
-pnpm start
-```
+## Dokumentation
+
+| Dokument | Inhalt |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Aufbau, Datenmodell, Sicherheitsmodell, Abläufe, Teststrategie |
+| [docs/admin.md](docs/admin.md) | Admin-Aufgaben und Serverbetrieb: Admin anlegen, Freigaben, Backup, Wartung, Updates, Störungssuche |
+| [.env.example](.env.example) | Alle Umgebungsvariablen, kommentiert |
+| [AUDIT.md](AUDIT.md) | Sicherheits- und Compliance-Audit vor dem Go-Live, mit Umsetzungsstand je Finding |
+| [TODO.md](TODO.md) | Was als Nächstes ansteht, priorisiert |
 
 ## Tests
 
-- `__tests__/utils/plateUtils.test.ts`: Normalisierung und Validierung von Kennzeichen
-- `__tests__/components/ClaimPlateForm.test.tsx`: Claim-Formular und Validierung
+```bash
+pnpm test              # Unit-Tests, ohne Docker
+pnpm test:db:up        # Wegwerf-Postgres und Mailpit für die Integrationstests
+pnpm test:integration  # Integrationstests gegen echtes Postgres
+pnpm test:db:down      # Testcontainer abräumen
+pnpm smoke             # End-to-End gegen den laufenden Stack
+```
 
-## Projektstruktur
+Der wichtigste Testblock ist `__tests__/integration/rls.test.ts` — er sichert die Zusage ab, dass nur
+verifizierte Halter ihre Nachrichten lesen können. Details zur
+[Teststrategie](docs/architecture.md#9-teststrategie).
 
-- `src/app/actions.ts`: Öffentliche Nachrichtenerstellung
-- `src/app/dashboard/actions.ts`: Kennzeichen-Claim und Proof-Upload
-- `src/app/admin/actions.ts`: Admin-Genehmigung und Ablehnung
-- `src/app/auth/actions.ts`: Sign-in, Sign-up und Sign-out
-- `src/components/features/ClaimPlateForm.tsx`: Formular zum Registrieren eines Kennzeichens
-- `src/lib/utils/plateUtils.ts`: Kennzeichen-Normalisierung und -Validierung
+Die CI (`.github/workflows/ci.yml`) führt Lint, Typecheck, Unit- und Integrationstests, Build,
+`pnpm audit` und einen Secret-Scan bei jedem Push auf `main`/`dev` und jedem Pull Request aus.
 
-## Status
+## Weitere Befehle
 
-Die App ist als mobile-first Webanwendung aufgebaut und für den laufenden Ausbau mit Supabase, Server Actions und RLS vorbereitet.
+```bash
+pnpm lint          # Biome-Linter
+pnpm check         # Linter + Formatprüfung
+pnpm format        # Automatisch formatieren
+pnpm typecheck     # TypeScript ohne Emit
+pnpm build         # Produktionsbuild
+pnpm db:migrate    # Migrationen einspielen
+pnpm db:set-admin  # Admin-Rechte vergeben: pnpm db:set-admin <mail> [--revoke]
+pnpm db:prune      # Datenpflege: Sitzungen, Rate-Limit-Zeilen, alte Nachrichten, verwaiste Fotos
+```
+
+Die drei `db:`-Befehle erwarten `DATABASE_ADMIN_URL` (und für `db:migrate` `APP_DB_PASSWORD`) in
+der Umgebung. Im Docker-Betrieb laufen sie stattdessen über
+`docker compose run --rm migrate node scripts/…`.
+
+## Produktion
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile proxy up -d --build
+```
+
+Startet den Standalone-Build hinter Caddy mit automatischem TLS; die Datenbank bleibt dabei im
+internen Netz. Was vorher zu konfigurieren ist — Secrets, Domain, SMTP — steht in
+[docs/admin.md, Teil B](docs/admin.md#teil-b--serverbetrieb).
