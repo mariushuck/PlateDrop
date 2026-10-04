@@ -38,11 +38,25 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
 
 ## P1 — Absicherung und Tests
 
-- [ ] **E-Mail-Adresse in alten Git-Objekten** (manuell auf github.com): Die Historie ist auf die
-  noreply-Adresse umgeschrieben (2026-10-04), alte Commits bleiben aber über die PR-Seiten #1–#11
-  erreichbar. Unter *Settings → Emails* „Keep my email addresses private" und „Block command line
-  pushes that expose my email" einschalten; optional den GitHub Support bitten, Cached Views und
-  PR-Refs zu entfernen („Removing sensitive data from a repository"). Andere lokale Klone neu klonen.
+- [ ] **Merge-Commit `acd2971` (PR #12) trägt noch die Gmail-Adresse.** Er entstand, bevor die
+  E-Mail-Privatsphäre auf GitHub aktiv war; ein Ersatz mit gleichem Inhalt und noreply-Autor ist
+  vorbereitet, der Force-Push kam aber nicht an. Da `main` geschützt ist (auch für Admins), geht
+  das nur so:
+  1. Branch-Schutz von `main` kurz lockern (`enforce_admins` aus, Force-Push erlauben).
+  2. Ersatz-Commit bauen: gleicher Baum, gleiche Eltern (`2611c37`, `46ed19a`), gleiche Message und
+     Zeitstempel, Autor `186077186+mariushuck@users.noreply.github.com`
+     (`git commit-tree acd2971^{tree} -p acd2971^1 -p acd2971^2` mit `GIT_AUTHOR_*`).
+  3. Alles, was seitdem auf `main` liegt (ab `6b55e86`, PR #13), per `git rebase --rebase-merges`
+     auf den Ersatz setzen; die Hashes ändern sich ab dort.
+  4. `main` und `dev` mit `--force-with-lease` pushen, Schutz exakt wiederherstellen und per
+     `gh api …/branches/main/protection` prüfen.
+  5. Kontrolle: `git log origin/main --format=%ae | sort -u` zeigt nur noreply-Adressen.
+  Claude Code hat diese Abfolge blockiert; ausführen oder per Berechtigungsregel freigeben.
+- [ ] **E-Mail-Adresse in alten Git-Objekten**: Die Historie ist auf die noreply-Adresse
+  umgeschrieben (2026-10-04), die E-Mail-Privatsphäre auf GitHub ist aktiv und die globale
+  Git-Adresse umgestellt. Alte Commits bleiben aber über die PR-Seiten #1–#12 erreichbar; optional
+  den GitHub Support bitten, Cached Views und PR-Refs zu entfernen („Removing sensitive data from a
+  repository"). Andere lokale Klone neu klonen.
 
 - [ ] **Neue Befehle in admin.md gegen den laufenden Stack prüfen**: Restore aus
   `platedrop_backups` (B5), `jq`-Filter für JSON-Logs und Health-Abfrage (B7). Danach die
