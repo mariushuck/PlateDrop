@@ -17,6 +17,9 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
   Hosting, zuständige Aufsichtsbehörde in `src/app/datenschutz/page.tsx`. Falls
   `MESSAGE_RETENTION_DAYS` gesetzt wird, die Frist dort als Speicherdauer nennen.
 - [ ] **AV-Verträge** mit SMTP-Anbieter und Hosting-Provider schließen.
+- [ ] **Kontaktadresse für Datenschutzanfragen** auf einer eigenen Domain einrichten und in
+  `src/app/datenschutz/page.tsx` eintragen (heute Platzhalter; das frühere `privacy@platedrop.de`
+  gehört einer fremden, aktiv registrierten Domain).
 - [ ] **Produktions-`.env`**: alle Secrets frisch mit `openssl rand -base64 32`,
   `BETTER_AUTH_URL=https://<domain>`, `TRUSTED_PROXY_HOPS` passend zum tatsächlichen Proxy-Setup
   (admin.md B1/B2).
@@ -34,6 +37,12 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
 - [x] **`dev` nach `main` mergen**: per Pull Request am 2026-10-04 (39 Commits, CI grün).
 
 ## P1 — Absicherung und Tests
+
+- [ ] **E-Mail-Adresse in alten Git-Objekten** (manuell auf github.com): Die Historie ist auf die
+  noreply-Adresse umgeschrieben (2026-10-04), alte Commits bleiben aber über die PR-Seiten #1–#11
+  erreichbar. Unter *Settings → Emails* „Keep my email addresses private" und „Block command line
+  pushes that expose my email" einschalten; optional den GitHub Support bitten, Cached Views und
+  PR-Refs zu entfernen („Removing sensitive data from a repository"). Andere lokale Klone neu klonen.
 
 - [ ] **Neue Befehle in admin.md gegen den laufenden Stack prüfen**: Restore aus
   `platedrop_backups` (B5), `jq`-Filter für JSON-Logs und Health-Abfrage (B7). Danach die

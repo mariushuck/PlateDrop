@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
 
+# Öffentliches Repo: der Token darf nur lesen, auch falls der Repo-Default
+# einmal gelockert wird. Kein Job schreibt ins Repo.
+permissions:
+  contents: read
+
 # Ältere Läufe desselben Branches/PRs abbrechen.
 concurrency:
   group: ci-${{ github.ref }}
@@ -80,6 +85,10 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    # gitleaks-action liest bei Pull Requests die PR-Commits über die API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
