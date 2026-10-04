@@ -140,7 +140,7 @@ New behavior is written test-first. For anything touching authorization, verify 
 
 Integration tests need `pnpm test:db:up` first. They run serially against one database and reset it between tests.
 
-CI (`.github/workflows/ci.yml`, on push to `main`/`dev` and on PRs) runs `pnpm check`, `typecheck`, `test`, `build`, the integration suite against service containers, `pnpm audit --audit-level high`, and a gitleaks secret scan. Dependabot (`.github/dependabot.yml`) opens weekly update PRs.
+CI (`.github/workflows/ci.yml`, on push to `main`/`dev` and on PRs) runs `pnpm check`, `typecheck`, `test`, `build`, the integration suite against service containers, `pnpm audit --audit-level high`, and a gitleaks secret scan. Dependabot (`.github/dependabot.yml`) opens weekly update PRs. Actions are pinned to full commit SHAs with a version comment (`uses: owner/action@<sha> # vX.Y.Z`) — pin any new action the same way, resolving annotated tags to the commit. CodeQL runs as GitHub's default setup (no workflow file). `main` is protected: PR only, the four CI jobs must pass, admins included, merge commits only (squash and rebase are disabled).
 
 ## UI Rules
 
