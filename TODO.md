@@ -29,8 +29,8 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
   (täglich), siehe admin.md B9.
 - [ ] **Backups außer Haus und verschlüsselt** ablegen; das Volume `backups` liegt auf demselben
   Server wie die Daten. Einen Restore einmal vollständig durchspielen (admin.md B5).
-- [ ] **Integrationstests grün bestätigen**: `pnpm test:db:up && pnpm test:integration` lokal, bzw.
-  den CI-Job `integration` prüfen (laut AUDIT.md nach den Fixes noch offen).
+- [x] **Integrationstests grün bestätigen**: CI-Job `integration` grün (Lauf 37219861770,
+  2026-10-04).
 - [ ] **`dev` nach `main` mergen** per Pull Request (`dev` ist 32 Commits voraus).
 
 ## P1 — Absicherung und Tests
@@ -38,6 +38,13 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
 - [ ] **Neue Befehle in admin.md gegen den laufenden Stack prüfen**: Restore aus
   `platedrop_backups` (B5), `jq`-Filter für JSON-Logs und Health-Abfrage (B7). Danach die
   Einschränkung im Intro von admin.md entfernen.
+- [ ] **Standalone-Output enthält das ganze Projekt, inklusive `.env`.** Der dynamische
+  Dateizugriff in `src/lib/storage/proofs.ts` (`resolve(join(root, objectPath))`, Zeile 70 u. a.)
+  lässt den Next-Build alles in `.next/standalone` aufnehmen; seit Next 16.3 gibt es dazu eine
+  Build-Warnung. Im Docker-Image harmlos, weil `.dockerignore` `.env*` ausschließt. Bei einem
+  Deployment von `.next/standalone` ohne Docker würden aber die Secrets mitgeliefert. Abhilfe:
+  `/*turbopackIgnore: true*/` an den Pfadaufrufen, danach prüfen, dass `.next/standalone` kein
+  `.env`/`src` mehr enthält.
 - [ ] **Smoke-Test erweitern** (`scripts/smoke-test.mjs`): `/api/health`, Security-Header (CSP,
   `X-Frame-Options`, kein `X-Powered-By`), Datenexport, Kontolöschung inklusive Entfernen des
   Foto-Verzeichnisses.

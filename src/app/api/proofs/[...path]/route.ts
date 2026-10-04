@@ -6,8 +6,8 @@ import { InvalidProofPathError, readProof } from "@/lib/storage/proofs";
 /**
  * Liefert ein Beweisfoto aus – aber nur an den Halter oder einen Admin.
  *
- * Dies ist die einzige API-Route der Anwendung neben den Auth-Endpunkten.
- * Die Projektregel „Mutationen ausschließlich über Server Actions" bleibt
+ * Einer von drei bewussten Route Handlern (neben den Auth-Endpunkten und
+ * /api/health). Die Projektregel „Mutationen ausschließlich über Server Actions" bleibt
  * unberührt: hier wird nichts verändert, es wird nur gelesen. Ein Route
  * Handler ist nötig, weil ein <img>-Tag eine URL braucht, keine Server Action.
  *
