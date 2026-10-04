@@ -31,7 +31,7 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
   Server wie die Daten. Einen Restore einmal vollständig durchspielen (admin.md B5).
 - [x] **Integrationstests grün bestätigen**: CI-Job `integration` grün (Lauf 37219861770,
   2026-10-04).
-- [ ] **`dev` nach `main` mergen** per Pull Request (`dev` ist 32 Commits voraus).
+- [x] **`dev` nach `main` mergen**: per Pull Request am 2026-10-04 (39 Commits, CI grün).
 
 ## P1 — Absicherung und Tests
 
