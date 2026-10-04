@@ -30,11 +30,20 @@ export const auth = betterAuth({
   // Origin-/CSRF-Prüfung explizit an die konfigurierte Domain binden.
   trustedOrigins: [new URL(BASE_URL).origin],
 
+  // better-auth verlangt bei `/delete-user` mit frischer Sitzung kein Passwort.
+  // Gelöscht wird deshalb nur über die Server Action `deleteAccount`, die das
+  // Passwort mitschickt; die Sperre gilt nur für HTTP, `auth.api.deleteUser`
+  // bleibt serverseitig nutzbar.
+  disabledPaths: ["/delete-user", "/delete-user/callback"],
+
   emailAndPassword: {
     enabled: true,
     minPasswordLength: MIN_PASSWORD_LENGTH,
     // Lesen von Nachrichten setzt ein bestätigtes Konto voraus.
     requireEmailVerification: true,
+    // Wer sein Passwort zurücksetzt, tut das oft gerade wegen eines
+    // Verdachts. Bestehende Sitzungen – auch eine übernommene – enden damit.
+    revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       const mail = passwordResetEmail(url);
       await sendMail({ to: user.email, ...mail });

@@ -34,7 +34,8 @@ const config: Config = {
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "mjs", "json"],
   // ESM-Pakete aus dem better-auth-Umfeld müssen transformiert werden.
   transformIgnorePatterns: [
-    "/node_modules/\\.pnpm/(?!(better-auth|@better-auth\\+|better-call|@better-fetch\\+|@noble\\+|nanostores|jose|kysely|defu|zod|uncrypto)@)",
+    // Scoped-Pakete liegen unter `.pnpm/@scope+name@version`, daher `[^@/]+`.
+    "/node_modules/\\.pnpm/(?!(better-auth|@better-auth\\+[^@/]+|better-call|@better-fetch\\+[^@/]+|@noble\\+[^@/]+|nanostores|jose|kysely|defu|zod|uncrypto|rou3)@)",
   ],
   testTimeout: 30_000,
 };
