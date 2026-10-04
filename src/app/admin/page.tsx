@@ -1,97 +1,20 @@
-"use client";
-
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { Database } from "@/types/database.types";
-import { approvePlate, rejectPlate } from "./actions";
+import VerificationActions from "@/components/features/VerificationActions";
+import { requireAdmin } from "@/lib/auth/session";
+import { listPendingVerifications } from "@/lib/db/queries";
+import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
-type VerifiedPlate = Database["public"]["Tables"]["verified_plates"]["Row"];
-
-interface PendingVerification extends VerifiedPlate {
-  proof_image_url: string;
-}
-
-export default function AdminPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [pendingVerifications, setPendingVerifications] = useState<PendingVerification[]>([]);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const supabase = createClient();
-
-  useEffect(() => {
-    async function loadPendingVerifications() {
-      try {
-        // Fetch pending verifications with proof images
-        const { data, error } = await supabase
-          .from("verified_plates")
-          .select("*")
-          .eq("verification_status", "pending")
-          .not("proof_image_url", "is", null)
-          .order("created_at", { ascending: true });
-
-        if (error) {
-          console.error("Error fetching pending verifications:", error);
-          setIsLoading(false);
-          return;
-        }
-
-        setPendingVerifications((data || []) as PendingVerification[]);
-        setIsLoading(false);
-      } catch (err) {
-        console.error("Unexpected error:", err);
-        setIsLoading(false);
-      }
-    }
-
-    loadPendingVerifications();
-  }, [supabase]);
-
-  async function handleApprove(plateId: string) {
-    setProcessingId(plateId);
-    setActionError(null);
-
-    const result = await approvePlate(plateId);
-
-    if (!result.success) {
-      setActionError(result.error || "Fehler beim Genehmigen");
-      setProcessingId(null);
-      return;
-    }
-
-    // Remove from list and refresh
-    setPendingVerifications((prev) => prev.filter((p) => p.id !== plateId));
-    setProcessingId(null);
-  }
-
-  async function handleReject(plateId: string) {
-    setProcessingId(plateId);
-    setActionError(null);
-
-    const result = await rejectPlate(plateId);
-
-    if (!result.success) {
-      setActionError(result.error || "Fehler beim Ablehnen");
-      setProcessingId(null);
-      return;
-    }
-
-    // Remove from list and refresh
-    setPendingVerifications((prev) => prev.filter((p) => p.id !== plateId));
-    setProcessingId(null);
-  }
-
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex items-center justify-center rounded-lg bg-slate-50 py-12 dark:bg-slate-700">
-          <p className="text-slate-600 dark:text-slate-400">Wird geladen...</p>
-        </div>
-      </div>
-    );
-  }
+/**
+ * Server Component. Zuvor lief die Seite im Browser und verließ sich darauf,
+ * dass RLS ihr nur als Admin Daten liefert; die Beweisfotos kamen über
+ * kurzlebige Signed URLs. Jetzt prüft die Seite selbst (requireAdmin), lädt
+ * serverseitig, und die Bilder laufen über /api/proofs — dort wird bei JEDEM
+ * Abruf erneut geprüft, statt vorab für zehn Minuten freizugeben.
+ */
+export default async function AdminPage() {
+  const admin = await requireAdmin();
+  const pendingVerifications = await listPendingVerifications(admin.id);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -102,16 +25,6 @@ export default function AdminPage() {
           Überprüfen und genehmigen Sie ausstehende Kennzeichen-Verifizierungen
         </p>
       </div>
-
-      {/* Error Alert */}
-      {actionError && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <div className="flex items-center gap-3">
-            <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-sm text-red-800 dark:text-red-200">{actionError}</p>
-          </div>
-        </div>
-      )}
 
       {/* Pending Verifications Grid */}
       {pendingVerifications.length === 0 ? (
@@ -133,12 +46,15 @@ export default function AdminPage() {
               {/* Image Container: provide explicit width/height/alt to avoid layout shift */}
               <div className="w-full overflow-hidden rounded-t-xl">
                 <Image
-                  src={verification.proof_image_url}
+                  src={`/api/proofs/${verification.proof_image_url}`}
                   alt={`Beweisfoto für ${verification.plate_number}`}
                   width={800}
                   height={800}
                   className="w-full h-auto object-cover"
                   priority={false}
+                  // Beweisfotos zeigen echte Kennzeichen – nicht durch den
+                  // Bild-Cache von Next.js auf die Platte spiegeln.
+                  unoptimized
                 />
               </div>
 
@@ -157,33 +73,19 @@ export default function AdminPage() {
                   </p>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(verification.id)}
-                    disabled={processingId === verification.id}
-                    className="flex-1 rounded-lg border border-green-600 bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-green-700 hover:bg-green-700 disabled:opacity-50 dark:border-green-500 dark:bg-green-500 dark:hover:border-green-600 dark:hover:bg-green-600"
-                  >
-                    {processingId === verification.id ? (
-                      <Loader2 className="inline-block h-4 w-4 animate-spin" />
-                    ) : (
-                      "Genehmigen"
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleReject(verification.id)}
-                    disabled={processingId === verification.id}
-                    className="flex-1 rounded-lg border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-red-700 hover:bg-red-700 disabled:opacity-50 dark:border-red-500 dark:bg-red-500 dark:hover:border-red-600 dark:hover:bg-red-600"
-                  >
-                    {processingId === verification.id ? (
-                      <Loader2 className="inline-block h-4 w-4 animate-spin" />
-                    ) : (
-                      "Ablehnen"
-                    )}
-                  </button>
-                </div>
+                {isCanonicalPlate(verification.plate_number) ? (
+                  <VerificationActions plateId={verification.id} />
+                ) : (
+                  // Altzeile aus der Zeit vor Migration 0008: mehrdeutig, Freigabe
+                  // und Ablehnung scheitern an der Formatprüfung.
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                      Altformat: Kennzeichen anhand des Fotos zuordnen (docs/admin.md, A3), danach
+                      hier freigeben.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

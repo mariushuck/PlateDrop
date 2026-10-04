@@ -1,109 +1,56 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import { getSessionUser } from "@/lib/auth/session";
+import { setPlateVerification } from "@/lib/db/queries";
+import { logger } from "@/lib/logger";
 
-export async function approvePlate(plateId: string): Promise<{ success: boolean; error?: string }> {
-  // Get authenticated user
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+const NOT_ALLOWED = "Sie haben keine Berechtigung für diese Aktion.";
 
-  if (userError || !userData.user) {
-    return {
-      success: false,
-      error: "Sie müssen angemeldet sein.",
-    };
+/**
+ * Genehmigt oder lehnt ein Kennzeichen ab.
+ *
+ * Zwei Prüfungen: hier das Admin-Flag der Session, und in der Datenbank die
+ * Policy `verified_plates_update_admin`. Fällt eine aus, hält die andere.
+ */
+async function setVerification(
+  plateId: string,
+  approved: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getSessionUser();
+
+  if (!user) {
+    return { success: false, error: "Sie müssen angemeldet sein." };
   }
 
-  // Check if user is admin
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (profileError || !profileData?.is_admin) {
-    return {
-      success: false,
-      error: "Sie haben keine Berechtigung für diese Aktion.",
-    };
+  if (!user.isAdmin) {
+    return { success: false, error: NOT_ALLOWED };
   }
 
   try {
-    const { error } = await supabase
-      .from("verified_plates")
-      .update({
-        is_verified: true,
-        verification_status: "approved",
-      })
-      .eq("id", plateId);
+    const changed = await setPlateVerification(user.id, plateId, approved);
 
-    if (error) {
-      console.error("Supabase update error:", error);
-      return {
-        success: false,
-        error: "Fehler beim Genehmigen des Kennzeichens.",
-      };
+    if (!changed) {
+      return { success: false, error: "Kennzeichen nicht gefunden." };
     }
 
+    revalidatePath("/admin");
     return { success: true };
   } catch (err) {
-    console.error("Unexpected error:", err);
+    logger.error("Fehler beim Aktualisieren der Verifizierung:", err);
     return {
       success: false,
-      error: "Ein unerwarteter Fehler ist aufgetreten.",
+      error: approved
+        ? "Fehler beim Genehmigen des Kennzeichens."
+        : "Fehler beim Ablehnen des Kennzeichens.",
     };
   }
 }
 
+export async function approvePlate(plateId: string): Promise<{ success: boolean; error?: string }> {
+  return setVerification(plateId, true);
+}
+
 export async function rejectPlate(plateId: string): Promise<{ success: boolean; error?: string }> {
-  // Get authenticated user
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !userData.user) {
-    return {
-      success: false,
-      error: "Sie müssen angemeldet sein.",
-    };
-  }
-
-  // Check if user is admin
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (profileError || !profileData?.is_admin) {
-    return {
-      success: false,
-      error: "Sie haben keine Berechtigung für diese Aktion.",
-    };
-  }
-
-  try {
-    const { error } = await supabase
-      .from("verified_plates")
-      .update({
-        is_verified: false,
-        verification_status: "rejected",
-      })
-      .eq("id", plateId);
-
-    if (error) {
-      console.error("Supabase update error:", error);
-      return {
-        success: false,
-        error: "Fehler beim Ablehnen des Kennzeichens.",
-      };
-    }
-
-    return { success: true };
-  } catch (err) {
-    console.error("Unexpected error:", err);
-    return {
-      success: false,
-      error: "Ein unerwarteter Fehler ist aufgetreten.",
-    };
-  }
+  return setVerification(plateId, false);
 }

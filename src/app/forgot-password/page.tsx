@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
+import { useActionState } from "react";
 import { requestPasswordReset } from "./actions";
 
 const initialState = { error: null as string | null, success: false };
@@ -32,14 +32,17 @@ export default function ForgotPasswordPage() {
           {state.success ? (
             <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
               <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                Falls diese E-Mail-Adresse registriert ist, erhältst du in Kürze eine E-Mail mit einem Link.
+                Falls diese E-Mail-Adresse registriert ist, erhältst du in Kürze eine E-Mail mit
+                einem Link.
               </p>
             </div>
           ) : (
             <form action={action} className="flex flex-col gap-4">
               {state.error && (
                 <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                    {state.error}
+                  </p>
                 </div>
               )}
               <div className="flex flex-col gap-2">
@@ -71,10 +74,7 @@ export default function ForgotPasswordPage() {
           )}
 
           <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-            <Link
-              href="/login"
-              className="font-medium text-slate-900 underline dark:text-white"
-            >
+            <Link href="/login" className="font-medium text-slate-900 underline dark:text-white">
               Zurück zum Login
             </Link>
           </p>

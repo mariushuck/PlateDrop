@@ -1,0 +1,37 @@
+# Wegwerf-Postgres für die Integrationstests (`pnpm test:integration`).
+# Läuft im RAM und auf einem eigenen Port, damit eine laufende Dev-DB
+# unangetastet bleibt.
+name: platedrop-test
+
+services:
+  db-test:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: platedrop_test
+      POSTGRES_USER: platedrop_owner
+      POSTGRES_PASSWORD: test
+    tmpfs:
+      - /var/lib/postgresql
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platedrop_owner -d platedrop_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # SMTP-Sink für die Mailer-Integrationstests. Eigene Ports, damit ein
+  # laufendes Dev-Mailpit nicht kollidiert.
+  mailpit-test:
+    image: axllent/mailpit:latest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "51025:1025"
+      - "58025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
