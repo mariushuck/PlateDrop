@@ -75,6 +75,7 @@ Variablen aus der Umgebung, daher `node --env-file=…`. Das gilt auch für `pnp
 | [.env.example](.env.example) | Alle Umgebungsvariablen, kommentiert |
 | [AUDIT.md](AUDIT.md) | Sicherheits- und Compliance-Audit vor dem Go-Live, mit Umsetzungsstand je Finding |
 | [TODO.md](TODO.md) | Was als Nächstes ansteht, priorisiert |
+| [SECURITY.md](SECURITY.md) | Sicherheitslücken vertraulich melden |
 
 ## Tests
 
@@ -119,3 +120,13 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile proxy 
 Startet den Standalone-Build hinter Caddy mit automatischem TLS; die Datenbank bleibt dabei im
 internen Netz. Was vorher zu konfigurieren ist — Secrets, Domain, SMTP — steht in
 [docs/admin.md, Teil B](docs/admin.md#teil-b--serverbetrieb).
+
+## Sicherheit
+
+Sicherheitslücken bitte **nicht** als öffentliches Issue melden, sondern vertraulich über
+*Security → Report a vulnerability*. Details in [SECURITY.md](SECURITY.md).
+
+## Lizenz
+
+Alle Rechte vorbehalten. Der Quelltext ist zur Einsicht veröffentlicht; Nutzung, Änderung und
+Weitergabe sind ohne schriftliche Erlaubnis nicht gestattet. Siehe [LICENSE](LICENSE).

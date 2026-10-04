@@ -51,14 +51,7 @@ export default function Datenschutz() {
             </p>
             <p>
               Einen Datenschutzbeauftragten hat der Betreiber {PLACEHOLDER} benannt / nicht benannt
-              (§ 38 BDSG). Anfragen zum Datenschutz:{" "}
-              <a
-                href="mailto:privacy@platedrop.de"
-                className="text-blue-600 hover:underline dark:text-blue-400"
-              >
-                privacy@platedrop.de
-              </a>
-              .
+              (§ 38 BDSG). Anfragen zum Datenschutz: {PLACEHOLDER}.
             </p>
           </section>
 
@@ -259,16 +252,9 @@ export default function Datenschutz() {
               <li>Widerspruch gegen Verarbeitungen auf Basis von Art. 6 Abs. 1 lit. f (Art. 21)</li>
             </ul>
             <p className="mb-2">
-              Zur Ausübung genügt eine formlose E-Mail an{" "}
-              <a
-                href="mailto:privacy@platedrop.de"
-                className="text-blue-600 hover:underline dark:text-blue-400"
-              >
-                privacy@platedrop.de
-              </a>
-              . In den Kontoeinstellungen kannst du deine Daten außerdem selbst als Datei
-              exportieren und dein Konto löschen; darüber hinausgehende Anträge bearbeitet der
-              Betrieb manuell.
+              Zur Ausübung genügt eine formlose E-Mail an {PLACEHOLDER}. In den Kontoeinstellungen
+              kannst du deine Daten außerdem selbst als Datei exportieren und dein Konto löschen;
+              darüber hinausgehende Anträge bearbeitet der Betrieb manuell.
             </p>
             <p>
               Außerdem besteht ein Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde,
