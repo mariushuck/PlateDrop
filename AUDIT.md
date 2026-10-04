@@ -51,6 +51,9 @@ neu bzw. angepasst: `rls.test.ts` (is_admin-Grant), `queries.test.ts`
 5. Optional: Fehler-Aggregation (Sentry/GlitchTip) an `src/lib/logger.ts` andocken.
 6. `pnpm test:db:up && pnpm test:integration` einmal lokal grün laufen lassen.
 
+> Fortgeschrieben wird diese Liste in [TODO.md](TODO.md); dieser Bericht bleibt als Stand vom
+> 2026-08-30 unverändert.
+
 ---
 
 ## 1. Executive Summary

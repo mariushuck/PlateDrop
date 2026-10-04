@@ -4,7 +4,9 @@ Diese Anleitung richtet sich an dich als Betreiber von PlateDrop. **Teil A** bes
 wiederkehrenden Admin-Aufgaben und gilt lokal wie auf dem Server. **Teil B** behandelt alles, was
 nur den Serverbetrieb betrifft: Deployment, Secrets, Sicherung, Updates und Störungssuche.
 
-Alle Befehle in diesem Dokument sind gegen den laufenden Stack ausgeführt und geprüft worden.
+Alle Befehle in diesem Dokument sind gegen den laufenden Stack ausgeführt und geprüft worden —
+mit Ausnahme der am 2026-10-04 ergänzten Befehle zu gepackten Sicherungen (B5), JSON-Logs und
+Healthcheck (B7). Deren Prüfung steht in [TODO.md](../TODO.md).
 
 ---
 
@@ -136,8 +138,9 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "DELETE FROM verified_plates WHERE plate_number = 'KAAB1234';"
 ```
 
-Das dazugehörige Beweisfoto bleibt dabei im Volume liegen und muss separat entfernt werden — den
-Pfad vorher aus `proof_image_url` notieren.
+Das dazugehörige Beweisfoto bleibt dabei zunächst im Volume liegen. Der nächste Lauf von
+`maintenance.mjs` bzw. `prune-proofs.mjs --delete` entfernt es (siehe
+[Regelmäßige Wartung](#b9-regelmäßige-wartung)).
 
 ## A4 In der Datenbank nachschlagen
 
@@ -257,7 +260,13 @@ Voraussetzung für TLS: `DOMAIN` in `.env` zeigt auf deine echte Domain, und der
 zeigt auf den Server. Caddy fordert das Zertifikat dann beim ersten Aufruf automatisch an.
 
 Ohne Proxy — etwa hinter einem vorhandenen Reverse Proxy — lässt du `--profile proxy` weg und
-ergänzt in `docker-compose.prod.yml` ein Port-Mapping für `web`.
+ergänzt in `docker-compose.prod.yml` ein Port-Mapping für `web`. Setze dann `TRUSTED_PROXY_HOPS`
+auf die Zahl der Proxys, die tatsächlich vor der App stehen — bzw. `0`, wenn gar keiner davor steht.
+Sonst liest das Absenderlimit eine falsche oder eine vom Client gefälschte IP (siehe
+[technische Doku, Rate-Limiting](architecture.md#6-rate-limiting)).
+
+Ob alles läuft, zeigt `dcp ps`: `web` steht nach etwa 20 Sekunden auf `healthy`. Der Status kommt
+vom Healthcheck gegen `/api/health`, der die Datenbankverbindung prüft.
 
 ## B2 Secrets
 
@@ -276,6 +285,16 @@ openssl rand -base64 32
 
 Die beiden Datenbank-Passwörter stehen jeweils an zwei Stellen — einmal als eigene Variable, einmal
 eingebettet in die Verbindungs-URL. Beide müssen übereinstimmen, sonst startet die App nicht.
+
+Außerdem muss `BETTER_AUTH_URL` die öffentliche Adresse **mit `https://`** sein, z. B.
+`https://platedrop.example.com`. Nur dann setzt better-auth secure Cookies, und die Origin-Prüfung
+lässt genau diese Domain zu.
+
+Fehlt eine Pflichtvariable (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `RATE_LIMIT_SALT`, die
+Datenbank-Passwörter), verweigert schon `docker compose` den Start mit `… fehlt`. Wird die App
+anders gestartet, bricht sie beim ersten Zugriff mit
+`Pflicht-Umgebungsvariable … ist nicht gesetzt` ab. Das ist Absicht: Ein Start ohne Salt oder mit
+falscher Basis-URL sähe gesund aus, wäre aber nicht geschützt.
 
 ## B3 SMTP einrichten
 
@@ -342,6 +361,22 @@ Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Für ein
 dcp exec -T db psql -U platedrop_owner -d platedrop < platedrop-2026-08-30.sql
 ```
 
+Sicherungen aus dem `backup`-Service liegen gepackt im Volume `platedrop_backups`. Sie lassen sich
+direkt von dort einspielen:
+
+```bash
+# vorhandene Sicherungen anzeigen
+docker run --rm -v platedrop_backups:/backups alpine ls -l /backups
+
+# Datenbank aus dem gepackten Dump zurückspielen
+docker run --rm -v platedrop_backups:/backups alpine \
+  gunzip -c /backups/platedrop-2026-08-30.sql.gz \
+  | dcp exec -T db psql -U platedrop_owner -d platedrop
+```
+
+Für die Fotos aus dem `backups`-Volume im Befehl unten `-v "$PWD:/backup"` durch
+`-v platedrop_backups:/backup` ersetzen.
+
 `--clean --if-exists` im Dump räumt vorhandene Objekte vorher ab, ein Zurückspielen in die laufende
 Datenbank ist also möglich. Danach `dcp restart web`, damit die App keine Verbindungen auf
 inzwischen ersetzte Objekte behält.
@@ -400,6 +435,13 @@ dcp logs proxy         # Caddy, inklusive Zertifikatsvorgängen
 dcp ps                 # Was läuft, was ist gesund
 ```
 
+In Produktion schreibt `web` je Eintrag eine JSON-Zeile (`level`, `time`, `message`, bei Fehlern
+`error` und `stack`). Fehler herausfiltern:
+
+```bash
+dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
+```
+
 | Symptom | Wahrscheinliche Ursache | Prüfschritt |
 | --- | --- | --- |
 | Registrierung meldet „Registrierung nicht möglich" | Mailversand schlägt fehl, das Konto wird verworfen | `dcp logs web \| grep -i mail`, dann SMTP-Werte gegen B3 prüfen |
@@ -410,9 +452,13 @@ dcp ps                 # Was läuft, was ist gesund
 | Beweisfoto liefert 404 | Datei fehlt im Volume, oder das Kennzeichen gehört jemand anderem | `dcp exec web ls /data/proofs/<nutzer-id>/`; 404 statt 403 ist Absicht und verrät nichts über fremde Pfade |
 | Beweisfoto liefert 401 | keine gültige Session | erneut anmelden |
 | App startet nicht, Fehler zur Datenbank | `APP_DB_PASSWORD` und das Passwort in `DATABASE_URL` weichen voneinander ab | beide Werte in `.env` vergleichen, dann `dcp up -d` |
+| `docker compose` meldet `… fehlt` oder die App `Pflicht-Umgebungsvariable … ist nicht gesetzt` | Pflichtvariable leer oder nicht gesetzt | `.env` gegen `.env.example` und B2 prüfen |
+| `web` bleibt `unhealthy` | `/api/health` antwortet 503: Datenbank nicht erreichbar | `dcp exec web node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>r.text()).then(console.log)"`, dann `dcp logs db` |
+| Login-Cookie wird nicht gesetzt, Anmeldung „verpufft" | `BETTER_AUTH_URL` passt nicht zur aufgerufenen Adresse (falsche Domain, `http` statt `https`) | Wert in `.env` mit der URL im Browser vergleichen, dann `dcp up -d web` |
 | `migrate` bricht ab | fehlerhafte Migrationsdatei; die Transaktion wurde zurückgerollt | `dcp logs migrate`, Datei korrigieren, `dcp up -d migrate` |
 | Kein TLS-Zertifikat | `DOMAIN` falsch, DNS zeigt nicht auf den Server, oder Port 80 ist blockiert | `dcp logs proxy \| grep -i certificate` |
 | Nachricht wird mit „Zu viele Anfragen" abgelehnt | eines der beiden Limits greift: 10 pro Minute je Absender, 20 pro Stunde je Kennzeichen | `SELECT * FROM message_throttle ORDER BY window_start DESC LIMIT 5;` |
+| Alle Absender teilen sich ein Limit, oder `message_throttle` bleibt leer | `TRUSTED_PROXY_HOPS` passt nicht zum Proxy-Setup (siehe B1) | Anzahl der Proxys vor `web` zählen und den Wert in `.env` angleichen |
 
 ## B8 Datenschutz: Auskunft und Löschung
 
@@ -535,10 +581,16 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 ### Veraltete Rate-Limit-Zeilen und optionale Nachrichten-Frist
 
 - `scripts/prune-throttle.mjs` löscht Zeilen aus `message_throttle`, deren Tages-Hash nie wieder
-  getroffen wird (Standard: älter als 2 Tage, `THROTTLE_RETAIN_DAYS`).
+  getroffen wird (Standard: älter als 2 Tage, einstellbar über `THROTTLE_RETAIN_DAYS`).
 - `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
   Ohne gesetzte Variable passiert nichts – ob Nachrichten befristet aufbewahrt werden, ist eine
   Produktentscheidung. Ist eine Frist gesetzt, nennt die Datenschutzerklärung sie als Speicherdauer.
+
+> **Bekannte Lücke:** Der `migrate`-Service in `docker-compose.yml` reicht `MESSAGE_RETENTION_DAYS`
+> und `THROTTLE_RETAIN_DAYS` derzeit nicht in den Container durch — Werte aus `.env` kommen dort
+> nicht an, eine Nachrichtenfrist würde still ignoriert. Bis zur Korrektur (siehe
+> [TODO.md](../TODO.md)) den Wert beim Aufruf explizit mitgeben:
+> `docker compose run --rm -e MESSAGE_RETENTION_DAYS=90 migrate node scripts/maintenance.mjs`.
 
 ### Alles zusammen per Cron
 

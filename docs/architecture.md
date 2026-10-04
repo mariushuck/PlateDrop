@@ -38,11 +38,14 @@ flowchart LR
 | --- | --- |
 | `db` | PostgreSQL 18. Hält Nutzer, Sitzungen, Kennzeichen, Nachrichten und die Rate-Limit-Fenster. |
 | `migrate` | Läuft einmal vor `web`, legt die App-Rolle an und spielt offene Migrationen ein. Beendet sich danach. |
-| `web` | Die Anwendung. Rendert serverseitig, nimmt Mutationen über Server Actions entgegen. |
-| `proxy` | Caddy, optional über das Compose-Profil `proxy`. TLS-Terminierung, holt Zertifikate selbst. |
+| `web` | Die Anwendung. Rendert serverseitig, nimmt Mutationen über Server Actions entgegen. Healthcheck gegen `/api/health`. |
+| `proxy` | Caddy, optional über das Compose-Profil `proxy`. TLS-Terminierung, HSTS, holt Zertifikate selbst. |
+| `backup` | Nur in Produktion, Compose-Profil `backup`. Einmaliger Lauf von `scripts/backup.sh`: Dump plus Foto-Archiv ins Volume `backups`. |
 
 `web` und `migrate` teilen sich dasselbe Image: Der standalone-Build von Next.js enthält bereits
-`pg`, ein zweites Image wäre reiner Ballast.
+`pg`, ein zweites Image wäre reiner Ballast. Über `migrate` laufen auch die Wartungsskripte
+(`docker compose run --rm migrate node scripts/…`), weil der Service als Owner verbindet und das
+Foto-Volume eingebunden hat.
 
 ---
 
@@ -91,17 +94,20 @@ sind kleine Client Components darunter.
 
 ### Server Actions sind der einzige Weg für Mutationen
 
-Nachricht senden, Kennzeichen beanspruchen, Foto hochladen, Freigabe erteilen, alle Auth-Formulare —
-alles läuft über Server Actions. Für Schreibzugriffe gibt es bewusst **keine** API-Routen.
+Nachricht senden, Kennzeichen beanspruchen, Foto hochladen, Freigabe erteilen, Datenexport,
+Kontolöschung, alle Auth-Formulare — alles läuft über Server Actions. Für Schreibzugriffe gibt es
+bewusst **keine** API-Routen.
 
-### Zwei Route Handler als bewusste Ausnahmen
+### Drei Route Handler als bewusste Ausnahmen
 
 | Route | Warum sie existiert |
 | --- | --- |
 | [`/api/auth/[...all]`](../src/app/api/auth/[...all]/route.ts) | better-auth braucht sie. Die Links in Bestätigungs- und Reset-Mails müssen auf eine URL zeigen, nicht auf eine Server Action. |
 | [`/api/proofs/[...path]`](../src/app/api/proofs/[...path]/route.ts) | **Nur GET, verändert nichts.** Ein `<img>`-Tag braucht eine URL. Prüft bei jedem Abruf Sitzung und Berechtigung neu. |
+| [`/api/health`](../src/app/api/health/route.ts) | **Nur GET, verändert nichts.** Container-Healthcheck und Uptime-Monitor brauchen eine URL. Führt `SELECT 1` aus, antwortet 200 oder 503. |
 
-Die Regel „keine API-Routen" gilt für Mutationen. Beide Ausnahmen schreiben nichts.
+Die Regel „keine API-Routen" gilt für Mutationen. Keine der Ausnahmen schreibt etwas — abgesehen
+von better-auth selbst, das über seine Endpunkte Token bestätigt.
 
 ### Routen der Anwendung
 
@@ -112,11 +118,12 @@ Die Regel „keine API-Routen" gilt für Mutationen. Beide Ausnahmen schreiben n
 | `/forgot-password` | Passwort-Reset anfordern | öffentlich |
 | `/reset-password` | Neues Passwort setzen, Token aus der E-Mail | öffentlich |
 | `/dashboard` | Kennzeichen verwalten, Nachrichten lesen | angemeldet |
-| `/dashboard/settings` | E-Mail und Passwort ändern | angemeldet |
+| `/dashboard/settings` | E-Mail und Passwort ändern, Daten exportieren, Konto löschen | angemeldet |
 | `/admin` | Offene Verifizierungen prüfen | angemeldet + Admin |
 | `/impressum`, `/datenschutz` | Rechtliches | öffentlich |
 | `/api/auth/[...all]` | better-auth-Endpunkte | öffentlich |
 | `/api/proofs/[...path]` | Beweisfoto ausliefern | Halter oder Admin, pro Abruf geprüft |
+| `/api/health` | Erreichbarkeit der Datenbank | öffentlich, liefert nur `{"status": …}` |
 
 ### Kennzeichen-Normalisierung
 
@@ -218,8 +225,14 @@ Definiert in [`0003_app_tables.sql`](../db/migrations/0003_app_tables.sql).
 | `plate_number` | normalisiert, projektweit eindeutig |
 | `is_verified` | Erst wenn `true`, sind Nachrichten lesbar |
 | `verification_status` | `pending`, `approved` oder `rejected`, per CHECK erzwungen |
-| `verification_code` | Code im Format `XX-XXXX`, den der Halter aufs Foto legt |
+| `verification_code` | Code im Format `XX-XXXX`, den der Halter aufs Foto legt. Projektweit eindeutig (`0006`) |
 | `proof_image_url` | Objektpfad im Volume, nie eine öffentliche URL |
+
+Der Bestätigungscode ist das einzige Geheimnis, das einen Anspruch an das Foto hinter der
+Windschutzscheibe bindet. [`verificationCode.ts`](../src/lib/utils/verificationCode.ts) erzeugt ihn
+deshalb mit `crypto.randomInt` statt `Math.random`, aus einem Alphabet ohne die verwechselbaren
+Zeichen `0/O` und `1/I` — der Code wird von Hand geschrieben und vom Foto abgelesen. Kollidiert ein
+Code mit dem Unique-Constraint, würfelt `claimPlate` bis zu fünfmal neu.
 
 **`messages`** — eine anonyme Nachricht. Ein CHECK begrenzt den Text auf 1 bis 500 Zeichen und
 spiegelt damit die Validierung der Server Action auf Datenbankebene.
@@ -283,15 +296,22 @@ better-auth muss Nutzer anlegen und Sitzungen prüfen, bevor überhaupt ein Nutz
 bei der Registrierung und bei jedem Login gibt es noch keine `app.user_id`. Diese Tabellen erreicht
 ausschließlich die Auth-Bibliothek; die Anwendung fasst sie nie direkt an.
 
+Damit ein künftiger Query-Fehler die fehlende RLS nicht zum Selbst-Hochstufen nutzen kann, darf die
+App-Rolle auf `users` seit [`0007_users_column_grants.sql`](../db/migrations/0007_users_column_grants.sql)
+nur noch die Spalten ändern, die better-auth tatsächlich schreibt (`name`, `email`,
+`"emailVerified"`, `image`, `"updatedAt"`). Ein `UPDATE users SET is_admin = true` scheitert als
+`platedrop_app` am Grant; das Flag setzt nur [`set-admin.mjs`](../scripts/set-admin.mjs) als Owner.
+
 `app.is_admin()` liest `users` als `SECURITY DEFINER`. So können die Policies das Admin-Flag prüfen,
 ohne der App-Rolle dafür eigene Leserechte auf die Nutzertabelle zu geben.
 
 ### Ebene 2: Anwendungsschicht
 
 Jede Funktion in [`queries.ts`](../src/lib/db/queries.ts) filtert **zusätzlich** explizit nach
-`user_id`, obwohl die Policy das bereits täte. Admin-Server-Actions prüfen `isAdmin` aus der Session,
-bevor sie die Datenbank überhaupt fragen. Geschützte Seiten rufen `requireUser()` oder
-`requireAdmin()` auf.
+`user_id`, obwohl die Policy das bereits täte. Die Admin-Abfragen — `listPendingVerifications`,
+`setPlateVerification` und der Admin-Zweig von `canReadProof` — tragen stattdessen
+`app.is_admin()` im SQL. Admin-Server-Actions prüfen `isAdmin` aus der Session, bevor sie die
+Datenbank überhaupt fragen. Geschützte Seiten rufen `requireUser()` oder `requireAdmin()` auf.
 
 Ein vergessener Filter allein führt damit zu keinem Leck, eine fehlerhafte Policy allein ebenso
 wenig.
@@ -303,13 +323,48 @@ Die Dateien liegen im Volume `proofs` unter `<nutzer-id>/<kennzeichen-id>-<zeits
 - **Der Pfad wird vor jedem Dateizugriff gegen ein striktes Muster geprüft** — zwei Segmente, UUID
   als Präfix, keine Punkte im Dateinamen außer der Endung. Ein `..` kommt dadurch gar nicht erst
   durch. Ein zweiter Test vergleicht zusätzlich den aufgelösten Pfad mit dem Wurzelverzeichnis.
-- **Die Endung stammt aus dem Content-Type, nie aus dem übermittelten Dateinamen.** Der kommt vom
-  Client und ist frei wählbar. SVG ist nicht erlaubt, weil es Skripte enthalten kann.
+- **Die Endung stammt aus den ersten Bytes der Datei**, nie aus dem übermittelten Dateinamen und
+  nicht aus dem Content-Type — beide kommen vom Client und sind frei wählbar. `sniffImageType`
+  erkennt JPEG, PNG, WebP und HEIC an ihrer Signatur; alles andere wird abgewiesen. SVG ist nicht
+  erlaubt, weil es Skripte enthalten kann.
+- **Erst die Eigentümerschaft, dann die Datei.** `uploadProof` prüft mit `plateBelongsToUser`, ob
+  das Kennzeichen dem Aufrufer gehört, bevor irgendetwas ins Volume geschrieben wird. Nach dem
+  erfolgreichen Eintrag wird das ersetzte Foto entfernt.
 - **Autorisiert wird bei jedem Abruf.** Das ersetzt die früheren Signed URLs von Supabase: Statt
   einen Link zehn Minuten lang gültig zu halten, prüft der Route Handler jedes Mal neu. Wird ein
   Kennzeichen abgelehnt oder gelöscht, endet der Zugriff sofort.
 - Ein unberechtigter Abruf liefert **404, nicht 403** — die Antwort verrät damit nicht, ob der Pfad
   existiert.
+
+### Sitzungs-Cookies
+
+[`server.ts`](../src/lib/auth/server.ts) setzt die Cookie-Attribute explizit, statt sich auf die
+Voreinstellungen zu verlassen: `useSecureCookies` (samt `__Secure-`-Präfix), sobald
+`BETTER_AUTH_URL` mit `https://` beginnt; `httpOnly`; `sameSite: "lax"`. **Nicht `strict`**, weil die
+Links aus Bestätigungs- und Reset-Mails Top-Level-Navigationen von fremder Herkunft sind — mit
+`strict` käme die Sitzung dort nicht mit. `trustedOrigins` ist auf den Origin der `BETTER_AUTH_URL`
+festgelegt.
+
+### HTTP-Security-Header
+
+[`next.config.ts`](../next.config.ts) setzt app-weit eine Content-Security-Policy sowie
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+`Permissions-Policy` (Kamera, Mikrofon, Standort aus) und in Produktion HSTS. Der Header
+`X-Powered-By` ist abgeschaltet. Caddy setzt HSTS zusätzlich am Rand und entfernt den
+`Server`-Header.
+
+Die CSP kommt **ohne Nonce** aus: Die App hat keine Middleware-Schicht, in der pro Anfrage ein Nonce
+entstehen könnte. Für Skripte und Styles bleibt deshalb `'unsafe-inline'` nötig (Hydration,
+`next/font`), externe Quellen sind trotzdem vollständig gesperrt, ebenso Einbettung in fremde Frames
+(`frame-ancestors 'none'`).
+
+### Konfiguration: lieber nicht starten als still ungeschützt
+
+Mehrere Zusagen hängen an Umgebungsvariablen: der gesalzene IP-Hash an `RATE_LIMIT_SALT`, secure
+Cookies und Origin-Prüfung an `BETTER_AUTH_URL`, alle Token an `BETTER_AUTH_SECRET`. Sie werden über
+`requireEnv` aus [`env.ts`](../src/lib/env.ts) gelesen, das bei fehlendem oder leerem Wert sofort
+abbricht. Ein stiller Rückfall auf einen Leerstring ergäbe einen Dienst, der so aussieht, als würde
+er schützen. `docker-compose.yml` erzwingt dieselben Variablen zusätzlich mit `${…:?}`.
 
 ---
 
@@ -332,6 +387,13 @@ Fluten einer einzelnen Person.
 dem aktuellen Datum. Nur dieser Hash erreicht die Datenbank. Die tägliche Rotation begrenzt, wie
 lange sich Anfragen überhaupt korrelieren lassen. Lässt sich keine IP bestimmen, wird die Anfrage
 durchgelassen — der Deckel je Kennzeichen greift dann als Auffanglinie.
+
+**Welche IP gezählt wird.** Jeder Proxy hängt die IP seines Gegenübers hinten an `X-Forwarded-For`
+an; was davor steht, kann der Client frei erfinden. `getClientIp` liest deshalb den Eintrag an
+Position `länge − TRUSTED_PROXY_HOPS` (Standard 1 = der Caddy aus Compose), nie den ersten.
+`TRUSTED_PROXY_HOPS=0` schaltet das Vertrauen in den Header ganz ab. Steht der Wert falsch — etwa 1
+ohne vorgeschalteten Proxy —, landet entweder jede Anfrage im selben Fenster oder das Absenderlimit
+lässt sich per gefälschtem Header umgehen.
 
 Beide Funktionen sind `SECURITY DEFINER` mit festem `search_path`, und `message_throttle` hat weder
 Policy noch Grant: An die Tabelle kommt nur die Funktion selbst heran.
@@ -389,9 +451,13 @@ sequenceDiagram
     App-->>H: Code anzeigen
     Note over H: Code auf Zettel schreiben,<br/>hinter die Scheibe legen,<br/>mit Kennzeichen fotografieren
     H->>App: Foto hochladen
-    App->>App: Typ und Groesse pruefen
+    App->>App: Groesse pruefen (max. 5 MB)
+    App->>DB: plateBelongsToUser()
+    DB-->>App: eigene Zeile oder nichts
+    App->>App: Byte-Signatur pruefen, Endung ableiten
     App->>App: Datei ins Volume schreiben
-    App->>DB: Pfad an der eigenen Zeile eintragen
+    App->>DB: Pfad eintragen, Status zurueck auf pending
+    App->>App: ersetztes Foto loeschen
     Ad->>App: /admin oeffnen
     App->>DB: offene Verifizierungen laden
     App-->>Ad: Foto, Kennzeichen, Code
@@ -454,6 +520,37 @@ sequenceDiagram
     Note over B,DB: Erst danach ist ein Login moeglich
 ```
 
+### Datenexport und Kontolöschung
+
+Beides steht jeder angemeldeten Person unter `/dashboard/settings` zur Verfügung (Art. 15, 17 und 20
+DSGVO).
+
+**Export.** Die Server Action `exportMyData` liest über `exportUserData` im Nutzerkontext die eigenen
+Kennzeichen und die Nachrichten an die eigenen **verifizierten** Kennzeichen, ergänzt die
+Kontodaten aus der Session und gibt alles als JSON zurück; der Browser bietet es als Download an.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant A as deleteAccount
+    participant BA as better-auth
+    participant FS as Volume
+    participant DB as PostgreSQL
+
+    B->>A: Passwort zur Bestaetigung
+    A->>BA: deleteUser(password)
+    BA->>BA: Passwort pruefen
+    BA->>FS: beforeDelete: deleteAllProofsForUser()
+    BA->>DB: DELETE FROM users
+    Note over DB: Kaskade: sessions, accounts,<br/>verified_plates
+    A-->>B: Weiterleitung auf /
+```
+
+Nachrichten bleiben bei der Löschung bestehen: Sie hängen nur am Kennzeichen, nicht am Konto, und
+tragen keine Spur ihres Absenders. Wie Admins mit Löschanträgen umgehen, die auch diese Nachrichten
+betreffen, steht in der [Admin-Anleitung, B8](admin.md#b8-datenschutz-auskunft-und-löschung).
+
 ---
 
 ## 8. Migrationen
@@ -468,6 +565,8 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0003_app_tables.sql` | `verified_plates`, `messages`, `message_throttle` |
 | `0004_policies.sql` | RLS-Policies und Grants — das Sicherheitsmodell |
 | `0005_rate_limit.sql` | Trigger und Funktion für beide Limits |
+| `0006_verification_code_unique.sql` | `UNIQUE (verification_code)`; setzt etwaige Doppel-Codes aus der Zeit vor dem CSPRNG auf NULL |
+| `0007_users_column_grants.sql` | Spaltenscharfes `UPDATE` auf `users` für die App-Rolle, ohne `is_admin` |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -485,13 +584,14 @@ leere Datenbank, sonst enthält der Plan nur die Differenz zum Ist-Zustand.
 
 ## 9. Teststrategie
 
-Drei Ebenen mit unterschiedlichem Zuschnitt.
+Drei Ebenen mit unterschiedlichem Zuschnitt, dazu die CI.
 
 | Ebene | Befehl | Deckt ab |
 | --- | --- | --- |
-| Unit | `pnpm test` | Kennzeichenlogik, Claim-Formular, Pfadprüfung der Beweisfotos. Braucht kein Docker. |
-| Integration | `pnpm test:db:up && pnpm test:integration` | Policies, Data-Access-Modul, Transaktionskontext, Migrations-Runner, Admin-Skript, Mailversand, die öffentliche Server Action. Läuft gegen echtes Postgres und Mailpit. |
-| End-to-End | `pnpm smoke` | Der vollständige Ablauf über HTTP gegen den laufenden Stack: Registrierung, Bestätigungsmail, Login, geschützte Seiten, Auslieferung der Beweisfotos, Passwort-Reset. |
+| Unit | `pnpm test` | Kennzeichenlogik, Bestätigungscode, Claim-Formular, Ablage und Pfadprüfung der Beweisfotos samt Byte-Signatur, IP-Ermittlung und -Hashing, `requireEnv`, HTML-Escaping der Mailvorlagen. Braucht kein Docker. |
+| Integration | `pnpm test:db:up && pnpm test:integration` | Policies, Data-Access-Modul (inkl. Code-Kollision und Datenexport), Transaktionskontext, Migrations-Runner, Admin-Skript, alle Prune-Skripte, Mailversand, die öffentliche Server Action. Läuft gegen echtes Postgres und Mailpit. |
+| End-to-End | `pnpm smoke` | Der vollständige Ablauf über HTTP gegen den laufenden Stack: Registrierung, Bestätigungsmail, Login, geschützte Seiten, Auslieferung der Beweisfotos, Passwort-Reset, Ablehnung und erneutes Einreichen. |
+| CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Bei jedem Push auf `main`/`dev` und jedem PR: `pnpm check`, `typecheck`, Unit-Tests, `build`, die Integrationssuite gegen Service-Container, `pnpm audit --audit-level high` und ein gitleaks-Secret-Scan. Dependabot schlägt wöchentlich Updates vor. |
 
 Die wichtigste Datei ist [`__tests__/integration/rls.test.ts`](../__tests__/integration/rls.test.ts).
 Sie prüft die Kernzusagen direkt gegen die Policies: anonym schreiben aber nicht lesen, keine fremden
@@ -506,19 +606,38 @@ Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 
 ---
 
-## 10. Verzeichnisstruktur
+## 10. Betrieb und Beobachtbarkeit
+
+- **Logging.** Server-Code protokolliert über [`logger.ts`](../src/lib/logger.ts) statt direkt über
+  `console`. In Produktion entsteht je Eintrag eine JSON-Zeile (`level`, `time`, `message`, bei
+  Fehlern `error` und `stack`), in der Entwicklung lesbarer Text. Ein externer Fehlerdienst ist
+  nicht angebunden; er ließe sich hier an einer Stelle andocken.
+- **Healthcheck.** `/api/health` prüft die Datenbankverbindung; der `web`-Container meldet darüber
+  seinen Zustand an Docker.
+- **Datenpflege und Sicherung.** `scripts/maintenance.mjs` bündelt die Prune-Skripte (abgelaufene
+  Sitzungen, alte Rate-Limit-Zeilen, optional alte Nachrichten, verwaiste Fotos),
+  `scripts/backup.sh` sichert Datenbank und Fotos. Beide sind für Cron gedacht; Einrichtung und
+  Rhythmus stehen in der [Admin-Anleitung, B4 und B9](admin.md#b9-regelmäßige-wartung).
+
+---
+
+## 11. Verzeichnisstruktur
 
 ```
-db/migrations/          Schema, Policies und Rate-Limits als nummerierte SQL-Dateien
-scripts/                Migrations-Runner, Admin-Skript, Rauchtest, Auth-Schema-Generator
+.github/                CI-Workflow und Dependabot
+db/migrations/          Schema, Policies, Rate-Limits und Grants als nummerierte SQL-Dateien
+scripts/                Migrations-Runner, Admin-Skript, Prune-Skripte, maintenance.mjs,
+                        backup.sh, Rauchtest, Auth-Schema-Generator
 src/app/                Routen; jede actions.ts enthaelt die Server Actions ihres Bereichs
-src/app/api/            Die zwei bewussten Route Handler
+src/app/api/            Die drei bewussten Route Handler (auth, proofs, health)
 src/components/         features/ fuer fachliche Formulare, ui/ fuer Rahmenelemente
-src/lib/auth/           better-auth-Konfiguration und Session-Helfer
+src/lib/auth/           better-auth-Konfiguration, Session-Helfer, Passwortregel
 src/lib/db/             Pool, Transaktionskontext, saemtliches SQL, Zeilentypen
 src/lib/email/          Mailversand und Vorlagen
-src/lib/storage/        Ablage und Lesen der Beweisfotos
-src/lib/utils/          Kennzeichenlogik, pseudonymisiertes IP-Hashing
+src/lib/storage/        Ablage, Lesen und Loeschen der Beweisfotos
+src/lib/utils/          Kennzeichenlogik, Bestaetigungscode, IP-Ermittlung und -Hashing
+src/lib/env.ts          Pflicht-Umgebungsvariablen mit Fail-Fast
+src/lib/logger.ts       Strukturiertes Logging
 __tests__/              unit (utils, components, lib) und integration/
 ```
 
