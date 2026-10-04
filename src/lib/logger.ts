@@ -2,7 +2,7 @@
  * Sehr schlanker Logger. In Produktion je Eintrag eine JSON-Zeile (für die
  * Log-Sammlung des Betreibers), sonst menschenlesbar. Kein externer Dienst –
  * Fehler-Aggregation (z. B. Sentry/GlitchTip) lässt sich hier zentral
- * andocken, statt an 17 `console.error`-Aufrufen.
+ * andocken, statt an jeder einzelnen Fehlerstelle.
  */
 type Level = "info" | "warn" | "error";
 

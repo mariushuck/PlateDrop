@@ -50,17 +50,25 @@ Ausführlich in der [Admin-Anleitung](docs/admin.md#a1-das-erste-admin-konto-anl
 
 ```bash
 docker compose up -d db mailpit
-# In .env.local `db` durch `localhost` ersetzen und PROOFS_DIR auf ./.data/proofs setzen
-pnpm install && pnpm db:migrate && pnpm dev
+# In .env.local `db`/`mailpit` durch `localhost` ersetzen und PROOFS_DIR auf ./.data/proofs setzen
+pnpm install
+node --env-file=.env.local scripts/migrate.mjs
+pnpm dev
 ```
+
+`pnpm dev` liest `.env.local` selbst, die Skripte unter `scripts/` dagegen nicht — sie brauchen die
+Variablen aus der Umgebung, daher `node --env-file=…`. Das gilt auch für `pnpm db:migrate`,
+`db:set-admin` und `db:prune`.
 
 ## Dokumentation
 
 | Dokument | Inhalt |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | Aufbau, Datenmodell, Sicherheitsmodell, Abläufe, Teststrategie |
-| [docs/admin.md](docs/admin.md) | Admin-Aufgaben und Serverbetrieb: Admin anlegen, Freigaben, Backup, Updates, Störungssuche |
+| [docs/admin.md](docs/admin.md) | Admin-Aufgaben und Serverbetrieb: Admin anlegen, Freigaben, Backup, Wartung, Updates, Störungssuche |
 | [.env.example](.env.example) | Alle Umgebungsvariablen, kommentiert |
+| [AUDIT.md](AUDIT.md) | Sicherheits- und Compliance-Audit vor dem Go-Live, mit Umsetzungsstand je Finding |
+| [TODO.md](TODO.md) | Was als Nächstes ansteht, priorisiert |
 
 ## Tests
 
@@ -76,6 +84,9 @@ Der wichtigste Testblock ist `__tests__/integration/rls.test.ts` — er sichert 
 verifizierte Halter ihre Nachrichten lesen können. Details zur
 [Teststrategie](docs/architecture.md#9-teststrategie).
 
+Die CI (`.github/workflows/ci.yml`) führt Lint, Typecheck, Unit- und Integrationstests, Build,
+`pnpm audit` und einen Secret-Scan bei jedem Push auf `main`/`dev` und jedem Pull Request aus.
+
 ## Weitere Befehle
 
 ```bash
@@ -85,7 +96,13 @@ pnpm format        # Automatisch formatieren
 pnpm typecheck     # TypeScript ohne Emit
 pnpm build         # Produktionsbuild
 pnpm db:migrate    # Migrationen einspielen
+pnpm db:set-admin  # Admin-Rechte vergeben: pnpm db:set-admin <mail> [--revoke]
+pnpm db:prune      # Datenpflege: Sitzungen, Rate-Limit-Zeilen, alte Nachrichten, verwaiste Fotos
 ```
+
+Die drei `db:`-Befehle erwarten `DATABASE_ADMIN_URL` (und für `db:migrate` `APP_DB_PASSWORD`) in
+der Umgebung. Im Docker-Betrieb laufen sie stattdessen über
+`docker compose run --rm migrate node scripts/…`.
 
 ## Produktion
 
