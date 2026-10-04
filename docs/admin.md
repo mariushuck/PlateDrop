@@ -105,7 +105,8 @@ Zu jedem Eintrag siehst du das hochgeladene Foto, das Kennzeichen und den Bestä
 Code und Kennzeichen nicht zusammenpassen.
 
 Mit der Freigabe wird `is_verified` gesetzt, und erst dann kann der Halter die Nachrichten an sein
-Kennzeichen lesen.
+Kennzeichen lesen — und zwar die ab 30 Tage vor seinem Anspruch. Ältere bleiben unsichtbar, weil sie
+an einen früheren Halter gerichtet sein können (Migration 0009).
 
 ### Was bei einer Ablehnung passiert
 
@@ -481,6 +482,7 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | --- | --- | --- |
 | Registrierung meldet „Registrierung nicht möglich" | Mailversand schlägt fehl, das Konto wird verworfen | `dcp logs web \| grep -i mail`, dann SMTP-Werte gegen B3 prüfen |
 | Bestätigungsmail kommt nicht an | Relay lehnt ab, oder `MAIL_FROM` ist nicht zugelassen | Logs des Relays; Absenderadresse muss zur authentifizierten Domain passen |
+| Nach einem Passwort-Reset auf allen Geräten abgemeldet | Absicht: ein Reset beendet alle Sitzungen (`revokeSessionsOnPasswordReset`), damit eine übernommene Sitzung ihn nicht überlebt | auf jedem Gerät neu anmelden |
 | Login schlägt trotz richtigem Passwort fehl | Adresse ist noch nicht bestätigt — beide Fälle liefern absichtlich dieselbe Meldung | `SELECT email, "emailVerified" FROM users WHERE email='…';` |
 | `/admin` leitet nach `/dashboard` um | Konto hat keine Admin-Rechte | `SELECT is_admin FROM users WHERE email='…';`, dann A2 |
 | „Dieses Kennzeichen ist bereits registriert" beim eigenen Kennzeichen | Ein bestehender Anspruch belegt die Nummer — auch ein abgelehnter, den niemand weiterverfolgt | `SELECT * FROM verified_plates WHERE plate_number='…';`, dann A3 |
@@ -569,8 +571,10 @@ Schritt 4 räumt alle Dateien ab, auf die keine Zeile mehr zeigt — nicht nur d
 - Die Bilddateien liegen im Dateisystem, nicht in der Datenbank. Die Fremdschlüssel-Kaskade erreicht
   sie nicht, deshalb das Aufräumskript.
 
-Bei Schritt 2 abwägen: Das Kennzeichen könnte später von jemand anderem beansprucht werden, der die
-alten Nachrichten dann läse. Für eine Löschanfrage ist das Entfernen die richtige Wahl.
+Bei Schritt 2 abwägen: Beansprucht später jemand anderes das Kennzeichen, sieht er Nachrichten ab
+30 Tage vor seinem eigenen Anspruch. Kommt der neue Anspruch kurz nach der Löschung, wären die
+jüngsten Nachrichten an die gelöschte Person also für ihn lesbar. Für eine Löschanfrage ist das
+Entfernen deshalb weiterhin die richtige Wahl.
 
 ## B9 Regelmäßige Wartung
 

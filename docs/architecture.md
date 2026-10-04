@@ -432,24 +432,27 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     B->>A: Kennzeichen + Text
-    A->>A: Kennzeichen validieren
-    A->>A: Text pruefen (1..500 Zeichen)
-    A->>A: IP salzen und hashen
-    A->>Q: checkMessageRate(hash)
-    Q->>DB: check_message_rate()
-    DB-->>Q: erlaubt / abgelehnt
-    alt Absenderlimit erreicht
-        A-->>B: Zu viele Anfragen
-    else erlaubt
-        A->>A: normalizePlate()
-        A->>Q: insertMessage()
-        Q->>DB: INSERT als anonyme Transaktion
-        DB->>DB: Trigger prueft Kennzeichenlimit
-        alt Kennzeichenlimit erreicht
-            DB-->>Q: check_violation
+    A->>A: parsePlate()
+    alt ungueltig oder mehrdeutig
+        A-->>B: Hinweis, z. B. Ortskuerzel abtrennen
+    else kanonisch, z. B. KA-AB-1234
+        A->>A: Text pruefen (1..500 Zeichen)
+        A->>A: IP salzen und hashen
+        A->>Q: checkMessageRate(hash)
+        Q->>DB: check_message_rate()
+        DB-->>Q: erlaubt / abgelehnt
+        alt Absenderlimit erreicht
             A-->>B: Zu viele Anfragen
-        else gespeichert
-            A-->>B: Erfolg
+        else erlaubt
+            A->>Q: insertMessage(kanonische Form)
+            Q->>DB: INSERT als anonyme Transaktion
+            DB->>DB: CHECK prueft Format, Trigger prueft Kennzeichenlimit
+            alt Kennzeichenlimit erreicht
+                DB-->>Q: check_violation
+                A-->>B: Zu viele Anfragen
+            else gespeichert
+                A-->>B: Erfolg
+            end
         end
     end
 ```
@@ -545,7 +548,8 @@ Beides steht jeder angemeldeten Person unter `/dashboard/settings` zur Verfügun
 DSGVO).
 
 **Export.** Die Server Action `exportMyData` liest über `exportUserData` im Nutzerkontext die eigenen
-Kennzeichen und die Nachrichten an die eigenen **verifizierten** Kennzeichen, ergänzt die
+Kennzeichen und die Nachrichten an die eigenen **verifizierten** Kennzeichen — im selben
+Lesefenster wie das Dashboard, also ab 30 Tage vor dem jeweiligen Anspruch —, ergänzt die
 Kontodaten aus der Session und gibt alles als JSON zurück; der Browser bietet es als Download an.
 
 ```mermaid
@@ -609,19 +613,24 @@ Drei Ebenen mit unterschiedlichem Zuschnitt, dazu die CI.
 
 | Ebene | Befehl | Deckt ab |
 | --- | --- | --- |
-| Unit | `pnpm test` | Kennzeichenlogik, Bestätigungscode, Claim-Formular, Ablage und Pfadprüfung der Beweisfotos samt Byte-Signatur, IP-Ermittlung und -Hashing, `requireEnv`, HTML-Escaping der Mailvorlagen. Braucht kein Docker. |
-| Integration | `pnpm test:db:up && pnpm test:integration` | Policies, Data-Access-Modul (inkl. Code-Kollision und Datenexport), Transaktionskontext, Migrations-Runner, Admin-Skript, alle Prune-Skripte, Mailversand, die öffentliche Server Action. Läuft gegen echtes Postgres und Mailpit. |
+| Unit | `pnpm test` | Kennzeichenlogik samt Erkennung mehrdeutiger Eingaben, Bestätigungscode, Claim-Formular, Ablage und Pfadprüfung der Beweisfotos samt Byte-Signatur, IP-Ermittlung und -Hashing, `requireEnv`, HTML-Escaping der Mailvorlagen. Braucht kein Docker. |
+| Integration | `pnpm test:db:up && pnpm test:integration` | Policies, Data-Access-Modul (inkl. Code-Kollision, Lesefenster und Datenexport), Transaktionskontext, Migrations-Runner samt Umwandlung der Altkennzeichen durch 0008, Admin-Skript, alle Prune-Skripte, Mailversand, die öffentliche Server Action, die better-auth-Härtung (Sitzungswiderruf beim Reset, gesperrtes `/delete-user`). Läuft gegen echtes Postgres und Mailpit. |
 | End-to-End | `pnpm smoke` | Der vollständige Ablauf über HTTP gegen den laufenden Stack: Registrierung, Bestätigungsmail, Login, geschützte Seiten, Auslieferung der Beweisfotos, Passwort-Reset, Ablehnung und erneutes Einreichen. |
 | CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Bei jedem Push auf `main`/`dev` und jedem PR: `pnpm check`, `typecheck`, Unit-Tests, `build`, die Integrationssuite gegen Service-Container, `pnpm audit --audit-level high` und ein gitleaks-Secret-Scan. Dependabot schlägt wöchentlich Updates vor. |
 
 Die wichtigste Datei ist [`__tests__/integration/rls.test.ts`](../__tests__/integration/rls.test.ts).
 Sie prüft die Kernzusagen direkt gegen die Policies: anonym schreiben aber nicht lesen, keine fremden
-Nachrichten, nichts vor der Freigabe, kein Selbst-Freischalten, kein Admin-Zugriff ohne Admin-Recht.
+Nachrichten, nichts vor der Freigabe, nichts aus der Zeit vor dem Lesefenster, nur Kennzeichen in
+kanonischer Form, kein Selbst-Freischalten, kein Admin-Zugriff ohne Admin-Recht.
 
 **Diese Tests wurden gegengeprüft, indem die jeweilige Policy absichtlich kaputt gemacht und der
 Testlauf beobachtet wurde** — RLS abschalten, `app.is_admin()` auf `true` festnageln, den
 Eigentümerfilter entfernen. Jede Mutation wurde erkannt. Zwei Tests fielen bei dieser Prüfung durch
 und mussten ersetzt werden, weil sie das behauptete Verhalten gar nicht messen konnten.
+
+Für Lesefenster und Formatprüfung genauso: Fehlt die Fensterbedingung nur in der Policy, wird der
+RLS-Test rot, während die Query-Tests über die zweite Ebene grün bleiben. Fehlt sie auch in
+`queries.ts`, werden alle drei rot. Ohne den Format-CHECK auf `messages` schlägt der Formattest fehl.
 
 Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 
