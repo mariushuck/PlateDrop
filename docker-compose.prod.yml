@@ -12,7 +12,8 @@ services:
     environment:
       NODE_ENV: production
     # Kein Port-Mapping: der Zugriff läuft über den proxy-Service.
-    # Ohne Proxy hier `ports: ["3000:3000"]` ergänzen.
+    # Ohne Proxy hier `ports: ["3000:3000"]` ergänzen und in .env
+    # TRUSTED_PROXY_HOPS=0 setzen – sonst ist X-Forwarded-For frei fälschbar.
     volumes:
       - proofs:/data/proofs
 

@@ -1,8 +1,9 @@
-import { CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 import VerificationActions from "@/components/features/VerificationActions";
 import { requireAdmin } from "@/lib/auth/session";
 import { listPendingVerifications } from "@/lib/db/queries";
+import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
 /**
  * Server Component. Zuvor lief die Seite im Browser und verließ sich darauf,
@@ -72,7 +73,19 @@ export default async function AdminPage() {
                   </p>
                 </div>
 
-                <VerificationActions plateId={verification.id} />
+                {isCanonicalPlate(verification.plate_number) ? (
+                  <VerificationActions plateId={verification.id} />
+                ) : (
+                  // Altzeile aus der Zeit vor Migration 0008: mehrdeutig, Freigabe
+                  // und Ablehnung scheitern an der Formatprüfung.
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                      Altformat: Kennzeichen anhand des Fotos zuordnen (docs/admin.md, A3), danach
+                      hier freigeben.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

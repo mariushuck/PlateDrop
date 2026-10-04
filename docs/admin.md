@@ -128,19 +128,53 @@ nicht registrieren kann, hilft ein Blick auf den bestehenden Anspruch:
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "SELECT u.email, vp.verification_status, vp.created_at
      FROM verified_plates vp JOIN users u ON u.id = vp.user_id
-    WHERE vp.plate_number = 'KAAB1234';"
+    WHERE vp.plate_number = 'KA-AB-1234';"
 ```
 
 Ist der Anspruch eindeutig verwaist, entfernst du ihn und gibst die Nummer frei:
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
-  "DELETE FROM verified_plates WHERE plate_number = 'KAAB1234';"
+  "DELETE FROM verified_plates WHERE plate_number = 'KA-AB-1234';"
 ```
 
 Das dazugehörige Beweisfoto bleibt dabei zunächst im Volume liegen. Der nächste Lauf von
 `maintenance.mjs` bzw. `prune-proofs.mjs --delete` entfernt es (siehe
 [Regelmäßige Wartung](#b9-regelmäßige-wartung)).
+
+### Kennzeichen im Altformat zuordnen
+
+Bis Migration 0008 wurden Kennzeichen ohne Trennstriche gespeichert. `KAAB1234` kann aber
+`KA-AB-1234` oder `KAA-B-1234` sein. Die Migration hat eindeutige Altzeilen selbst umgewandelt.
+Mehrdeutige stehen weiter im Altformat, haben ihre Freigabe verloren (`is_verified = false`,
+Status `pending`) und erscheinen unter `/admin` mit dem Hinweis *Altformat*, ohne Knöpfe zum
+Freigeben oder Ablehnen. Beides würde an der Formatprüfung scheitern. Der Halter sieht im
+Dashboard einen Hinweis und muss nichts tun.
+
+**1. Altzeilen finden**
+
+```bash
+docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
+  "SELECT vp.id, vp.plate_number, vp.proof_image_url, u.email
+     FROM verified_plates vp JOIN users u ON u.id = vp.user_id
+    WHERE NOT (vp.plate_number ~ '^[A-ZÄÖÜ]{1,3}-[A-Z]{1,2}-[1-9][0-9]{0,3}[EH]?$');"
+```
+
+**2. Anhand des Fotos zuordnen.** Auf dem Beweisfoto unter `/admin` ist das echte Kennzeichen zu
+sehen. Die Zeile bekommt die kanonische Form:
+
+```bash
+docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
+  "UPDATE verified_plates SET plate_number = 'KA-AB-1234' WHERE id = '<id>';"
+```
+
+Meldet Postgres dabei eine Unique-Verletzung, hat inzwischen jemand anderes genau dieses
+Kennzeichen beansprucht. Dann den Halter per E-Mail informieren und den Altanspruch löschen.
+
+**3. Freigeben** — das Kennzeichen erscheint unter `/admin` jetzt mit den normalen Knöpfen.
+
+Nachrichten an mehrdeutige Altkennzeichen werden bewusst **nicht** umgehängt. Bei ihnen lässt sich
+nicht feststellen, an welches Kennzeichen sie gingen.
 
 ## A4 In der Datenbank nachschlagen
 
@@ -173,14 +207,15 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
     ORDER BY vp.created_at;"
 ```
 
-**Wem gehört ein Kennzeichen?** Kennzeichen stehen normalisiert in der Datenbank — ohne Bindestriche
-und Leerzeichen, in Großbuchstaben. Aus `KA-AB-1234` wird `KAAB1234`.
+**Wem gehört ein Kennzeichen?** Kennzeichen stehen in kanonischer Form in der Datenbank:
+Großbuchstaben, je ein Bindestrich nach Ortskürzel und Buchstaben. Aus `ka ab 1234` wird
+`KA-AB-1234`. Zeilen von vor Migration 0008 können noch im Kompaktformat `KAAB1234` stehen (siehe A3).
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "SELECT u.email, vp.verification_status, vp.is_verified
      FROM verified_plates vp JOIN users u ON u.id = vp.user_id
-    WHERE vp.plate_number = 'KAAB1234';"
+    WHERE vp.plate_number = 'KA-AB-1234';"
 ```
 
 **Kennzeichen eines Nutzers**
@@ -197,7 +232,7 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
   "SELECT created_at, left(message_text, 60) AS text
-     FROM messages WHERE plate_number = 'KAAB1234'
+     FROM messages WHERE plate_number = 'KA-AB-1234'
     ORDER BY created_at DESC LIMIT 10;"
 ```
 
@@ -457,6 +492,7 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Login-Cookie wird nicht gesetzt, Anmeldung „verpufft" | `BETTER_AUTH_URL` passt nicht zur aufgerufenen Adresse (falsche Domain, `http` statt `https`) | Wert in `.env` mit der URL im Browser vergleichen, dann `dcp up -d web` |
 | `migrate` bricht ab | fehlerhafte Migrationsdatei; die Transaktion wurde zurückgerollt | `dcp logs migrate`, Datei korrigieren, `dcp up -d migrate` |
 | Kein TLS-Zertifikat | `DOMAIN` falsch, DNS zeigt nicht auf den Server, oder Port 80 ist blockiert | `dcp logs proxy \| grep -i certificate` |
+| Eingabe wird mit „Bitte Ortskürzel und Buchstaben trennen" abgelehnt | Ohne Trennung ist die Eingabe mehrdeutig (`KAAB1234` = `KA-AB` oder `KAA-B`) | Absicht; mit Bindestrich oder Leerzeichen nach dem Ortskürzel eingeben, z. B. `KA-AB 1234` |
 | Nachricht wird mit „Zu viele Anfragen" abgelehnt | eines der beiden Limits greift: 10 pro Minute je Absender, 20 pro Stunde je Kennzeichen | `SELECT * FROM message_throttle ORDER BY window_start DESC LIMIT 5;` |
 | Alle Absender teilen sich ein Limit, oder `message_throttle` bleibt leer | `TRUSTED_PROXY_HOPS` passt nicht zum Proxy-Setup (siehe B1) | Anzahl der Proxys vor `web` zählen und den Wert in `.env` angleichen |
 
@@ -511,7 +547,7 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -tAc \
 
 # 2. Nachrichten an diese Kennzeichen löschen (sie hängen NICHT am Konto)
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
-  "DELETE FROM messages WHERE plate_number IN ('KAAB1234');"
+  "DELETE FROM messages WHERE plate_number IN ('KA-AB-1234');"
 
 # 3. Konto löschen — kaskadiert auf Kennzeichen, Sitzungen und Zugänge
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \

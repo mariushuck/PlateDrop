@@ -1,5 +1,13 @@
 import pg, { type Pool } from "pg";
-import { APP_URL, migrateFresh, seedMessage, seedPlate, seedUser, withAdmin } from "./helpers/db";
+import {
+  APP_URL,
+  daysAgo,
+  migrateFresh,
+  seedMessage,
+  seedPlate,
+  seedUser,
+  withAdmin,
+} from "./helpers/db";
 
 let appPool: Pool;
 
@@ -80,6 +88,45 @@ describe("RLS: messages", () => {
     const visible = await asUser(stranger, (client) => client.query("SELECT * FROM messages"));
 
     expect(visible.rows).toHaveLength(0);
+  });
+
+  it("lässt anonym nur Kennzeichen in kanonischer Form schreiben", async () => {
+    // Im Kompaktformat wären K-AB-1234 und KA-B-1234 derselbe Wert.
+    await expect(
+      asUser(null, (client) =>
+        client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
+          "KAB1234",
+          "an wen?",
+        ]),
+      ),
+    ).rejects.toThrow(/messages_plate_format_check/);
+  });
+
+  // Kennzeichen werden neu vergeben. Ein neuer Halter soll nicht lesen, was
+  // Jahre vorher an den Vorbesitzer ging — wohl aber eine Notiz, die kurz vor
+  // seiner Registrierung hinterlassen wurde.
+  it("zeigt Nachrichten erst ab 30 Tage vor dem Anspruch", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", {
+      verified: true,
+      status: "approved",
+      createdAt: daysAgo(10),
+    });
+    await seedMessage("KA-AB-1234", "an den Vorbesitzer", daysAgo(400));
+    await seedMessage("KA-AB-1234", "knapp vor dem Fenster", daysAgo(41));
+    await seedMessage("KA-AB-1234", "kurz vor der Registrierung", daysAgo(39));
+    await seedMessage("KA-AB-1234", "nach der Registrierung", daysAgo(1));
+
+    const visible = await asUser(owner, (client) =>
+      client.query<{ message_text: string }>(
+        "SELECT message_text FROM messages ORDER BY created_at",
+      ),
+    );
+
+    expect(visible.rows).toEqual([
+      { message_text: "kurz vor der Registrierung" },
+      { message_text: "nach der Registrierung" },
+    ]);
   });
 
   it("zeigt keine Nachrichten, solange das Kennzeichen unverifiziert ist", async () => {

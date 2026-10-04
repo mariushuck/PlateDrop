@@ -47,7 +47,21 @@ describe("ClaimPlateForm", () => {
     const input = screen.getByLabelText(/Kennzeichen/i);
     fireEvent.change(input, { target: { value: "invalid-plate" } });
 
-    expect(screen.getByText(/Ungültiges Kennzeichen/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ungültiges deutsches Kennzeichen/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeDisabled();
+  });
+
+  it("verlangt bei mehrdeutiger Eingabe eine Trennung zwischen Ortskürzel und Buchstaben", () => {
+    render(
+      <ClaimPlateForm
+        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+      />,
+    );
+
+    const input = screen.getByLabelText(/Kennzeichen/i);
+    fireEvent.change(input, { target: { value: "KAAB1234" } });
+
+    expect(screen.getByText(/Ortskürzel und Buchstaben trennen/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeDisabled();
   });
 
@@ -61,7 +75,7 @@ describe("ClaimPlateForm", () => {
     const input = screen.getByLabelText(/Kennzeichen/i);
     fireEvent.change(input, { target: { value: "KA-AB-1234" } });
 
-    expect(screen.queryByText(/Ungültiges Kennzeichen/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ungültiges deutsches Kennzeichen/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeEnabled();
   });
 

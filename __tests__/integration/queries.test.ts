@@ -1,4 +1,12 @@
-import { APP_URL, migrateFresh, seedMessage, seedPlate, seedUser, withAdmin } from "./helpers/db";
+import {
+  APP_URL,
+  daysAgo,
+  migrateFresh,
+  seedMessage,
+  seedPlate,
+  seedUser,
+  withAdmin,
+} from "./helpers/db";
 
 type Queries = typeof import("@/lib/db/queries");
 type DbContext = typeof import("@/lib/db/context");
@@ -138,6 +146,22 @@ describe("listMessagesForUser", () => {
 
     await expect(listMessagesForUser(stranger)).resolves.toEqual([]);
   });
+
+  it("liefert nur Nachrichten ab 30 Tage vor dem Anspruch", async () => {
+    const { listMessagesForUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", {
+      verified: true,
+      status: "approved",
+      createdAt: daysAgo(10),
+    });
+    await seedMessage("KA-AB-1234", "an den Vorbesitzer", daysAgo(400));
+    await seedMessage("KA-AB-1234", "im Fenster", daysAgo(39));
+
+    const messages = await listMessagesForUser(owner);
+
+    expect(messages.map((m) => m.message_text)).toEqual(["im Fenster"]);
+  });
 });
 
 describe("claimPlate", () => {
@@ -211,6 +235,22 @@ describe("exportUserData", () => {
     const data = await exportUserData(owner);
 
     expect(data.messages).toEqual([]);
+  });
+
+  it("exportiert nur Nachrichten ab 30 Tage vor dem Anspruch", async () => {
+    const { exportUserData } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", {
+      verified: true,
+      status: "approved",
+      createdAt: daysAgo(10),
+    });
+    await seedMessage("KA-AB-1234", "an den Vorbesitzer", daysAgo(400));
+    await seedMessage("KA-AB-1234", "im Fenster", daysAgo(39));
+
+    const data = await exportUserData(owner);
+
+    expect(data.messages.map((m) => m.message_text)).toEqual(["im Fenster"]);
   });
 });
 

@@ -127,9 +127,19 @@ von better-auth selbst, das über seine Endpunkte Token bestätigt.
 
 ### Kennzeichen-Normalisierung
 
-Jedes Kennzeichen durchläuft vor jedem Datenbankzugriff `normalizePlate` aus
-[`plateUtils.ts`](../src/lib/utils/plateUtils.ts): Bindestriche und Leerzeichen fallen weg, alles
-wird großgeschrieben. Aus `KA-AB-1234` wird `KAAB1234`.
+Jedes Kennzeichen durchläuft vor jedem Datenbankzugriff `parsePlate` aus
+[`plateUtils.ts`](../src/lib/utils/plateUtils.ts). Gespeichert wird die Form
+`ORTSKÜRZEL-BUCHSTABEN-ZAHL`, optional mit `E` oder `H`: aus `ka ab 1234` wird `KA-AB-1234`.
+Ortskürzel dürfen Umlaute enthalten (`TÖL`, `MÜ`), die Zahl beginnt nie mit einer Null.
+
+**Die Trennstriche sind Teil des Werts.** Bis Migration 0008 wurde `KAAB1234` gespeichert. Dabei
+fallen verschiedene Kennzeichen zusammen: `K-AB 1234` (Köln) und `KA-B 1234` (Karlsruhe) wurden
+beide zu `KAB1234`, und wer eines davon verifizierte, las die Nachrichten an das andere. Fehlt in
+der Eingabe die Trennung zwischen Ortskürzel und Buchstaben, probiert `parsePlate` alle
+Aufteilungen durch: Ist genau eine gültig, wird sie übernommen (`BM123` → `B-M-123`), sonst lehnt
+das Formular die Eingabe mit der Bitte um ein Trennzeichen ab. Ein `CHECK` auf `verified_plates`
+und `messages` setzt dasselbe Muster in der Datenbank durch, sodass kein Schreibweg die
+Normalisierung umgehen kann.
 
 Das ist keine Kosmetik. Nachrichten und Kennzeichen werden über `plate_number` verknüpft — würden
 Schreib- und Lesepfad unterschiedlich normalisieren, fände der Join in `listMessagesForUser` nichts
@@ -222,7 +232,7 @@ Definiert in [`0003_app_tables.sql`](../db/migrations/0003_app_tables.sql).
 | Spalte | Bedeutung |
 | --- | --- |
 | `user_id` | Halter, `ON DELETE CASCADE` |
-| `plate_number` | normalisiert, projektweit eindeutig |
+| `plate_number` | kanonisch (`KA-AB-1234`, per CHECK erzwungen), projektweit eindeutig |
 | `is_verified` | Erst wenn `true`, sind Nachrichten lesbar |
 | `verification_status` | `pending`, `approved` oder `rejected`, per CHECK erzwungen |
 | `verification_code` | Code im Format `XX-XXXX`, den der Halter aufs Foto legt. Projektweit eindeutig (`0006`) |
@@ -286,7 +296,7 @@ Alle aus [`0004_policies.sql`](../db/migrations/0004_policies.sql).
 | Policy | Wirkung |
 | --- | --- |
 | `messages_insert_public` | `WITH CHECK (true)` — jede Person darf schreiben, ohne Konto, ohne Login. Der Kern der App. |
-| `messages_select_if_verified_owner` | Lesen nur, wenn eine Zeile in `verified_plates` existiert, die dem Anfragenden gehört, auf dasselbe Kennzeichen lautet **und** `is_verified = true` trägt. |
+| `messages_select_if_verified_owner` | Lesen nur, wenn eine Zeile in `verified_plates` existiert, die dem Anfragenden gehört, auf dasselbe Kennzeichen lautet, `is_verified = true` trägt **und** die Nachricht frühestens 30 Tage vor dem Anspruch eingegangen ist (`app.message_read_since(vp.created_at)`, Migration 0009). Kennzeichen werden neu vergeben; ein neuer Halter soll nicht lesen, was an den Vorbesitzer ging. `listMessagesForUser` und `exportUserData` filtern zusätzlich mit derselben Funktion. |
 | `messages_no_update` / `messages_no_delete` | `USING (false)`. Zusätzlich fehlt der App-Rolle jedes UPDATE- und DELETE-Recht auf `messages`; der Versuch scheitert deshalb schon am Grant, bevor die Policy greift. Die Policies dokumentieren die Absicht und tragen, falls je ein Grant hinzukäme. |
 
 ### Warum die Auth-Tabellen ohne RLS laufen
@@ -344,6 +354,15 @@ Voreinstellungen zu verlassen: `useSecureCookies` (samt `__Secure-`-Präfix), so
 Links aus Bestätigungs- und Reset-Mails Top-Level-Navigationen von fremder Herkunft sind — mit
 `strict` käme die Sitzung dort nicht mit. `trustedOrigins` ist auf den Origin der `BETTER_AUTH_URL`
 festgelegt.
+
+Ein **Passwort-Reset beendet alle Sitzungen** des Kontos (`revokeSessionsOnPasswordReset`). Wer
+sein Passwort zurücksetzt, tut das oft wegen eines Verdachts; eine übernommene Sitzung soll den
+Reset nicht überleben.
+
+**`/api/auth/delete-user` ist über HTTP gesperrt** (`disabledPaths`). better-auth löscht dort bei
+einer frischen Sitzung auch ohne Passwort. Gelöscht wird deshalb nur über die Server Action
+`deleteAccount`, die das Passwort an `auth.api.deleteUser` weiterreicht — die Sperre gilt nur für
+den HTTP-Router, nicht für den serverseitigen Aufruf.
 
 ### HTTP-Security-Header
 
@@ -567,6 +586,8 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0005_rate_limit.sql` | Trigger und Funktion für beide Limits |
 | `0006_verification_code_unique.sql` | `UNIQUE (verification_code)`; setzt etwaige Doppel-Codes aus der Zeit vor dem CSPRNG auf NULL |
 | `0007_users_column_grants.sql` | Spaltenscharfes `UPDATE` auf `users` für die App-Rolle, ohne `is_admin` |
+| `0008_plate_format.sql` | Kanonisches Kennzeichenformat: wandelt eindeutige Altzeilen um, entzieht mehrdeutigen die Freigabe, `CHECK` auf beiden Tabellen (`NOT VALID`) |
+| `0009_message_read_window.sql` | `app.message_read_since()` und die Lese-Policy mit 30-Tage-Fenster |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in

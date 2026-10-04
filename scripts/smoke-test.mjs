@@ -190,7 +190,8 @@ async function main() {
 
   // Claim und Upload laufen über Server Actions; für den Rauchtest legen wir
   // Zeile und Datei direkt an und prüfen dann die Ausliefer-Route.
-  const plateNumber = `KA-SM-${String(STAMP).slice(-4)}`;
+  // Zahl 1000–9999: ohne führende Null, sonst greift die Formatprüfung (0008).
+  const plateNumber = `KA-SM-${1000 + (STAMP % 9000)}`;
   const plate = await pool.query(
     `INSERT INTO verified_plates (user_id, plate_number, verification_code)
      VALUES ($1, $2, 'PD-SMOK') RETURNING id`,
