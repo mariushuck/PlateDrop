@@ -62,10 +62,25 @@ describe("dropMessage", () => {
         "SELECT plate_number, message_text FROM messages",
       ),
     );
-    // normalizePlate entfernt Bindestriche und Leerzeichen und schreibt groß —
-    // dieselbe Form landet auch beim Claim in verified_plates, sonst würde das
-    // Lesen später nicht mehr treffen.
-    expect(stored.rows).toEqual([{ plate_number: "KAAB1234", message_text: "Dein Licht ist an." }]);
+    // Gespeichert wird die kanonische Form mit Trennstrichen — dieselbe Form
+    // landet auch beim Claim in verified_plates, sonst würde das Lesen später
+    // nicht mehr treffen.
+    expect(stored.rows).toEqual([
+      { plate_number: "KA-AB-1234", message_text: "Dein Licht ist an." },
+    ]);
+  });
+
+  it("weist eine mehrdeutige Eingabe ab, statt sie einem Kennzeichen zuzuordnen", async () => {
+    const { dropMessage } = await loadActions();
+
+    // KAAB1234 kann KA-AB-1234 oder KAA-B-1234 sein.
+    const result = await dropMessage(null, form({ plateNumber: "KAAB1234", messageText: "Hallo" }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Ortskürzel und Buchstaben trennen");
+
+    const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
+    expect(stored.rows).toHaveLength(0);
   });
 
   it("weist ein ungültiges Kennzeichen ab, ohne zu speichern", async () => {

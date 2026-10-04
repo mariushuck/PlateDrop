@@ -4,6 +4,7 @@ import ProofUploadForm from "@/components/features/ProofUploadForm";
 import { requireUser } from "@/lib/auth/session";
 import { listMessagesForUser, listPlatesForUser } from "@/lib/db/queries";
 import type { Message } from "@/lib/db/types";
+import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 import { claimPlate } from "./actions";
 
 /**
@@ -101,8 +102,18 @@ export default async function DashboardPage() {
                 </div>
 
                 {/* Photo Upload — bei einer Ablehnung liegt der alte Pfad noch in der
-                    Zeile, trotzdem muss hier wieder das Upload-Feld stehen. */}
-                {plate.proof_image_url && plate.verification_status === "pending" ? (
+                    Zeile, trotzdem muss hier wieder das Upload-Feld stehen. Altzeilen
+                    ohne Trennstriche (vor Migration 0008) ordnet der Admin zu; ein
+                    neues Foto würde dort an der Formatprüfung scheitern. */}
+                {!isCanonicalPlate(plate.plate_number) ? (
+                  <div className="flex items-start gap-2 rounded-lg bg-slate-100 p-4 dark:bg-slate-700">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      Dieses Kennzeichen wurde vor einer Formatumstellung gespeichert und wird vom
+                      Admin anhand deines Fotos neu zugeordnet. Du musst nichts tun.
+                    </p>
+                  </div>
+                ) : plate.proof_image_url && plate.verification_status === "pending" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-green-100 p-4 dark:bg-green-900/30">
                     <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                     <p className="text-sm font-medium text-green-800 dark:text-green-200">
@@ -126,6 +137,11 @@ export default async function DashboardPage() {
             Nachrichten ({totalApprovedMessages})
           </h2>
         </div>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Angezeigt werden Nachrichten ab 30 Tage vor der Registrierung des jeweiligen Kennzeichens.
+          Ältere Nachrichten können an eine frühere Halterin oder einen früheren Halter gerichtet
+          sein.
+        </p>
 
         {hasNoContent ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 py-12 dark:bg-slate-700">

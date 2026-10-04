@@ -96,7 +96,11 @@ export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
   });
 }
 
-/** Nachrichten an die verifizierten Kennzeichen des Nutzers, neueste zuerst. */
+/**
+ * Nachrichten an die verifizierten Kennzeichen des Nutzers, neueste zuerst –
+ * ab 30 Tage vor dem Anspruch (`app.message_read_since`, Migration 0009).
+ * Die Policy setzt dieselbe Grenze durch; der Filter hier ist die zweite Ebene.
+ */
 export function listMessagesForUser(userId: string): Promise<Message[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<Message>(
@@ -105,6 +109,7 @@ export function listMessagesForUser(userId: string): Promise<Message[]> {
          JOIN verified_plates vp ON vp.plate_number = m.plate_number
         WHERE vp.user_id = $1
           AND vp.is_verified = true
+          AND m.created_at >= app.message_read_since(vp.created_at)
         ORDER BY m.created_at DESC`,
       [userId],
     );
@@ -171,7 +176,7 @@ export interface UserDataExport {
 /**
  * Sammelt die personenbezogenen Daten des Nutzers für eine Auskunft/Kopie
  * nach Art. 15/20 DSGVO: seine Kennzeichen und die Nachrichten an seine
- * VERIFIZIERTEN Kennzeichen. Die Kontostammdaten (E-Mail, Anlage) legt der
+ * VERIFIZIERTEN Kennzeichen, im selben Lesefenster wie das Dashboard. Die Kontostammdaten (E-Mail, Anlage) legt der
  * Aufrufer aus der Session dazu.
  */
 export function exportUserData(userId: string): Promise<UserDataExport> {
@@ -187,7 +192,9 @@ export function exportUserData(userId: string): Promise<UserDataExport> {
       `SELECT m.plate_number, m.message_text, m.created_at
          FROM messages m
          JOIN verified_plates vp ON vp.plate_number = m.plate_number
-        WHERE vp.user_id = $1 AND vp.is_verified = true
+        WHERE vp.user_id = $1
+          AND vp.is_verified = true
+          AND m.created_at >= app.message_read_since(vp.created_at)
         ORDER BY m.created_at`,
       [userId],
     );

@@ -10,7 +10,7 @@ import {
 } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
-import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
+import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { generateVerificationCode } from "@/lib/utils/verificationCode";
 
 /** Maximale Größe eines Beweisfotos. */
@@ -26,15 +26,13 @@ export async function claimPlate(
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
-  if (!validateGermanPlate(plateNumber)) {
-    return {
-      success: false,
-      error: "Ungültiges deutsches Kennzeichen. Beispiel: KA-AB-1234",
-    };
+  const parsedPlate = parsePlate(plateNumber);
+  if (!parsedPlate.ok) {
+    return { success: false, error: plateErrorMessage(parsedPlate.reason) };
   }
 
   const user = await requireUser();
-  const normalizedPlate = normalizePlate(plateNumber);
+  const normalizedPlate = parsedPlate.plate;
 
   try {
     await claimPlateQuery(user.id, normalizedPlate, generateVerificationCode);

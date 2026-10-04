@@ -71,7 +71,9 @@ export default function Datenschutz() {
               PlateDrop trennt Schreiben und Lesen: Eine Nachricht an ein Kennzeichen kann jede
               Person <strong>ohne Konto und ohne Anmeldung</strong> hinterlassen. Lesen kann eine
               Nachricht nur, wer ein bestätigtes Konto besitzt und das betroffene Kennzeichen als
-              Halter:in verifiziert hat.
+              Halter:in verifiziert hat. Weil Kennzeichen neu vergeben werden, sieht eine Halter:in
+              nur Nachrichten, die frühestens 30 Tage vor der Registrierung des Kennzeichens
+              eingegangen sind – ältere können an eine frühere Halter:in gerichtet sein.
             </p>
           </section>
 

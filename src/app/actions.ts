@@ -2,7 +2,7 @@
 
 import { checkMessageRate, insertMessage, PlateRateLimitError } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
-import { normalizePlate, validateGermanPlate } from "@/lib/utils/plateUtils";
+import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
 
 const RATE_LIMIT_ERROR = "Zu viele Anfragen. Bitte versuchen Sie es in einigen Minuten erneut.";
@@ -20,11 +20,9 @@ export async function dropMessage(
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
-  if (!validateGermanPlate(plateNumber)) {
-    return {
-      success: false,
-      error: "Ungültiges deutsches Kennzeichen. Beispiel: KA-AB-1234",
-    };
+  const parsedPlate = parsePlate(plateNumber);
+  if (!parsedPlate.ok) {
+    return { success: false, error: plateErrorMessage(parsedPlate.reason) };
   }
 
   // Validate message
@@ -39,7 +37,7 @@ export async function dropMessage(
     };
   }
 
-  const normalizedPlate = normalizePlate(plateNumber);
+  const normalizedPlate = parsedPlate.plate;
 
   try {
     // Limit je Absender (pseudonymisiert). Ohne bestimmbare IP wird durch-

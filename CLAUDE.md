@@ -69,7 +69,7 @@ The RLS invariants are covered by `__tests__/integration/rls.test.ts`. Changing 
 
 ### Auth
 
-- `src/lib/auth/server.ts` — better-auth instance (email/password, required email verification, password reset, email change, account deletion). Cookies are hardened explicitly: `useSecureCookies` when `BETTER_AUTH_URL` is https, `sameSite: "lax"` (not strict — mail links are cross-site top-level navigations), `trustedOrigins` pinned to the base URL.
+- `src/lib/auth/server.ts` — better-auth instance (email/password, required email verification, password reset, email change, account deletion). A password reset revokes every session (`revokeSessionsOnPasswordReset`). `disabledPaths` blocks `/delete-user` over HTTP — better-auth would delete there without a password on a fresh session; deletion only goes through the `deleteAccount` Server Action, which passes the password to `auth.api.deleteUser`. Cookies are hardened explicitly: `useSecureCookies` when `BETTER_AUTH_URL` is https, `sameSite: "lax"` (not strict — mail links are cross-site top-level navigations), `trustedOrigins` pinned to the base URL.
 - `src/lib/auth/session.ts` — `getSessionUser()`, `requireUser()`, `requireAdmin()`
 - `src/lib/auth/client.ts` — client for Client Components
 - `src/lib/auth/passwordPolicy.ts` — `MIN_PASSWORD_LENGTH` (12), the single source for better-auth, Server Actions and form hints
@@ -90,6 +90,8 @@ Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.m
 - `0005` both rate limits
 - `0006` `UNIQUE (verification_code)` on `verified_plates`
 - `0007` column-scoped `UPDATE` grant on `users` — `platedrop_app` cannot write `is_admin`
+- `0008` canonical plate format: converts unambiguous legacy rows, revokes verification of ambiguous ones, adds the format `CHECK`
+- `0009` read window: `app.message_read_since()` and the rewritten `messages_select_if_verified_owner` policy
 
 ### Storage
 
@@ -107,7 +109,9 @@ Exactly three route handlers exist, and all are deliberate exceptions:
 - `src/app/api/proofs/[...path]/route.ts` — **GET only, mutates nothing**. An `<img>` tag needs a URL, not a Server Action. It re-checks session and authorization on every single request, which replaced Supabase's pre-issued signed URLs: access ends the moment a plate is rejected or deleted, rather than when a signature expires.
 - `src/app/api/health/route.ts` — **GET only, mutates nothing**. A container healthcheck / uptime monitor needs a URL. Runs `SELECT 1`, returns 200/503.
 
-**German plate normalization**: All plates go through `src/lib/utils/plateUtils.ts` before any DB query or insert. `normalizePlate` strips hyphens and spaces and upper-cases, so the stored form is e.g. `KAAB1234`. Write and read paths must use it identically or the join in `listMessagesForUser` stops matching.
+**German plate normalization**: All plates go through `parsePlate` in `src/lib/utils/plateUtils.ts` before any DB query or insert. The stored form keeps separators — `DISTRICT-LETTERS-NUMBER[E|H]`, e.g. `KA-AB-1234` — because without the district/letters boundary `K-AB 1234` (Köln) and `KA-B 1234` (Karlsruhe) collapse into one value and the verified owner of one would read the other's messages. Input without that boundary (`KAAB1234`) is rejected as `ambiguous` unless only one split is valid (`BM123` → `B-M-123`). Districts may contain umlauts; the number has no leading zero. Migration `0008` enforces the same pattern as a `CHECK` on `verified_plates` and `messages` (`NOT VALID`: pre-0008 compact rows stay, see `docs/admin.md` A3). Write and read paths must use it identically or the join in `listMessagesForUser` stops matching.
+
+**Read window**: an owner reads messages from 30 days before their claim (`verified_plates.created_at`) onwards, never older ones — plates get reassigned. The boundary lives in one SQL function, `app.message_read_since()` (migration `0009`), used by the `messages` SELECT policy and by `listMessagesForUser` / `exportUserData`.
 
 **Rate limiting**: per sender via a salted, daily-rotating SHA-256 hash of the IP (`check_message_rate`, 10/minute) and per plate via a DB trigger (`enforce_message_rate_limit`, 20/hour). The raw IP is never stored. The client IP is read from `X-Forwarded-For` at position `length - TRUSTED_PROXY_HOPS` (default 1 = the Caddy proxy), never the client-controlled first entry; `TRUSTED_PROXY_HOPS=0` disables header trust.
 

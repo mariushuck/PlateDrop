@@ -50,26 +50,44 @@ export async function seedUser(id: string, email: string, isAdmin = false): Prom
 export async function seedPlate(
   userId: string,
   plate: string,
-  opts: { verified?: boolean; status?: string; proofPath?: string | null } = {},
+  opts: {
+    verified?: boolean;
+    status?: string;
+    proofPath?: string | null;
+    /** Zeitpunkt des Anspruchs; Standard: jetzt. */
+    createdAt?: Date;
+  } = {},
 ): Promise<string> {
   const { rows } = await withAdmin((client) =>
     client.query<{ id: string }>(
       `INSERT INTO verified_plates
-         (user_id, plate_number, is_verified, verification_status, proof_image_url)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [userId, plate, opts.verified ?? false, opts.status ?? "pending", opts.proofPath ?? null],
+         (user_id, plate_number, is_verified, verification_status, proof_image_url, created_at)
+       VALUES ($1, $2, $3, $4, $5, coalesce($6, now())) RETURNING id`,
+      [
+        userId,
+        plate,
+        opts.verified ?? false,
+        opts.status ?? "pending",
+        opts.proofPath ?? null,
+        opts.createdAt ?? null,
+      ],
     ),
   );
   return rows[0].id;
 }
 
-export async function seedMessage(plate: string, text: string): Promise<void> {
+export async function seedMessage(plate: string, text: string, createdAt?: Date): Promise<void> {
   await withAdmin((client) =>
-    client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
-      plate,
-      text,
-    ]),
+    client.query(
+      "INSERT INTO messages (plate_number, message_text, created_at) VALUES ($1, $2, coalesce($3, now()))",
+      [plate, text, createdAt ?? null],
+    ),
   );
+}
+
+/** Zeitpunkt vor `days` Tagen. */
+export function daysAgo(days: number): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
 export async function clearMailbox(): Promise<void> {
