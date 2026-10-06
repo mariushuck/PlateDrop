@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/admin.md` — operator runbook: granting admin rights, approvals, backup and restore, updates, troubleshooting, GDPR deletion, scheduled maintenance
 - `AUDIT.md` — pre-go-live security/compliance audit (2026-08-30) with the remediation status of every finding; historical, do not rewrite
 - `TODO.md` — prioritized list of what comes next
+- `docs/strategy.md` — product direction (niche / B2B, starting with company car parks, decided 2026-10-06) and the planned extensions behind TODO P3; a decision record, not a spec
 
 Keep them current when the behaviour they describe changes; the README deliberately stays short and links into them.
 

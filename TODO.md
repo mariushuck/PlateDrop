@@ -1,10 +1,20 @@
 # TODO
 
-Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-04 (Branch `dev`).
-Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md) und ein Abgleich von Code und Doku.
+Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-06 (Branch `dev`).
+Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md), ein Abgleich von Code und Doku und die
+Produktstrategie in [docs/strategy.md](docs/strategy.md).
 
 Erledigtes hier abhaken und bei Gelegenheit entfernen. Was sich am Verhalten ändert, gehört
 zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md](docs/admin.md).
+
+## Richtung
+
+PlateDrop geht in Richtung **Nische / B2B** (Einstieg Firmenparkplätze, danach Wohnanlagen), nicht
+in den Massenmarkt. Im Privatmarkt ist die Monetarisierbarkeit begrenzt; dort bleibt die App
+kostenlos. Begründung, Geschäftsmodell und die nicht-technischen Schritte (Nutzertests, Gespräche
+mit Facility-Managern als Go/No-Go, AV-Verträge, Arbeitgeberklärung) stehen in
+[docs/strategy.md](docs/strategy.md). Hier stehen nur die technischen Pakete (P3). P0 bleibt
+Voraussetzung für jeden öffentlichen Start.
 
 ---
 
@@ -72,7 +82,8 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
   `X-Frame-Options`, kein `X-Powered-By`), Datenexport, Kontolöschung inklusive Entfernen des
   Foto-Verzeichnisses.
 - [ ] **Rate-Limit für Claim und Foto-Upload** je Nutzer. Heute bremst nichts das massenhafte
-  Beanspruchen von Kennzeichen oder Hochladen (Audit W1 nannte das fehlende Lockout).
+  Beanspruchen von Kennzeichen oder Hochladen (Audit W1 nannte das fehlende Lockout). Zusammen mit
+  „höchstens 3 offene Claims“ aus P3 Phase A umsetzen.
 - [ ] **Optional `FORCE ROW LEVEL SECURITY`** auf `verified_plates` und `messages` (Audit-Empfehlung
   zu W2, nicht umgesetzt). Nur mit neuer Migration und RLS-Suite.
 - [ ] **Skripte laden keine `.env`-Datei.** Lokal ohne Docker brauchen `pnpm db:migrate`,
@@ -90,3 +101,94 @@ zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md]
 - [ ] **Optional Breached-Password-Check** bei Registrierung und Passwortwechsel (Audit W14).
 - [ ] **Aufräumen**: Next-Boilerplate `public/{file,globe,next,vercel,window}.svg` wird nirgends
   verwendet und kann weg.
+
+## P3 — Produkt (Strategie, nach P0)
+
+Reihenfolge A → B → E, private Sticker zuletzt ([strategy.md §5](docs/strategy.md#5-empfohlene-reihenfolge)).
+Jede Phase: Migration mit RLS-Suite, Datenschutzerklärung und `docs/architecture.md` im selben Zug
+nachziehen.
+
+### Phase A — Fundament ([strategy.md §0](docs/strategy.md#0-fundament-zwei-lücken-die-jeder-hebel-voraussetzt))
+
+- [ ] **Migration `0010` Claim-Konkurrenz**: `verified_plates_plate_unique` durch partielle
+  Unique-Indizes ersetzen (ein `approved` je Kennzeichen, ein offener Claim je Nutzer und
+  Kennzeichen), Status `expired` und `superseded`. `is_verified` muss bei diesen Übergängen auf
+  `false` gehen, sonst liest der abgelöste Halter weiter; am besten per `CHECK` an
+  `verification_status` koppeln. `idx_verified_plates_plate` behalten.
+- [ ] **`setPlateVerification` löst Konkurrenz auf**: in derselben Transaktion andere `pending` →
+  `rejected`, bisheriger `approved` → `superseded`; Mail an den abgelösten Halter.
+- [ ] **Höchstens 3 offene Claims je Nutzer** in `claimPlate` (zusammen mit dem P1-Rate-Limit).
+- [ ] **`prune-claims` in `scripts/maintenance.mjs`**: offene Claims ohne Foto nach 7 Tagen auf
+  `expired`.
+- [ ] **RLS-Test Halterwechsel** in `__tests__/integration/rls.test.ts`: alter Halter verliert den
+  Zugriff, neuer liest ab 30 Tage vor seinem Claim.
+- [ ] **Nachricht ausblenden**: `messages.hidden_at`, `messages_no_update` durch eine Policy nur für
+  den verifizierten Halter im Lesefenster ersetzen, Grant nur `UPDATE (hidden_at)`.
+- [ ] **Nachricht melden**: Tabelle `message_reports`, Melde-Aktion im Dashboard, Ansicht und
+  Erledigen unter `/admin` (DSA-Melde- und Abhilfeverfahren).
+- [ ] **Empfang pausieren**: `verified_plates.paused_until`. Nachrichten weiter annehmen (sonst
+  verrät die Antwort die Registrierung), aber nicht anzeigen und nicht benachrichtigen.
+- [ ] **`MESSAGE_RETENTION_DAYS` verpflichtend**: `requireEnv`, `.env.example`, admin.md B9,
+  Speicherdauer in der Datenschutzerklärung (hängt am P0-Bug zu den Retention-Variablen).
+
+### Phase B — Nachrichtentypen und Benachrichtigung ([strategy.md §2](docs/strategy.md#2-hebel-2--vordefinierte-nachrichten-und-benachrichtigung))
+
+- [ ] **Migration `0011`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
+  `messages_has_content`; Tabellen `push_subscriptions` und `notification_outbox`; `AFTER INSERT`-
+  Trigger, der nur für freigegebene, nicht pausierte Halter eine Outbox-Zeile anlegt (gleiche
+  Antwortzeit für registrierte und unregistrierte Kennzeichen).
+- [ ] **Katalog** in `src/lib/messages/catalog.ts` plus Unit-Test, der Katalog und Migration
+  abgleicht.
+- [ ] **Formular umstellen**: `src/app/page.tsx` / `dropMessage` nehmen `messageType` statt
+  Freitext; kein Freitext mehr für anonyme Absender; Hinweis auf 110/112 bei Notfällen mit Tier oder
+  Kind.
+- [ ] **Dashboard**: Typ-Text und Symbol, `read_at` beim Öffnen, Ausblenden/Melden aus Phase A.
+- [ ] **Notifier-Service**: `scripts/notifier.mjs` als Compose-Service aus dem `runner`-Image;
+  `SELECT … FOR UPDATE SKIP LOCKED`, `LISTEN/NOTIFY` plus Polling, Backoff, Push-Endpunkte bei
+  404/410 löschen; Test gegen Mailpit.
+- [ ] **E-Mail-Vorlage** in `src/lib/email/templates.ts` (nur Typ und Kennzeichen, kein weiterer
+  Inhalt).
+- [ ] **Web Push**: `public/sw.js`, `src/app/manifest.ts`, Paket `web-push`, VAPID-Variablen in
+  `.env.example` und Compose, CSP um `worker-src 'self'`.
+- [ ] **Einstellungen** unter `/dashboard/settings`: Kanäle, Ruhezeiten (dringliche Typen
+  ignorieren sie), Push-Freigabe; Unit-Test für die Ruhezeiten-Logik.
+- [ ] **Bündeln**: höchstens eine Benachrichtigung pro Typ und Viertelstunde.
+- [ ] **Monitoring**: Alter des ältesten offenen Outbox-Eintrags in `/api/health`, Log-Warnung ab
+  fünf Minuten.
+- [ ] **Datenschutzerklärung**: Push-Dienste der Browserhersteller, Speicherdauer der Abos.
+
+### Phase E — Mandanten-MVP ([strategy.md §3](docs/strategy.md#3-hebel-3--b2b-nische-statt-massenmarkt))
+
+Erst bauen, wenn die Gespräche aus strategy.md §3.9 ein Go ergeben haben.
+
+- [ ] **Token- und QR-Technik** (aus Hebel 1, hier zuerst gebraucht): `src/lib/tags/token.ts`
+  (`crypto.randomBytes(16)`, base64url), QR serverseitig als SVG, Fehlerkorrektur M/Q.
+- [ ] **Migration Organisationen**: `organizations`, `org_members`, `org_sites`; `org_id` auf
+  `verified_plates` und `messages`, `messages.sender_id`; Eindeutigkeit des freigegebenen Halters je
+  Organisation (`NULLS NOT DISTINCT`).
+- [ ] **RLS**: `app.is_org_member()` / `app.is_org_admin()` (`SECURITY DEFINER`); Lese-Policy
+  verlangt `m.org_id IS NOT DISTINCT FROM vp.org_id`; Org-Admins geben Kennzeichen frei, lesen aber
+  keine fremden Nachrichten.
+- [ ] **Eigene RLS-Testgruppe Mandantentrennung**: öffentliche Nachricht erreicht nie das
+  Firmenkonto mit demselben Kennzeichen und umgekehrt; Org-Admin liest nichts Fremdes.
+- [ ] **Routen**: `/o/[slug]` (Mitglieder), `/o/[slug]/admin` (Mitglieder, Kennzeichen,
+  Standorte, Einstellungen), `/o/[slug]/s/[siteToken]` (Besucher-Formular am Standort),
+  `/invite/[token]` (Einladung per Mail).
+- [ ] **Org-Einstellungen**: Absendername sichtbar oder nicht, Freitext für angemeldete Absender,
+  eigene Katalog-Einträge.
+- [ ] **Kennzeichen-Import** aus Fuhrpark- oder Parkausweisliste, Freigabe durch Org-Admin statt
+  Foto.
+- [ ] **Aggregierte Statistik** (Vorfälle pro Woche), nie pro Person.
+- [ ] **Vor dem ersten zahlenden Kunden**: Fehler-Aggregation aus P2 und Uptime-Monitoring auf
+  `/api/health`.
+
+### Später — private QR-Sticker ([strategy.md §1](docs/strategy.md#1-hebel-1--opt-in-per-qr-sticker))
+
+- [ ] `contact_tags`, `messages.tag_id`/`status_token`, `messages_exactly_one_target`; zweite
+  SELECT-Policy für Tag-Nachrichten.
+- [ ] Öffentliches Formular `/t/[token]` mit `dropTagMessage` (gleiche Rate-Limits),
+  Statusseite `/s/[statusToken]` über `SECURITY DEFINER`-Funktion ohne Inhalt.
+- [ ] `/dashboard/tags` (anlegen, umbenennen, widerrufen) und Sticker-PDF als GET-Route; als
+  vierte Route-Ausnahme in `CLAUDE.md` dokumentieren.
+- [ ] Integrationstests (fremder Nutzer, widerrufener Tag, Statusfunktion) und Smoke-Test
+  Scan → Nachricht → Dashboard.
