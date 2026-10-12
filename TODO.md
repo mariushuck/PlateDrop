@@ -1,8 +1,8 @@
 # TODO
 
-Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-06 (Branch `dev`).
-Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md), ein Abgleich von Code und Doku und die
-Produktstrategie in [docs/strategy.md](docs/strategy.md).
+Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-12 (Branch `dev`).
+Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md), ein Abgleich von Code und Doku, ein
+Repo-Audit vom 2026-10-12 und die Produktstrategie in [docs/strategy.md](docs/strategy.md).
 
 Erledigtes hier abhaken und bei Gelegenheit entfernen. Was sich am Verhalten ändert, gehört
 zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md](docs/admin.md).
@@ -38,6 +38,13 @@ Voraussetzung für jeden öffentlichen Start.
   `docker compose run --rm migrate node scripts/maintenance.mjs` gesetzte Fristen werden still
   ignoriert. Beide in `services.migrate.environment` ergänzen, danach den Hinweis „Bekannte Lücke"
   in admin.md B9 entfernen.
+- [ ] **Bug: Beweisfotos über 1 MB scheitern.** Next.js nimmt Server-Action-Requests standardmäßig nur
+  bis 1 MB an; `uploadProof` erlaubt 5 MB, Caddy 8 MB. Ein normales Handyfoto bricht mit „Ein Fehler
+  ist aufgetreten“ ab. In `next.config.ts` `experimental.serverActions.bodySizeLimit: "6mb"` setzen
+  (gilt auch für `dropMessage`; Caddy deckelt bei 8 MB).
+- [ ] **Bug: `scripts/backup.sh` meldet Erfolg trotz gescheitertem `pg_dump`.** `set -eu` prüft in
+  `pg_dump | gzip` nur `gzip`; es entsteht eine leere Sicherung, und nach `BACKUP_RETENTION_DAYS`
+  sind alle guten Sicherungen weggeräumt. `set -euo pipefail` (Busybox-ash kann das).
 - [ ] **Cron-Jobs einrichten** für `scripts/maintenance.mjs` (täglich) und den `backup`-Service
   (täglich), siehe admin.md B9.
 - [ ] **Backups außer Haus und verschlüsselt** ablegen; das Volume `backups` liegt auf demselben
@@ -89,6 +96,26 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Skripte laden keine `.env`-Datei.** Lokal ohne Docker brauchen `pnpm db:migrate`,
   `db:set-admin` und `db:prune` die Variablen aus der Umgebung (README nennt
   `node --env-file=.env.local …`). Bequemer wäre z. B. ein Script-Eintrag mit `--env-file-if-exists`.
+- [ ] **`prune-proofs.mjs` kann frische Uploads löschen.** Es liest erst die referenzierten Pfade, dann
+  die Dateien; ein Upload dazwischen (Datei geschrieben, `setProofPath` noch nicht committet) gilt als
+  verwaist. Dateien jünger als eine Stunde überspringen (`mtimeMs`, `stat` läuft dort schon).
+- [ ] **Ein Absender kann ein Kennzeichen eine Stunde stummschalten.** Bei 10/Minute je Absender
+  erreicht eine einzige IP den Deckel von 20/Stunde je Kennzeichen in zwei Minuten; danach bekommt
+  jeder andere „Zu viele Anfragen“. Neue Migration: zweites Limit je Absender *und* Kennzeichen
+  (z. B. 3/Stunde, Schlüssel IP-Hash + Kennzeichen), `check_message_rate` mit Limit als Parameter.
+  RLS-/Query-Tests mitziehen.
+- [ ] **Dashboard lädt alle Nachrichten ohne Obergrenze.** `listMessagesForUser` hat kein `LIMIT`;
+  ohne `MESSAGE_RETENTION_DAYS` wächst die Seite unbegrenzt (Spam am Limit ≈ 14.000/Monat). `LIMIT 200`
+  plus Hinweis auf den Datenexport; `exportUserData` bleibt vollständig.
+- [ ] **Alte E-Mail-Adresse bleibt in `users.name`.** `signUp` setzt `name: email`; nach einer
+  E-Mail-Änderung steht die alte Adresse dort für immer und fehlt im Datenexport. `name: ""` bei der
+  Registrierung plus Migration, die bestehende Werte leert; admin.md-Datenliste anpassen.
+- [ ] **HEIC-Beweisfotos sind in Chrome/Firefox nicht sichtbar.** Der Admin sieht ein kaputtes Bild
+  und kann nur ablehnen. HEIC aus `ALLOWED_TYPES` und `sniffImageType` streichen, damit der Nutzer
+  sofort eine klare Meldung bekommt (vorher prüfen, ob iPhones beim Upload ohnehin JPEG liefern).
+- [ ] **Upload-Weg ungetestet.** Der Smoke-Test schreibt das Foto direkt ins Volume und setzt den Pfad
+  per SQL, deshalb fiel das 1-MB-Limit nicht auf. Ein ~2 MB großes JPEG über die echte Action
+  hochladen und danach `pending` prüfen.
 
 ## P2 — Verbesserungen
 
@@ -101,6 +128,14 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Optional Breached-Password-Check** bei Registrierung und Passwortwechsel (Audit W14).
 - [ ] **Aufräumen**: Next-Boilerplate `public/{file,globe,next,vercel,window}.svg` wird nirgends
   verwendet und kann weg.
+- [ ] **Verwaistes Foto bei DB-Fehler in `uploadProof`**: wirft `setProofPath`, bleibt die Datei bis
+  zum nächsten Prune liegen. Im `catch` `deleteProof(objectPath)` aufrufen wie im `!updated`-Zweig.
+- [ ] **Toter Code in `deleteAccount`**: `deleted` ist nach dem `try` immer `true`, `return { error:
+  null }` unerreichbar. Variable streichen, direkt `redirect("/")`.
+- [ ] **`normalizePlate` und `validateGermanPlate`** nutzt nur der Test; die App verwendet überall
+  `parsePlate`. Beide samt Testblöcken löschen.
+- [ ] **`EXTENSION_TO_TYPE`** in `src/lib/storage/proofs.ts` ist die Umkehrung von `ALLOWED_TYPES`;
+  per `Object.fromEntries` ableiten.
 
 ## P3 — Produkt (Strategie, nach P0)
 
