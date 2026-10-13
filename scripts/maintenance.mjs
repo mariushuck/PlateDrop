@@ -16,8 +16,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const STEPS = [
   ["prune-sessions.mjs", []],
+  ["prune-claims.mjs", []],
   ["prune-throttle.mjs", []],
   ["prune-messages.mjs", []],
+  ["prune-outbox.mjs", []],
   ["prune-proofs.mjs", ["--delete"]],
 ];
 

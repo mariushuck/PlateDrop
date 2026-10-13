@@ -2,7 +2,8 @@
 
 Diese Anleitung richtet sich an dich als Betreiber von PlateDrop. **Teil A** beschreibt die
 wiederkehrenden Admin-Aufgaben und gilt lokal wie auf dem Server. **Teil B** behandelt alles, was
-nur den Serverbetrieb betrifft: Deployment, Secrets, Sicherung, Updates und Störungssuche.
+nur den Serverbetrieb betrifft: Deployment, Secrets, Sicherung, Updates und Störungssuche. **Teil C**
+beschreibt Organisationen für Privatgelände: anlegen, betreuen, zum Vertragsende löschen.
 
 Alle Befehle in diesem Dokument sind gegen den laufenden Stack ausgeführt und geprüft worden —
 mit Ausnahme der am 2026-10-04 ergänzten Befehle zu gepackten Sicherungen (B5), JSON-Logs und
@@ -108,6 +109,23 @@ Mit der Freigabe wird `is_verified` gesetzt, und erst dann kann der Halter die N
 Kennzeichen lesen — und zwar die ab 30 Tage vor seinem Anspruch. Ältere bleiben unsichtbar, weil sie
 an einen früheren Halter gerichtet sein können (Migration 0009).
 
+### Mehrere Ansprüche auf dasselbe Kennzeichen
+
+Seit Migration 0011 dürfen mehrere Nutzer dasselbe Kennzeichen gleichzeitig beanspruchen, etwa nach
+einem Fahrzeugverkauf oder wenn jemand eine fremde Nummer blockiert hat. Gibt es schon einen
+freigegebenen Halter, zeigt die Karte unter `/admin` einen gelben Hinweis. Prüfe dann besonders
+genau, ob Code und Kennzeichen auf dem Foto zusammenpassen.
+
+Gibst du frei, passiert in einem Schritt:
+
+- der bisherige Halter wird auf `superseded` gesetzt, verliert sofort den Lesezugriff und bekommt eine
+  Mail; im Dashboard sieht er das Kennzeichen unter „Beendet“ und kann es erneut beanspruchen,
+- alle anderen offenen Ansprüche auf dieses Kennzeichen werden abgelehnt.
+
+Ansprüche ohne Foto verfallen nach 7 Tagen von selbst (`expired`, siehe
+[Regelmäßige Wartung](#b9-regelmäßige-wartung)). Ein Nutzer kann höchstens drei Ansprüche
+gleichzeitig offen haben.
+
 ### Was bei einer Ablehnung passiert
 
 Eine Ablehnung setzt den Status auf `rejected`. Der Halter sieht das Kennzeichen daraufhin in seinem
@@ -121,9 +139,10 @@ Prüfung nicht erfolgreich war und dass Code und Kennzeichen gut lesbar sein mü
 Sonderfall, den dieser Text nicht abdeckt, ist eine kurze E-Mail hilfreicher als eine wortlose
 Ablehnung.
 
-**Wenn ein Anspruch liegen bleibt:** Solange die Zeile existiert, ist die Kennzeichennummer durch den
-Unique-Constraint belegt — auch bei Status `rejected`. Meldet sich jemand, weil er sein Kennzeichen
-nicht registrieren kann, hilft ein Blick auf den bestehenden Anspruch:
+**Wenn ein Anspruch liegen bleibt:** Ein liegengebliebener Anspruch blockiert seit Migration 0011
+niemanden mehr; der echte Halter beansprucht das Kennzeichen einfach selbst, und deine Freigabe
+räumt den Rest ab. Halter können eigene Kennzeichen im Dashboard auch selbst entfernen. Willst du
+trotzdem nachsehen, wer ein Kennzeichen beansprucht:
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
@@ -132,7 +151,7 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
     WHERE vp.plate_number = 'KA-AB-1234';"
 ```
 
-Ist der Anspruch eindeutig verwaist, entfernst du ihn und gibst die Nummer frei:
+Einen eindeutig verwaisten Anspruch entfernst du so:
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
@@ -176,6 +195,21 @@ Kennzeichen beansprucht. Dann den Halter per E-Mail informieren und den Altanspr
 
 Nachrichten an mehrdeutige Altkennzeichen werden bewusst **nicht** umgehängt. Bei ihnen lässt sich
 nicht feststellen, an welches Kennzeichen sie gingen.
+
+## A3a Meldungen bearbeiten
+
+Empfänger können eine Nachricht unter `/dashboard` melden (Grund: Beleidigung, Bedrohung, Spam,
+Sonstiges). Die Nachricht verschwindet dabei sofort aus ihrem Dashboard. Offene Meldungen stehen
+unter `/admin` ganz oben, mit Text, Kennzeichen, Grund und Datum. Du entscheidest:
+
+- **Nachricht löschen** – endgültig, die Meldung fällt mit weg. Das Log vermerkt Zeitpunkt,
+  Nachrichten-ID und deine Konto-ID, nicht den Inhalt.
+- **Behalten** – die Meldung ist erledigt, die Nachricht bleibt für den Empfänger ausgeblendet und
+  wird mit Ablauf von `MESSAGE_RETENTION_DAYS` gelöscht.
+
+Nur gemeldete Nachrichten sind für dich sichtbar; alle anderen bleiben auch dem Admin verborgen. Bei
+einer Bedrohung kann eine Anzeige angebracht sein – dann vor dem Löschen sichern, was die Polizei
+braucht (Text, Zeitpunkt, Kennzeichen).
 
 ## A4 In der Datenbank nachschlagen
 
@@ -283,14 +317,15 @@ cp .env.example .env      # danach ausfüllen, siehe B2 und B3
 dcp --profile proxy up -d --build
 ```
 
-Das startet vier Dienste:
+Das startet fünf Dienste:
 
-| Dienst    | Aufgabe                                                          |
-| --------- | ---------------------------------------------------------------- |
-| `db`      | PostgreSQL 18, nur im internen Netz erreichbar                    |
-| `migrate` | einmaliger Lauf, spielt offene Migrationen ein, beendet sich dann |
-| `web`     | die Anwendung, nicht direkt nach außen exponiert                  |
-| `proxy`   | Caddy auf Port 80 und 443, holt das TLS-Zertifikat selbst         |
+| Dienst     | Aufgabe                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| `db`       | PostgreSQL 18, nur im internen Netz erreichbar                    |
+| `migrate`  | einmaliger Lauf, spielt offene Migrationen ein, beendet sich dann |
+| `web`      | die Anwendung, nicht direkt nach außen exponiert                  |
+| `notifier` | verschickt die Benachrichtigungs-Mails an Halter                  |
+| `proxy`    | Caddy auf Port 80 und 443, holt das TLS-Zertifikat selbst         |
 
 Voraussetzung für TLS: `DOMAIN` in `.env` zeigt auf deine echte Domain, und deren A-/AAAA-Record
 zeigt auf den Server. Caddy fordert das Zertifikat dann beim ersten Aufruf automatisch an.
@@ -302,7 +337,9 @@ Sonst liest das Absenderlimit eine falsche oder eine vom Client gefälschte IP (
 [technische Doku, Rate-Limiting](architecture.md#6-rate-limiting)).
 
 Ob alles läuft, zeigt `dcp ps`: `web` steht nach etwa 20 Sekunden auf `healthy`. Der Status kommt
-vom Healthcheck gegen `/api/health`, der die Datenbankverbindung prüft.
+vom Healthcheck gegen `/api/health`, der die Datenbankverbindung prüft. Die Antwort enthält
+zusätzlich `outboxLagSeconds`; ein Uptime-Monitor sollte warnen, wenn der Wert über einigen Minuten
+liegt (siehe B7).
 
 ## B2 Secrets
 
@@ -386,7 +423,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 
 `scripts/backup.sh` läuft in einem `postgres:18-alpine`-Container (passende `pg_dump`-Version),
 schreibt `platedrop-<Datum>.sql.gz` und `proofs-<Datum>.tar.gz` in das `backups`-Volume und löscht
-Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Für einen Zeitplan siehe
+Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Scheitert `pg_dump`, bricht
+das Skript mit einem Fehlercode ab, bevor es aufräumt, und hinterlässt keine halbe Sicherung; ein
+Cron-Job sollte diesen Fehlercode melden. Für einen Zeitplan siehe
 [Regelmäßige Wartung](#b9-regelmäßige-wartung).
 
 ## B5 Zurückspielen
@@ -466,6 +505,7 @@ Vor größeren Updates: erst sichern (B4).
 ```bash
 dcp logs -f web        # Anwendung
 dcp logs migrate       # Migrationen, nur der letzte Lauf
+dcp logs -f notifier   # Versand der Benachrichtigungs-Mails
 dcp logs db            # Datenbank
 dcp logs proxy         # Caddy, inklusive Zertifikatsvorgängen
 dcp ps                 # Was läuft, was ist gesund
@@ -485,11 +525,14 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Nach einem Passwort-Reset auf allen Geräten abgemeldet | Absicht: ein Reset beendet alle Sitzungen (`revokeSessionsOnPasswordReset`), damit eine übernommene Sitzung ihn nicht überlebt | auf jedem Gerät neu anmelden |
 | Login schlägt trotz richtigem Passwort fehl | Adresse ist noch nicht bestätigt — beide Fälle liefern absichtlich dieselbe Meldung | `SELECT email, "emailVerified" FROM users WHERE email='…';` |
 | `/admin` leitet nach `/dashboard` um | Konto hat keine Admin-Rechte | `SELECT is_admin FROM users WHERE email='…';`, dann A2 |
-| „Dieses Kennzeichen ist bereits registriert" beim eigenen Kennzeichen | Ein bestehender Anspruch belegt die Nummer — auch ein abgelehnter, den niemand weiterverfolgt | `SELECT * FROM verified_plates WHERE plate_number='…';`, dann A3 |
+| „Sie haben dieses Kennzeichen bereits beansprucht" | Der Nutzer hat schon einen offenen oder freigegebenen Anspruch auf dieses Kennzeichen | im Dashboard nachsehen; bei Bedarf dort entfernen und neu beanspruchen |
+| „Höchstens 3 Kennzeichen können gleichzeitig auf Prüfung warten" | Drei offene Ansprüche des Nutzers ohne Entscheidung | Foto nachreichen, prüfen oder einen Anspruch entfernen; ohne Foto verfallen sie nach 7 Tagen |
 | Beweisfoto liefert 404 | Datei fehlt im Volume, oder das Kennzeichen gehört jemand anderem | `dcp exec web ls /data/proofs/<nutzer-id>/`; 404 statt 403 ist Absicht und verrät nichts über fremde Pfade |
 | Beweisfoto liefert 401 | keine gültige Session | erneut anmelden |
 | App startet nicht, Fehler zur Datenbank | `APP_DB_PASSWORD` und das Passwort in `DATABASE_URL` weichen voneinander ab | beide Werte in `.env` vergleichen, dann `dcp up -d` |
 | `docker compose` meldet `… fehlt` oder die App `Pflicht-Umgebungsvariable … ist nicht gesetzt` | Pflichtvariable leer oder nicht gesetzt | `.env` gegen `.env.example` und B2 prüfen |
+| Halter bekommt keine Benachrichtigung | `notifier` läuft nicht, SMTP lehnt ab, E-Mail in den Einstellungen abgeschaltet, Kennzeichen pausiert oder Ruhezeit | `dcp ps notifier`, `dcp logs notifier`; offene Einträge: `SELECT id, attempts, next_attempt_at, last_error FROM notification_outbox WHERE sent_at IS NULL ORDER BY id DESC LIMIT 10;` |
+| Log-Warnung „Benachrichtigungen stauen sich“, `/api/health` zeigt ein hohes `outboxLagSeconds` | Die älteste fällige Benachrichtigung wartet länger als 5 Minuten – meist steht `notifier` oder der SMTP-Relay | `dcp up -d notifier`, dann `dcp logs notifier`; nach 10 Fehlversuchen gibt er einen Eintrag auf (`attempts = 10`) |
 | `web` bleibt `unhealthy` | `/api/health` antwortet 503: Datenbank nicht erreichbar | `dcp exec web node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>r.text()).then(console.log)"`, dann `dcp logs db` |
 | Login-Cookie wird nicht gesetzt, Anmeldung „verpufft" | `BETTER_AUTH_URL` passt nicht zur aufgerufenen Adresse (falsche Domain, `http` statt `https`) | Wert in `.env` mit der URL im Browser vergleichen, dann `dcp up -d web` |
 | `migrate` bricht ab | fehlerhafte Migrationsdatei; die Transaktion wurde zurückgerollt | `dcp logs migrate`, Datei korrigieren, `dcp up -d migrate` |
@@ -504,10 +547,16 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 
 | Ort | Inhalt |
 | --- | --- |
-| `users` | E-Mail-Adresse, Bestätigungsstatus, Anlagedatum |
+| `users` | E-Mail-Adresse, Anzeigename (freiwillig, für Organisationen), Bestätigungsstatus, Anlagedatum |
 | `sessions` | **IP-Adresse im Klartext** und User-Agent je aktiver Sitzung, dazu das Ablaufdatum |
 | `verified_plates` | Kennzeichen, Status, Pfad zum Beweisfoto |
-| `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender** |
+| `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender**; `hidden_at`, wenn ausgeblendet |
+| `message_reports` | Meldungen: meldendes Konto, Grund, Zeitpunkt, erledigt-Zeitpunkt |
+| `notification_settings` | E-Mail an/aus, Ruhezeiten je Konto |
+| `organizations`, `org_sites` | Betreiber und Standorte (keine Personendaten) |
+| `org_admins`, `site_members` | wer welche Organisation verwaltet bzw. an welchem Standort Mitglied ist |
+| `org_plate_allowlist` | Kennzeichen der Fuhrpark-/Parkausweisliste einer Organisation |
+| `notification_outbox` | Benachrichtigungen: Konto, Kennzeichen, Typ, Versandzeitpunkt; erledigte nach 30 Tagen gelöscht |
 | `message_throttle` | gesalzener SHA-256-Hash der Absender-IP, täglich rotierend; keine Klartext-IP |
 | Volume `proofs` | Fotos, auf denen Kennzeichen und Umfeld zu sehen sind |
 
@@ -597,6 +646,16 @@ Nutzers und hielte deshalb sämtliche fremden Fotos für verwaist.
 
 Ein sinnvoller Rhythmus ist monatlich, und nach jeder Kontolöschung.
 
+### Ansprüche ohne Foto verfallen lassen
+
+```bash
+docker compose run --rm migrate node scripts/prune-claims.mjs
+```
+
+Setzt offene Ansprüche, zu denen nach 7 Tagen noch kein Foto hochgeladen wurde, auf `expired`. Die
+Zeile bleibt stehen, damit der Nutzer im Dashboard sieht, was passiert ist; er kann das Kennzeichen
+erneut beanspruchen. Läuft täglich über `maintenance.mjs`.
+
 ### Abgelaufene Sitzungen entfernen
 
 ```bash
@@ -618,24 +677,24 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 0 4 * * 0 cd /pfad/zu/platedrop && docker compose run --rm migrate node scripts/prune-sessions.mjs
 ```
 
-### Veraltete Rate-Limit-Zeilen und optionale Nachrichten-Frist
+### Veraltete Rate-Limit-Zeilen und Nachrichten-Frist
 
 - `scripts/prune-throttle.mjs` löscht Zeilen aus `message_throttle`, deren Tages-Hash nie wieder
   getroffen wird (Standard: älter als 2 Tage, einstellbar über `THROTTLE_RETAIN_DAYS`).
-- `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
-  Ohne gesetzte Variable passiert nichts – ob Nachrichten befristet aufbewahrt werden, ist eine
-  Produktentscheidung. Ist eine Frist gesetzt, nennt die Datenschutzerklärung sie als Speicherdauer.
+- `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind
+  (Pflicht, Vorgabe in `.env.example`: 90). Die Datenschutzerklärung zeigt denselben Wert als
+  Speicherdauer an. Fehlt die Variable, startet weder `web` noch `migrate`, und das Skript bricht
+  mit Fehler ab.
 
-> **Bekannte Lücke:** Der `migrate`-Service in `docker-compose.yml` reicht `MESSAGE_RETENTION_DAYS`
-> und `THROTTLE_RETAIN_DAYS` derzeit nicht in den Container durch — Werte aus `.env` kommen dort
-> nicht an, eine Nachrichtenfrist würde still ignoriert. Bis zur Korrektur (siehe
-> [TODO.md](../TODO.md)) den Wert beim Aufruf explizit mitgeben:
-> `docker compose run --rm -e MESSAGE_RETENTION_DAYS=90 migrate node scripts/maintenance.mjs`.
+### Versendete Benachrichtigungen entfernen
+
+`scripts/prune-outbox.mjs` löscht Einträge aus `notification_outbox`, die versendet oder nach zehn
+Fehlversuchen aufgegeben wurden, sobald sie älter als 30 Tage sind. Offene Einträge bleiben.
 
 ### Alles zusammen per Cron
 
-`scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-throttle`,
-`prune-messages` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
+`scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-claims`, `prune-throttle`,
+`prune-messages`, `prune-outbox` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
 Schritte nicht.
 
 ```cron
@@ -644,3 +703,73 @@ Schritte nicht.
 # täglich 04:00 – Sicherung inkl. Aufräumen alter Backups
 0 4 * * * cd /pfad/zu/platedrop && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile backup run --rm backup
 ```
+
+---
+
+# Teil C — Organisationen
+
+Organisationen sind Betreiber privater Gelände (Firmenparkplatz, Hausverwaltung, Hotel …). Sie
+haben Standorte mit eigenem QR-Code, Mitglieder je Standort und Org-Admins, die unter
+`/o/<slug>/admin` alles Weitere selbst erledigen. Anlegen und Löschen machst nur du, per Skript –
+es gibt bewusst keine Selbstregistrierung. Hintergrund: [go-to-market.md](go-to-market.md),
+technisch [architecture.md, Mandantentrennung](architecture.md#mandantentrennung-0014).
+
+## C1 Organisation anlegen
+
+Der künftige Org-Admin registriert sich zuerst ganz normal und bestätigt seine Adresse. Dann:
+
+```bash
+dcp run --rm migrate node scripts/create-org.mjs \
+  --name "Muster Hausverwaltung" --slug muster \
+  --site "Tiefgarage Nord" --admin verwaltung@example.com
+```
+
+Das Skript nennt die Adresse der Verwaltung (`/o/muster/admin`) und die Standort-URL (`/s/<token>`).
+Der `slug` erscheint in der Adresse der Verwaltung: Kleinbuchstaben, Ziffern, Bindestriche. Weitere
+Standorte, Aushänge, Fuhrparkliste und Einstellungen pflegt der Org-Admin selbst.
+
+Ein **weiterer Org-Admin** (etwa eine Vertretung) bekommt die Rolle per SQL:
+
+```bash
+dcp exec -T db psql -U platedrop_owner -d platedrop -c \
+  "INSERT INTO org_admins (org_id, user_id)
+   SELECT o.id, u.id FROM organizations o, users u
+    WHERE o.slug = 'muster' AND lower(u.email) = 'vertretung@example.com';"
+```
+
+Entziehen entsprechend mit `DELETE FROM org_admins …`.
+
+## C2 Was der Org-Admin tut
+
+- **Beitritte bestätigen.** Mitglieder scannen den Aushang, melden sich an und beantragen den
+  Beitritt. Erst nach der Bestätigung können sie Kennzeichen für die Organisation eintragen.
+- **Kennzeichen freigeben** – ohne Foto. Steht ein Kennzeichen auf der Fuhrpark-/Parkausweisliste,
+  gilt es sofort.
+- **Mitglieder entfernen.** Der Lesezugriff endet sofort, die Kennzeichen des Mitglieds in dieser
+  Organisation verfallen (`expired`).
+- **Standorte** anlegen, deaktivieren oder den Code erneuern (alte Aushänge werden ungültig).
+- **Einstellungen:** Absendername zeigen, Freitext für Mitglieder erlauben.
+- **Statistik:** Vorfälle je Woche und Standort. Nachrichten selbst sieht ein Org-Admin nie.
+
+Meldungen zu Nachrichten aus Organisationen landen wie alle anderen unter `/admin` bei dir (A3a).
+
+## C3 Vertragsende: exportieren und löschen
+
+Nach Art. 28 Abs. 3 lit. g DSGVO gibst du dem Kunden seine Daten zurück und löschst sie. Erst
+ansehen, was betroffen ist:
+
+```bash
+dcp run --rm migrate node scripts/delete-org.mjs --slug muster
+```
+
+Dann exportieren und löschen in einem Schritt; das JSON landet auf dem Host:
+
+```bash
+dcp run --rm -T migrate node scripts/delete-org.mjs --slug muster --export - --yes > muster-export.json
+```
+
+Gelöscht werden Organisation, Standorte, Mitgliedschaften, Org-Admin-Rollen, Fuhrparkliste,
+Kennzeichen der Organisation und alle Nachrichten über ihre Standorte. Die Nutzerkonten und ihre
+öffentlichen Kennzeichen bleiben – sie gehören den Personen, nicht dem Kunden. Den Export übergibst
+du dem Kunden verschlüsselt und löschst deine Kopie danach. Sicherungen enthalten die Daten noch bis
+zum Ablauf von `BACKUP_RETENTION_DAYS`; das gehört in den AV-Vertrag.

@@ -2,21 +2,25 @@
 
 import { checkMessageRate, insertMessage, PlateRateLimitError } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
+import { isMessageType } from "@/lib/messages/catalog";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
 
 const RATE_LIMIT_ERROR = "Zu viele Anfragen. Bitte versuchen Sie es in einigen Minuten erneut.";
 const GENERIC_ERROR = "Fehler beim Speichern der Nachricht. Bitte versuchen Sie es später erneut.";
 
+/**
+ * Anonyme Nachricht an ein Kennzeichen. Absender wählen aus dem Katalog;
+ * ein mitgeschicktes Freitextfeld wird ignoriert (strategy.md §2).
+ */
 export async function dropMessage(
   _prevState: { success: boolean; error?: string } | null,
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  const plateNumber = formData.get("plateNumber") as string;
-  const messageText = formData.get("messageText") as string;
+  const plateNumber = formData.get("plateNumber");
+  const messageType = formData.get("messageType");
 
-  // Validate plate
-  if (!plateNumber?.trim()) {
+  if (typeof plateNumber !== "string" || !plateNumber.trim()) {
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
   }
 
@@ -25,19 +29,9 @@ export async function dropMessage(
     return { success: false, error: plateErrorMessage(parsedPlate.reason) };
   }
 
-  // Validate message
-  if (!messageText?.trim()) {
-    return { success: false, error: "Nachricht darf nicht leer sein." };
+  if (!isMessageType(messageType)) {
+    return { success: false, error: "Bitte wählen Sie eine Nachricht aus." };
   }
-
-  if (messageText.length > 500) {
-    return {
-      success: false,
-      error: "Nachricht darf nicht länger als 500 Zeichen sein.",
-    };
-  }
-
-  const normalizedPlate = parsedPlate.plate;
 
   try {
     // Limit je Absender (pseudonymisiert). Ohne bestimmbare IP wird durch-
@@ -47,7 +41,7 @@ export async function dropMessage(
       return { success: false, error: RATE_LIMIT_ERROR };
     }
 
-    await insertMessage(normalizedPlate, messageText.trim());
+    await insertMessage(parsedPlate.plate, messageType);
     return { success: true };
   } catch (err) {
     if (err instanceof PlateRateLimitError) {

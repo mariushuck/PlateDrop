@@ -1,0 +1,65 @@
+[
+  {
+    "code": "licht_an",
+    "label": "Licht ist an",
+    "text": "Am Fahrzeug brennt noch Licht.",
+    "icon": "lightbulb",
+    "urgent": true
+  },
+  {
+    "code": "fenster_offen",
+    "label": "Fenster oder Schiebedach offen",
+    "text": "Ein Fenster oder das Schiebedach steht offen.",
+    "icon": "app-window",
+    "urgent": true
+  },
+  {
+    "code": "tuer_offen",
+    "label": "Tür oder Kofferraum offen",
+    "text": "Eine Tür oder der Kofferraum ist nicht geschlossen.",
+    "icon": "door-open",
+    "urgent": true
+  },
+  {
+    "code": "blockiert",
+    "label": "Blockiert Ausfahrt oder Fahrzeug",
+    "text": "Das Fahrzeug blockiert eine Ausfahrt oder ein anderes Fahrzeug.",
+    "icon": "octagon-alert",
+    "urgent": true
+  },
+  {
+    "code": "abschleppen",
+    "label": "Abschleppwagen oder Ordnungsdienst",
+    "text": "Am Fahrzeug steht ein Abschleppwagen oder Ordnungsdienst.",
+    "icon": "truck",
+    "urgent": true
+  },
+  {
+    "code": "alarm",
+    "label": "Alarmanlage ausgelöst",
+    "text": "Die Alarmanlage ist ausgelöst.",
+    "icon": "siren",
+    "urgent": true
+  },
+  {
+    "code": "reifen",
+    "label": "Reifen sieht platt aus",
+    "text": "Ein Reifen sieht platt aus.",
+    "icon": "circle-dot",
+    "urgent": false
+  },
+  {
+    "code": "schaden_gesehen",
+    "label": "Schaden am Fahrzeug",
+    "text": "Am Fahrzeug ist ein Schaden zu sehen.",
+    "icon": "car-front",
+    "urgent": false
+  },
+  {
+    "code": "danke",
+    "label": "Danke fürs Parken",
+    "text": "Danke fürs rücksichtsvolle Parken.",
+    "icon": "heart",
+    "urgent": false
+  }
+]

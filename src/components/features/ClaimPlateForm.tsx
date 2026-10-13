@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2 } from "lucide-react";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 
 interface ClaimPlateFormProps {
@@ -9,10 +9,14 @@ interface ClaimPlateFormProps {
     _prevState: { success: boolean; error?: string } | null,
     formData: FormData,
   ) => Promise<{ success: boolean; error?: string }>;
+  /** Zusätzliche Felder, z. B. `orgId` beim Kennzeichen einer Organisation. */
+  hiddenFields?: Record<string, string>;
 }
 
-export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
+export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormProps) {
   const [state, formAction, isPending] = useActionState(action, null);
+  // Mehrere Formulare je Seite (öffentlich + je Organisation) brauchen eigene IDs.
+  const inputId = useId();
   const [plateInput, setPlateInput] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -37,7 +41,7 @@ export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
     }, 0);
 
     return () => window.clearTimeout(showTimer);
-  }, [state?.success]);
+  }, [state]);
 
   return (
     <div className="space-y-4">
@@ -51,18 +55,19 @@ export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
       )}
 
       <form action={formAction} className="flex flex-col gap-4">
+        {hiddenFields &&
+          Object.entries(hiddenFields).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
         {/* Plate Input */}
         <div className="flex flex-col gap-2">
-          <label
-            htmlFor="plateNumber"
-            className="text-sm font-semibold text-slate-900 dark:text-white"
-          >
+          <label htmlFor={inputId} className="text-sm font-semibold text-slate-900 dark:text-white">
             Kennzeichen
           </label>
 
           <div className="relative">
             <input
-              id="plateNumber"
+              id={inputId}
               name="plateNumber"
               type="text"
               placeholder="z.B. KA-AB-1234"

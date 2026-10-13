@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { use, useActionState, useState } from "react";
 import { signIn, signUp } from "@/app/auth/actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 
 type AuthMode = "signin" | "signup";
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  // Rückweg zum Standort-Formular; geprüft wird er in der Server Action.
+  const next = use(searchParams).next;
   const [mode, setMode] = useState<AuthMode>("signin");
   const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, null);
   const [signInState, signInAction, isSignInPending] = useActionState(signIn, null);
@@ -72,6 +78,7 @@ export default function LoginPage() {
           ) : (
             /* Form */
             <form action={currentAction} className="flex flex-col gap-4">
+              {typeof next === "string" && <input type="hidden" name="next" value={next} />}
               {/* Email Input */}
               <div className="flex flex-col gap-2">
                 <label

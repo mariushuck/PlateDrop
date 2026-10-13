@@ -1,8 +1,10 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
+import ReportActions from "@/components/features/ReportActions";
 import VerificationActions from "@/components/features/VerificationActions";
 import { requireAdmin } from "@/lib/auth/session";
-import { listPendingVerifications } from "@/lib/db/queries";
+import { listOpenReports, listPendingVerifications } from "@/lib/db/queries";
+import { messageType } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
 /**
@@ -14,7 +16,10 @@ import { isCanonicalPlate } from "@/lib/utils/plateUtils";
  */
 export default async function AdminPage() {
   const admin = await requireAdmin();
-  const pendingVerifications = await listPendingVerifications(admin.id);
+  const [pendingVerifications, openReports] = await Promise.all([
+    listPendingVerifications(admin.id),
+    listOpenReports(admin.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -25,6 +30,36 @@ export default async function AdminPage() {
           Überprüfen und genehmigen Sie ausstehende Kennzeichen-Verifizierungen
         </p>
       </div>
+
+      {openReports.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
+            Meldungen ({openReports.length})
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {openReports.map((report) => (
+              <div
+                key={report.id}
+                className="rounded-lg border border-red-200 bg-white p-4 shadow-sm dark:border-red-900/50 dark:bg-slate-800"
+              >
+                <p className="mb-1 text-xs font-semibold text-red-700 dark:text-red-400">
+                  {report.reason} · gemeldet am{" "}
+                  {new Date(report.created_at).toLocaleDateString("de-DE")}
+                </p>
+                <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                  an {report.plate_number}, gesendet am{" "}
+                  {new Date(report.message_created_at).toLocaleDateString("de-DE")}
+                </p>
+                <p className="mb-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-900 dark:bg-slate-700 dark:text-white">
+                  {(report.message_type && messageType(report.message_type)?.text) ??
+                    report.message_text}
+                </p>
+                <ReportActions reportId={report.id} messageId={report.message_id} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Pending Verifications Grid */}
       {pendingVerifications.length === 0 ? (
@@ -72,6 +107,16 @@ export default async function AdminPage() {
                     {verification.verification_code}
                   </p>
                 </div>
+
+                {verification.has_approved_holder && (
+                  <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                      Für dieses Kennzeichen gibt es bereits einen freigegebenen Halter. Eine
+                      Freigabe löst ihn ab; er wird per Mail informiert.
+                    </p>
+                  </div>
+                )}
 
                 {isCanonicalPlate(verification.plate_number) ? (
                   <VerificationActions plateId={verification.id} />

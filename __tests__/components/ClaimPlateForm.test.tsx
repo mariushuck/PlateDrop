@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useActionState } from "react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
 
@@ -91,5 +91,27 @@ describe("ClaimPlateForm", () => {
     return waitFor(() => {
       expect(screen.getByText(/Kennzeichen erfolgreich registriert/i)).toBeInTheDocument();
     });
+  });
+
+  it("meldet auch den zweiten Erfolg in Folge", () => {
+    jest.useFakeTimers();
+    const action = jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"];
+    // Jede Antwort der Action ist ein neues Objekt, auch wenn `success` gleich bleibt.
+    let state: { success: boolean } = { success: true };
+    mockUseActionState.mockImplementation((a: unknown) => [state, a, false]);
+
+    const { rerender } = render(<ClaimPlateForm action={action} />);
+    act(() => jest.advanceTimersByTime(0));
+    expect(screen.getByText(/Kennzeichen erfolgreich registriert/i)).toBeInTheDocument();
+
+    act(() => jest.advanceTimersByTime(3000));
+    expect(screen.queryByText(/Kennzeichen erfolgreich registriert/i)).not.toBeInTheDocument();
+
+    state = { success: true };
+    rerender(<ClaimPlateForm action={action} />);
+    act(() => jest.advanceTimersByTime(0));
+    expect(screen.getByText(/Kennzeichen erfolgreich registriert/i)).toBeInTheDocument();
+
+    jest.useRealTimers();
   });
 });

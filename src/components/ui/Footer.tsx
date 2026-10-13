@@ -20,6 +20,13 @@ export default function Footer() {
           >
             Datenschutz
           </Link>
+          <span className="text-slate-300 dark:text-slate-600">•</span>
+          <Link
+            href="/betreiber"
+            className="hover:text-slate-900 transition-colors dark:hover:text-slate-200"
+          >
+            Für Betreiber
+          </Link>
         </div>
 
         <p className="text-slate-500 dark:text-slate-500">© 2026 PlateDrop. Built with Next.js.</p>

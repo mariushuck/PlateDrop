@@ -56,13 +56,16 @@ export async function seedPlate(
     proofPath?: string | null;
     /** Zeitpunkt des Anspruchs; Standard: jetzt. */
     createdAt?: Date;
+    /** Organisation (0014); Standard: öffentlich. */
+    orgId?: string;
   } = {},
 ): Promise<string> {
   const { rows } = await withAdmin((client) =>
     client.query<{ id: string }>(
       `INSERT INTO verified_plates
-         (user_id, plate_number, is_verified, verification_status, proof_image_url, created_at)
-       VALUES ($1, $2, $3, $4, $5, coalesce($6, now())) RETURNING id`,
+         (user_id, plate_number, is_verified, verification_status, proof_image_url, created_at,
+          org_id)
+       VALUES ($1, $2, $3, $4, $5, coalesce($6, now()), $7) RETURNING id`,
       [
         userId,
         plate,
@@ -70,18 +73,78 @@ export async function seedPlate(
         opts.status ?? "pending",
         opts.proofPath ?? null,
         opts.createdAt ?? null,
+        opts.orgId ?? null,
       ],
     ),
   );
   return rows[0].id;
 }
 
-export async function seedMessage(plate: string, text: string, createdAt?: Date): Promise<void> {
+export async function seedMessage(
+  plate: string,
+  text: string,
+  createdAt?: Date,
+  scope: { orgId?: string; siteId?: string } = {},
+): Promise<void> {
   await withAdmin((client) =>
     client.query(
-      "INSERT INTO messages (plate_number, message_text, created_at) VALUES ($1, $2, coalesce($3, now()))",
-      [plate, text, createdAt ?? null],
+      `INSERT INTO messages (plate_number, message_text, created_at, org_id, site_id)
+       VALUES ($1, $2, coalesce($3, now()), $4, $5)`,
+      [plate, text, createdAt ?? null, scope.orgId ?? null, scope.siteId ?? null],
     ),
+  );
+}
+
+/** Organisation mit einem Standort; Token im gültigen Format. */
+export async function seedOrg(
+  slug: string,
+  opts: { showSender?: boolean; allowFreeText?: boolean } = {},
+): Promise<{ orgId: string; siteId: string; token: string }> {
+  return withAdmin(async (client) => {
+    const org = await client.query<{ id: string }>(
+      `INSERT INTO organizations (name, slug, show_sender, allow_free_text)
+       VALUES ($1, $1, $2, $3) RETURNING id`,
+      [slug, opts.showSender ?? false, opts.allowFreeText ?? false],
+    );
+    const orgId = org.rows[0].id;
+    const token = `${slug}-token-0000000000000000`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 22);
+    const site = await client.query<{ id: string }>(
+      "INSERT INTO org_sites (org_id, name, token) VALUES ($1, $2, $3) RETURNING id",
+      [orgId, `${slug}-standort`, token.padEnd(22, "x")],
+    );
+    return { orgId, siteId: site.rows[0].id, token: token.padEnd(22, "x") };
+  });
+}
+
+/** Weiterer Standort einer Organisation. */
+export async function seedSite(orgId: string, name: string): Promise<string> {
+  const token = `${name}-0000000000000000000000`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 22);
+  const { rows } = await withAdmin((client) =>
+    client.query<{ id: string }>(
+      "INSERT INTO org_sites (org_id, name, token) VALUES ($1, $2, $3) RETURNING id",
+      [orgId, name, token],
+    ),
+  );
+  return rows[0].id;
+}
+
+export async function seedMember(
+  siteId: string,
+  userId: string,
+  status: "pending" | "active" = "active",
+): Promise<void> {
+  await withAdmin((client) =>
+    client.query("INSERT INTO site_members (site_id, user_id, status) VALUES ($1, $2, $3)", [
+      siteId,
+      userId,
+      status,
+    ]),
+  );
+}
+
+export async function seedOrgAdmin(orgId: string, userId: string): Promise<void> {
+  await withAdmin((client) =>
+    client.query("INSERT INTO org_admins (org_id, user_id) VALUES ($1, $2)", [orgId, userId]),
   );
 }
 

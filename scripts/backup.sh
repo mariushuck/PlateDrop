@@ -14,7 +14,7 @@
 #   BACKUP_RETENTION_DAYS   Aufbewahrung in Tagen (Default 14)
 #
 # Die Beweisfotos sind personenbezogen: BACKUP_DIR verschlüsselt lagern.
-set -eu
+set -euo pipefail
 
 : "${DATABASE_ADMIN_URL:?DATABASE_ADMIN_URL ist nicht gesetzt}"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
@@ -25,7 +25,12 @@ STAMP="$(date +%F)"
 mkdir -p "$BACKUP_DIR"
 
 echo "Sichere Datenbank ..."
-pg_dump --clean --if-exists --no-owner "$DATABASE_ADMIN_URL" | gzip > "$BACKUP_DIR/platedrop-$STAMP.sql.gz"
+# Erst in eine Temp-Datei: scheitert pg_dump, bleibt keine halbe Sicherung
+# liegen, die nach einer guten aussieht.
+TMP="$BACKUP_DIR/platedrop-$STAMP.sql.gz.tmp"
+trap 'rm -f "$TMP"' EXIT
+pg_dump --clean --if-exists --no-owner "$DATABASE_ADMIN_URL" | gzip > "$TMP"
+mv "$TMP" "$BACKUP_DIR/platedrop-$STAMP.sql.gz"
 echo "  -> $BACKUP_DIR/platedrop-$STAMP.sql.gz"
 
 echo "Sichere Beweisfotos ..."

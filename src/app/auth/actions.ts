@@ -3,6 +3,7 @@
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { safeNextPath } from "@/lib/auth/nextPath";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 import { logger } from "@/lib/logger";
@@ -30,8 +31,10 @@ export async function signUp(
   try {
     // better-auth legt den Nutzer an und verschickt die Bestätigungsmail.
     // Angemeldet wird erst nach bestätigter Adresse.
+    // Kein Name: er ist der Anzeigename gegenüber Organisationen (0014) und wird
+    // in den Einstellungen gesetzt. Früher stand hier die E-Mail-Adresse.
     await auth.api.signUpEmail({
-      body: { name: email, email, password },
+      body: { name: "", email, password },
       headers: await headers(),
     });
     return { success: true };
@@ -70,8 +73,9 @@ export async function signIn(
     return { success: false, error: UNEXPECTED_ERROR };
   }
 
-  // redirect() wirft – deshalb außerhalb des try-Blocks.
-  redirect("/dashboard");
+  // redirect() wirft – deshalb außerhalb des try-Blocks. Rückkehr zum
+  // Standort-Formular, von dem aus jemand zum Beitreten kam (?next=).
+  redirect(safeNextPath(formData.get("next")));
 }
 
 export async function signOut() {

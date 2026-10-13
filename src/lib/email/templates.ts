@@ -77,3 +77,17 @@ export function emailChangeEmail(url: string, newEmail: string): MailTemplate {
     ),
   };
 }
+
+/** An den bisherigen Halter, wenn ein anderer Nutzer für sein Kennzeichen freigegeben wurde. */
+export function plateSupersededEmail(plateNumber: string, dashboardUrl: string): MailTemplate {
+  return {
+    subject: `PlateDrop: Kennzeichen ${plateNumber} neu vergeben`,
+    text: `Für das Kennzeichen ${plateNumber} wurde eine andere Person als Halterin oder Halter bestätigt.\n\nDu bekommst ab sofort keine Nachrichten mehr an dieses Kennzeichen. Fährst du das Fahrzeug weiterhin, kannst du es im Dashboard erneut beanspruchen:\n${dashboardUrl}`,
+    html: layout(
+      "Kennzeichen neu vergeben",
+      `Für das Kennzeichen <strong>${escapeHtml(plateNumber)}</strong> wurde eine andere Person als Halterin oder Halter bestätigt. Du bekommst ab sofort keine Nachrichten mehr daran. Fährst du das Fahrzeug weiterhin, kannst du es erneut beanspruchen.`,
+      "Zum Dashboard",
+      dashboardUrl,
+    ),
+  };
+}

@@ -13,7 +13,13 @@ export const metadata: Metadata = {
  */
 const PLACEHOLDER = "[Platzhalter – vor Go-Live ersetzen]";
 
+// Liest die Speicherfrist zur Laufzeit; beim Docker-Build ist sie nicht gesetzt.
+export const dynamic = "force-dynamic";
+
 export default function Datenschutz() {
+  // Pflichtvariable (docker-compose.yml); dieselbe Frist wendet prune-messages.mjs an.
+  const retentionDays = process.env.MESSAGE_RETENTION_DAYS ?? PLACEHOLDER;
+
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900">
       {/* Header */}
@@ -76,8 +82,9 @@ export default function Datenschutz() {
               3. Anonyme Nachrichten
             </h2>
             <p className="mb-2">
-              <strong>Gespeicherte Daten:</strong> das normalisierte Kennzeichen, der
-              Nachrichtentext (1–500 Zeichen) und der Zeitpunkt der Einreichung. Es wird{" "}
+              <strong>Gespeicherte Daten:</strong> das normalisierte Kennzeichen, die gewählte
+              vordefinierte Nachricht (z. B. „Licht ist an“) und der Zeitpunkt der Einreichung.
+              Freitext können anonyme Absender nicht eingeben. Es wird{" "}
               <strong>kein Absenderkennzeichen</strong> gespeichert – weder Name noch Konto noch
               IP-Adresse.
             </p>
@@ -92,6 +99,14 @@ export default function Datenschutz() {
               <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO – berechtigtes Interesse
               an einem funktionsfähigen, missbrauchsgeschützten Dienst und am Schutz der
               angeschriebenen Halter:innen.
+            </p>
+            <p className="mt-2">
+              <strong>Ausblenden und Melden:</strong> Empfänger:innen können eine Nachricht
+              ausblenden oder dem Betreiber melden. Gespeichert werden dabei der Zeitpunkt, bei
+              einer Meldung zusätzlich das meldende Konto und der gewählte Grund. Eine gemeldete
+              Nachricht sieht der Betreiber, um über ihre Löschung zu entscheiden (Art. 16 DSA);
+              alle übrigen Nachrichten bleiben auch für ihn unsichtbar. Rechtsgrundlage ist Art. 6
+              Abs. 1 lit. c und f DSGVO.
             </p>
           </section>
 
@@ -146,6 +161,37 @@ export default function Datenschutz() {
             </p>
           </section>
 
+          {/* 5a. Gelände und Organisationen */}
+          <section>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+              5a. Gelände und Organisationen
+            </h2>
+            <p className="mb-2">
+              Betreiber privater Gelände (z. B. Arbeitgeber, Hausverwaltungen) können PlateDrop für
+              ihre Parkflächen nutzen. Für die Daten in diesem Rahmen ist die jeweilige Organisation
+              Verantwortliche; PlateDrop verarbeitet sie in ihrem Auftrag (Art. 28 DSGVO).
+            </p>
+            <p className="mb-2">
+              <strong>Gespeicherte Daten:</strong> deine Mitgliedschaft an einem Standort samt
+              Status, die Kennzeichen, die du dort einträgst, und Nachrichten, die über den Code
+              eines Standorts gesendet werden. Schreibst du angemeldet über einen Standort, wird
+              dein Konto als Absender gespeichert; sichtbar ist für die Empfänger:in nur dein
+              freiwilliger Anzeigename und nur, wenn die Organisation das eingestellt hat. Besucher
+              ohne Konto bleiben anonym.
+            </p>
+            <p className="mb-2">
+              <strong>Was die Verwaltung sieht:</strong> E-Mail-Adresse und Anzeigename der
+              Mitglieder und Antragsteller:innen, ihre Kennzeichen in der Organisation und die Zahl
+              der Nachrichten je Woche und Standort. Den Inhalt von Nachrichten sieht sie nicht.
+            </p>
+            <p>
+              <strong>Ende:</strong> Trittst du aus oder entfernt dich die Verwaltung, endet der
+              Zugriff sofort und deine Kennzeichen in der Organisation verfallen. Endet der Vertrag
+              mit der Organisation, werden ihre Daten exportiert und gelöscht; dein Konto und deine
+              übrigen Kennzeichen bleiben bestehen.
+            </p>
+          </section>
+
           {/* 6. E-Mail-Versand */}
           <section>
             <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
@@ -154,9 +200,13 @@ export default function Datenschutz() {
             <p className="mb-2">
               Zur Bestätigung der E-Mail-Adresse, für die Passwort-Zurücksetzung und für die
               Bestätigung einer E-Mail-Änderung versendet PlateDrop E-Mails an die Adresse der
-              jeweiligen Nutzer:in. Der Versand läuft über einen vom Betreiber konfigurierten
-              SMTP-Dienst ({PLACEHOLDER} – Anbieter im Auftragsverarbeitungs- vertrag). Übermittelt
-              werden Empfängeradresse und E-Mail-Inhalt.
+              jeweiligen Nutzer:in. Verifizierte Halter:innen erhalten außerdem eine
+              Benachrichtigung, wenn eine Nachricht an ihr Kennzeichen eingeht; sie nennt nur die
+              Art der Nachricht und das Kennzeichen. Benachrichtigungen lassen sich in den
+              Kontoeinstellungen abschalten, mit Ruhezeiten versehen oder je Kennzeichen pausieren.
+              Der Versand läuft über einen vom Betreiber konfigurierten SMTP-Dienst ({PLACEHOLDER} –
+              Anbieter im Auftragsverarbeitungs- vertrag). Übermittelt werden Empfängeradresse und
+              E-Mail-Inhalt.
             </p>
             <p>
               <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. b und lit. f DSGVO.
@@ -212,10 +262,19 @@ export default function Datenschutz() {
             </h2>
             <ul className="list-inside list-disc space-y-1">
               <li>
-                <strong>Nachrichten:</strong> werden gespeichert, bis die Halter:in oder der Betrieb
-                sie entfernt. Eine automatische Löschung nach fester Frist greift nur, wenn der
-                Betreiber eine Speicherdauer festgelegt hat ({PLACEHOLDER} – Frist eintragen oder
-                diesen Zusatz streichen).
+                <strong>Nachrichten:</strong> höchstens {retentionDays} Tage ab Eingang; danach
+                werden sie durch eine regelmäßige Bereinigung gelöscht. Ausgeblendete Nachrichten
+                bleiben bis dahin gespeichert, damit eine Meldung noch geprüft werden kann. Der
+                Betreiber kann eine gemeldete Nachricht früher löschen.
+              </li>
+              <li>
+                <strong>Benachrichtigungen:</strong> der Versandauftrag (Konto, Kennzeichen, Art der
+                Nachricht, Zeitpunkt) wird 30 Tage nach dem Versand gelöscht, die Einstellungen mit
+                dem Konto.
+              </li>
+              <li>
+                <strong>Meldungen:</strong> zusammen mit der gemeldeten Nachricht, also ebenfalls
+                höchstens {retentionDays} Tage.
               </li>
               <li>
                 <strong>Konto- und Verifizierungsdaten:</strong> für die Dauer des Kontos; nach
@@ -278,7 +337,7 @@ export default function Datenschutz() {
           {/* Last Updated */}
           <div className="mt-12 rounded-lg bg-slate-100 p-4 dark:bg-slate-800">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              <strong>Stand:</strong> August 2026
+              <strong>Stand:</strong> Oktober 2026
             </p>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               Diese Datenschutzerklärung wird angepasst, sobald sich die beschriebene Verarbeitung

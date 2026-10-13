@@ -2,8 +2,12 @@ import {
   APP_URL,
   daysAgo,
   migrateFresh,
+  seedMember,
   seedMessage,
+  seedOrg,
+  seedOrgAdmin,
   seedPlate,
+  seedSite,
   seedUser,
   withAdmin,
 } from "./helpers/db";
@@ -32,26 +36,24 @@ describe("insertMessage", () => {
   it("speichert eine Nachricht ohne angemeldeten Nutzer", async () => {
     const { insertMessage } = await loadQueries();
 
-    await insertMessage("KA-AB-1234", "Dein Licht ist an.");
+    await insertMessage("KA-AB-1234", "licht_an");
 
     const stored = await withAdmin((client) =>
-      client.query<{ plate_number: string; message_text: string }>(
-        "SELECT plate_number, message_text FROM messages",
+      client.query<{ plate_number: string; message_type: string }>(
+        "SELECT plate_number, message_type FROM messages",
       ),
     );
-    expect(stored.rows).toEqual([
-      { plate_number: "KA-AB-1234", message_text: "Dein Licht ist an." },
-    ]);
+    expect(stored.rows).toEqual([{ plate_number: "KA-AB-1234", message_type: "licht_an" }]);
   });
 
   it("meldet das Erreichen des Kennzeichen-Limits als PlateRateLimitError", async () => {
     const { insertMessage, PlateRateLimitError } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", `Nachricht ${i}`);
+      await insertMessage("KA-AB-1234", "licht_an");
     }
 
-    await expect(insertMessage("KA-AB-1234", "eine zu viel")).rejects.toBeInstanceOf(
+    await expect(insertMessage("KA-AB-1234", "licht_an")).rejects.toBeInstanceOf(
       PlateRateLimitError,
     );
   });
@@ -60,10 +62,10 @@ describe("insertMessage", () => {
     const { insertMessage } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", `Nachricht ${i}`);
+      await insertMessage("KA-AB-1234", "licht_an");
     }
 
-    await expect(insertMessage("M-XY-9999", "anderes Kennzeichen")).resolves.toBeUndefined();
+    await expect(insertMessage("M-XY-9999", "licht_an")).resolves.toBeUndefined();
   });
 });
 
@@ -196,14 +198,42 @@ describe("claimPlate", () => {
     expect(plate.verification_code).toBe("PD-FREE");
   });
 
-  it("meldet ein bereits vergebenes Kennzeichen als PlateAlreadyClaimedError", async () => {
-    const { claimPlate, PlateAlreadyClaimedError } = await loadQueries();
+  // Ein fremder offener oder freigegebener Claim sperrt niemanden mehr aus
+  // (Squatting, Halterwechsel); die Antwort verrät so auch nicht, ob das
+  // Kennzeichen schon registriert ist. Entschieden wird bei der Freigabe.
+  it("lässt ein fremd beanspruchtes Kennzeichen erneut beanspruchen", async () => {
+    const { claimPlate } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
     const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+
+    const plate = await claimPlate(stranger, "KA-AB-1234", () => "PD-0000");
+
+    expect(plate).toMatchObject({ plate_number: "KA-AB-1234", verification_status: "pending" });
+  });
+
+  it("meldet einen doppelten eigenen Claim als PlateAlreadyClaimedError", async () => {
+    const { claimPlate, PlateAlreadyClaimedError } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234");
 
-    await expect(claimPlate(stranger, "KA-AB-1234", () => "PD-0000")).rejects.toBeInstanceOf(
+    await expect(claimPlate(owner, "KA-AB-1234", () => "PD-0000")).rejects.toBeInstanceOf(
       PlateAlreadyClaimedError,
+    );
+  });
+
+  it("erlaubt höchstens drei offene Claims je Nutzer", async () => {
+    const { claimPlate, TooManyOpenClaimsError } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1");
+    await seedPlate(owner, "KA-AB-2");
+    await seedPlate(owner, "KA-AB-3");
+    // Freigegebene und abgelehnte zählen nicht als offen.
+    await seedPlate(owner, "KA-AB-4", { verified: true, status: "approved" });
+    await seedPlate(owner, "KA-AB-5", { status: "rejected" });
+
+    await expect(claimPlate(owner, "KA-AB-6", () => "PD-0006")).rejects.toBeInstanceOf(
+      TooManyOpenClaimsError,
     );
   });
 });
@@ -268,6 +298,37 @@ describe("plateBelongsToUser", () => {
     await expect(plateBelongsToUser(owner, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")).resolves.toBe(
       false,
     );
+  });
+});
+
+describe("deletePlate", () => {
+  beforeEach(migrateFresh);
+
+  it("entfernt das eigene Kennzeichen und gibt den Fotopfad zurück", async () => {
+    const { deletePlate } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/foto.jpg" });
+
+    await expect(deletePlate(owner, plateId)).resolves.toEqual({
+      deleted: true,
+      proofPath: "user-owner/foto.jpg",
+    });
+    const left = await withAdmin((client) => client.query("SELECT id FROM verified_plates"));
+    expect(left.rows).toHaveLength(0);
+  });
+
+  it("lässt ein fremdes Kennzeichen stehen", async () => {
+    const { deletePlate } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234");
+
+    await expect(deletePlate(stranger, plateId)).resolves.toEqual({
+      deleted: false,
+      proofPath: null,
+    });
+    const left = await withAdmin((client) => client.query("SELECT id FROM verified_plates"));
+    expect(left.rows).toHaveLength(1);
   });
 });
 
@@ -394,7 +455,11 @@ describe("Admin-Abläufe", () => {
     const admin = await seedUser("user-admin", "admin@example.com", true);
     const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/proof.jpg" });
 
-    await expect(setPlateVerification(admin, plateId, true)).resolves.toBe(true);
+    await expect(setPlateVerification(admin, plateId, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean; verification_status: string }>(
@@ -410,7 +475,11 @@ describe("Admin-Abläufe", () => {
     const admin = await seedUser("user-admin", "admin@example.com", true);
     const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/proof.jpg" });
 
-    await expect(setPlateVerification(admin, plateId, false)).resolves.toBe(true);
+    await expect(setPlateVerification(admin, plateId, false)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean; verification_status: string }>(
@@ -420,13 +489,65 @@ describe("Admin-Abläufe", () => {
     expect(stored.rows).toEqual([{ is_verified: false, verification_status: "rejected" }]);
   });
 
+  it("löst bei der Freigabe die Konkurrenz um dasselbe Kennzeichen auf", async () => {
+    const { setPlateVerification } = await loadQueries();
+    const previous = await seedUser("user-previous", "previous@example.com");
+    const winner = await seedUser("user-winner", "winner@example.com");
+    const loser = await seedUser("user-loser", "loser@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(previous, "KA-AB-1234", { verified: true, status: "approved" });
+    const winnerPlate = await seedPlate(winner, "KA-AB-1234", { proofPath: "user-winner/a.jpg" });
+    await seedPlate(loser, "KA-AB-1234", { proofPath: "user-loser/b.jpg" });
+    await seedPlate(loser, "M-XY-9999"); // anderes Kennzeichen bleibt unberührt
+
+    await expect(setPlateVerification(admin, winnerPlate, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: ["previous@example.com"],
+    });
+
+    const stored = await withAdmin((client) =>
+      client.query<{ user_id: string; plate_number: string; verification_status: string }>(
+        `SELECT user_id, plate_number, verification_status FROM verified_plates
+          ORDER BY plate_number, user_id`,
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { user_id: "user-loser", plate_number: "KA-AB-1234", verification_status: "rejected" },
+      { user_id: "user-previous", plate_number: "KA-AB-1234", verification_status: "superseded" },
+      { user_id: "user-winner", plate_number: "KA-AB-1234", verification_status: "approved" },
+      { user_id: "user-loser", plate_number: "M-XY-9999", verification_status: "pending" },
+    ]);
+  });
+
+  it("zeigt dem Admin, ob es schon einen freigegebenen Halter gibt", async () => {
+    const { listPendingVerifications } = await loadQueries();
+    const previous = await seedUser("user-previous", "previous@example.com");
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(previous, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/a.jpg" });
+    await seedPlate(owner, "M-XY-9999", { proofPath: "user-owner/b.jpg" });
+
+    const pending = await listPendingVerifications(admin);
+
+    expect(pending.map((p) => [p.plate_number, p.has_approved_holder]).sort()).toEqual([
+      ["KA-AB-1234", true],
+      ["M-XY-9999", false],
+    ]);
+  });
+
   it("lässt einen Nicht-Admin kein fremdes Kennzeichen freischalten", async () => {
     const { setPlateVerification } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
     const plain = await seedUser("user-plain", "plain@example.com", false);
     const plateId = await seedPlate(owner, "KA-AB-1234");
 
-    await expect(setPlateVerification(plain, plateId, true)).resolves.toBe(false);
+    await expect(setPlateVerification(plain, plateId, true)).resolves.toEqual({
+      changed: false,
+      plateNumber: null,
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean }>("SELECT is_verified FROM verified_plates"),
@@ -470,5 +591,302 @@ describe("canReadProof", () => {
     await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/proof.jpg" });
 
     await expect(canReadProof(owner, "user-owner/gibt-es-nicht.jpg")).resolves.toBe(false);
+  });
+});
+
+async function firstMessageId(): Promise<string> {
+  const { rows } = await withAdmin((client) =>
+    client.query<{ id: string }>("SELECT id FROM messages ORDER BY created_at LIMIT 1"),
+  );
+  return rows[0].id;
+}
+
+describe("Empfänger-Kontrolle", () => {
+  beforeEach(migrateFresh);
+
+  it("blendet eine Nachricht für den Empfänger aus", async () => {
+    const { hideMessage, listMessagesForUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "lästig");
+    const id = await firstMessageId();
+
+    await expect(hideMessage(stranger, id)).resolves.toBe(false);
+    await expect(hideMessage(owner, id)).resolves.toBe(true);
+    await expect(listMessagesForUser(owner)).resolves.toEqual([]);
+  });
+
+  it("meldet und blendet in einem Schritt aus, ein zweites Melden ist harmlos", async () => {
+    const { reportMessage, listMessagesForUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "beleidigend");
+    const id = await firstMessageId();
+
+    await expect(reportMessage(owner, id, "Beleidigung")).resolves.toBe(true);
+    await expect(reportMessage(owner, id, "Beleidigung")).resolves.toBe(true);
+
+    await expect(listMessagesForUser(owner)).resolves.toEqual([]);
+    const reports = await withAdmin((client) =>
+      client.query<{ reason: string }>("SELECT reason FROM message_reports"),
+    );
+    expect(reports.rows).toEqual([{ reason: "Beleidigung" }]);
+  });
+
+  it("lässt nicht melden, was der Nutzer nicht lesen darf", async () => {
+    const { reportMessage } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "privat");
+
+    await expect(reportMessage(stranger, await firstMessageId(), "Spam")).resolves.toBe(false);
+  });
+
+  it("zeigt einem Admin offene Meldungen samt Nachricht und lässt ihn entscheiden", async () => {
+    const { reportMessage, listOpenReports, resolveReport, deleteReportedMessage } =
+      await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "erste");
+    await seedMessage("KA-AB-1234", "zweite");
+    const ids = (
+      await withAdmin((client) =>
+        client.query<{ id: string }>("SELECT id FROM messages ORDER BY message_text"),
+      )
+    ).rows.map((r) => r.id);
+    await reportMessage(owner, ids[0], "Spam");
+    await reportMessage(owner, ids[1], "Bedrohung");
+
+    await expect(listOpenReports(owner)).resolves.toEqual([]);
+    const open = await listOpenReports(admin);
+    expect(open.map((r) => [r.message_text, r.reason]).sort()).toEqual([
+      ["erste", "Spam"],
+      ["zweite", "Bedrohung"],
+    ]);
+
+    const first = open.find((r) => r.message_text === "erste");
+    const second = open.find((r) => r.message_text === "zweite");
+    await expect(resolveReport(owner, first?.id ?? "")).resolves.toBe(false);
+    await expect(resolveReport(admin, first?.id ?? "")).resolves.toBe(true);
+    await expect(deleteReportedMessage(admin, second?.message_id ?? "")).resolves.toBe(true);
+
+    await expect(listOpenReports(admin)).resolves.toEqual([]);
+    const left = await withAdmin((client) =>
+      client.query<{ message_text: string }>("SELECT message_text FROM messages"),
+    );
+    expect(left.rows).toEqual([{ message_text: "erste" }]);
+  });
+
+  it("setzt die Pause nur am eigenen Kennzeichen", async () => {
+    const { setPlatePause } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    const until = new Date(Date.now() + 86_400_000);
+
+    await expect(setPlatePause(stranger, plateId, until)).resolves.toBe(false);
+    await expect(setPlatePause(owner, plateId, until)).resolves.toBe(true);
+    await expect(setPlatePause(owner, plateId, null)).resolves.toBe(true);
+  });
+});
+
+describe("Organisationen: Standort und Nachrichten", () => {
+  beforeEach(migrateFresh);
+
+  it("löst ein Token auf und kennt deaktivierte Standorte", async () => {
+    const { siteByToken } = await loadQueries();
+    const { siteId, token } = await seedOrg("firma");
+
+    await expect(siteByToken(token)).resolves.toMatchObject({
+      siteId,
+      orgName: "firma",
+      active: true,
+    });
+    await expect(siteByToken("x".repeat(22))).resolves.toBeNull();
+    await withAdmin((client) => client.query("UPDATE org_sites SET disabled_at = now()"));
+    await expect(siteByToken(token)).resolves.toMatchObject({ active: false });
+  });
+
+  it("schreibt Standort-Nachrichten anonym und als Mitglied mit Freitext", async () => {
+    const { insertSiteMessage } = await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma", { allowFreeText: true });
+    const member = await seedUser("user-member", "member@example.com");
+    await seedMember(siteId, member);
+
+    await insertSiteMessage(null, {
+      plate: "KA-AB-1",
+      type: "blockiert",
+      text: null,
+      orgId,
+      siteId,
+    });
+    await insertSiteMessage(member, {
+      plate: "KA-AB-1",
+      type: null,
+      text: "Bitte umparken",
+      orgId,
+      siteId,
+    });
+
+    const stored = await withAdmin((client) =>
+      client.query(
+        "SELECT message_type, message_text, sender_id FROM messages ORDER BY created_at",
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { message_type: "blockiert", message_text: null, sender_id: null },
+      { message_type: null, message_text: "Bitte umparken", sender_id: "user-member" },
+    ]);
+  });
+
+  it("listet Nachrichten je Kennzeichen-Zeile mit Standort und erlaubtem Absendernamen", async () => {
+    const { listMessagesForUser } = await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma", { showSender: true });
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const sender = await seedUser("user-sender", "sender@example.com");
+    await withAdmin((client) =>
+      client.query("UPDATE users SET name = 'Erika' WHERE id = $1", [sender]),
+    );
+    await seedMember(siteId, owner);
+    const publicPlate = await seedPlate(owner, "KA-AB-1", { verified: true, status: "approved" });
+    const orgPlate = await seedPlate(owner, "KA-AB-1", {
+      verified: true,
+      status: "approved",
+      orgId,
+    });
+    await seedMessage("KA-AB-1", "öffentlich", daysAgo(1));
+    await withAdmin((client) =>
+      client.query(
+        `INSERT INTO messages (plate_number, message_text, org_id, site_id, sender_id)
+         VALUES ('KA-AB-1', 'am Standort', $1, $2, $3)`,
+        [orgId, siteId, sender],
+      ),
+    );
+
+    const messages = await listMessagesForUser(owner);
+
+    expect(messages.map((m) => [m.message_text, m.plate_id, m.site_name, m.sender_name])).toEqual([
+      ["am Standort", orgPlate, "firma-standort", "Erika"],
+      ["öffentlich", publicPlate, null, null],
+    ]);
+  });
+});
+
+describe("Organisationen: Mitgliedschaft und Kennzeichen", () => {
+  beforeEach(migrateFresh);
+
+  it("beantragt, bestätigt und beendet eine Mitgliedschaft", async () => {
+    const { requestSiteMembership, listOrgMembers, setMemberActive, listMyMemberships, leaveSite } =
+      await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const user = await seedUser("user-new", "new@example.com");
+    await seedOrgAdmin(orgId, admin);
+
+    await requestSiteMembership(user, siteId);
+    expect((await listOrgMembers(admin, orgId)).map((m) => [m.email, m.status])).toEqual([
+      ["new@example.com", "pending"],
+    ]);
+    await expect(listOrgMembers(user, orgId)).resolves.toEqual([]);
+
+    await expect(setMemberActive(user, siteId, user)).resolves.toBe(false);
+    await expect(setMemberActive(admin, siteId, user)).resolves.toBe(true);
+    expect((await listMyMemberships(user)).map((m) => [m.org_name, m.status])).toEqual([
+      ["firma", "active"],
+    ]);
+
+    await leaveSite(user, siteId);
+    await expect(listMyMemberships(user)).resolves.toEqual([]);
+  });
+
+  it("lässt Org-Admins nur Kennzeichen ihrer Organisation freigeben, Konkurrenz je Bereich", async () => {
+    const { claimPlate, setPlateVerification, listOrgPlates, listPendingVerifications } =
+      await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const platformAdmin = await seedUser("user-admin", "admin@example.com", true);
+    const member = await seedUser("user-member", "member@example.com");
+    const publicOwner = await seedUser("user-public", "public@example.com");
+    await seedOrgAdmin(orgId, admin);
+    await seedMember(siteId, member);
+    // Öffentlicher Halter derselben Nummer darf durch die Org-Freigabe nicht abgelöst werden.
+    await seedPlate(publicOwner, "KA-AB-1", { verified: true, status: "approved" });
+    const publicPending = await seedPlate(member, "M-X-1", { proofPath: "user-member/a.jpg" });
+
+    const orgPlate = await claimPlate(member, "KA-AB-1", () => "PD-0001", orgId);
+    expect(orgPlate).toMatchObject({ org_id: orgId, verification_code: null });
+
+    await expect(setPlateVerification(admin, publicPending, true)).resolves.toMatchObject({
+      changed: false,
+    });
+    await expect(setPlateVerification(admin, orgPlate.id, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1",
+      supersededEmails: [],
+    });
+    expect(
+      (await listOrgPlates(admin, orgId)).map((p) => [
+        p.plate_number,
+        p.email,
+        p.verification_status,
+      ]),
+    ).toEqual([["KA-AB-1", "member@example.com", "approved"]]);
+
+    const statuses = await withAdmin((client) =>
+      client.query("SELECT user_id, verification_status FROM verified_plates ORDER BY user_id"),
+    );
+    expect(statuses.rows).toContainEqual({
+      user_id: "user-public",
+      verification_status: "approved",
+    });
+
+    // Die Plattform-Freigabe sieht nur öffentliche Ansprüche.
+    expect((await listPendingVerifications(platformAdmin)).map((p) => p.plate_number)).toEqual([
+      "M-X-1",
+    ]);
+  });
+
+  it("pflegt Standorte, Fuhrparkliste, Einstellungen und Statistik als Org-Admin", async () => {
+    const q = await loadQueries();
+    const { orgId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedOrgAdmin(orgId, admin);
+
+    await expect(q.orgForAdmin(stranger, "firma")).resolves.toBeNull();
+    await expect(q.orgForAdmin(admin, "firma")).resolves.toMatchObject({
+      id: orgId,
+      slug: "firma",
+    });
+
+    const created = await q.createSite(admin, orgId, "Tiefgarage", "t".repeat(22));
+    await expect(q.createSite(stranger, orgId, "fremd", "f".repeat(22))).rejects.toThrow();
+    await expect(q.setSiteDisabled(admin, created, true)).resolves.toBe(true);
+    await expect(q.renewSiteToken(admin, created, "n".repeat(22))).resolves.toBe(true);
+    expect((await q.listOrgSites(admin, orgId)).map((s) => [s.name, s.token, s.disabled])).toEqual([
+      ["firma-standort", expect.any(String), false],
+      ["Tiefgarage", "n".repeat(22), true],
+    ]);
+
+    await q.addAllowlistPlate(admin, orgId, "KA-F-1");
+    await expect(q.listAllowlist(admin, orgId)).resolves.toEqual(["KA-F-1"]);
+    await q.removeAllowlistPlate(admin, orgId, "KA-F-1");
+    await expect(q.listAllowlist(admin, orgId)).resolves.toEqual([]);
+
+    await expect(
+      q.updateOrgSettings(stranger, orgId, { showSender: true, allowFreeText: true }),
+    ).resolves.toBe(false);
+    await expect(
+      q.updateOrgSettings(admin, orgId, { showSender: true, allowFreeText: false }),
+    ).resolves.toBe(true);
+
+    const siteId = await seedSite(orgId, "werk-2");
+    await seedMessage("KA-AB-1", "x", undefined, { orgId, siteId });
+    expect((await q.orgWeeklyStats(admin, orgId)).map((r) => [r.site_name, r.incidents])).toEqual([
+      ["werk-2", 1],
+    ]);
   });
 });

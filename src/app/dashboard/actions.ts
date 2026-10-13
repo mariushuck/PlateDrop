@@ -4,11 +4,19 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/session";
 import {
   claimPlate as claimPlateQuery,
+  deletePlate,
+  hideMessage,
+  leaveSite,
+  markMessagesRead,
   PlateAlreadyClaimedError,
   plateBelongsToUser,
+  reportMessage,
+  setPlatePause,
   setProofPath,
+  TooManyOpenClaimsError,
 } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
+import { REPORT_REASONS } from "@/lib/messages/reportReasons";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { generateVerificationCode } from "@/lib/utils/verificationCode";
@@ -39,11 +47,108 @@ export async function claimPlate(
     revalidatePath("/dashboard");
     return { success: true };
   } catch (err) {
-    if (err instanceof PlateAlreadyClaimedError) {
-      return { success: false, error: "Dieses Kennzeichen ist bereits registriert." };
+    if (err instanceof PlateAlreadyClaimedError || err instanceof TooManyOpenClaimsError) {
+      return { success: false, error: err.message };
     }
     logger.error("Fehler beim Registrieren des Kennzeichens:", err);
     return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };
+  }
+}
+
+/** Blendet eine Nachricht für den Empfänger aus. */
+export async function hideMessageAction(
+  messageId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  try {
+    if (!(await hideMessage(user.id, messageId))) {
+      return { success: false, error: "Nachricht nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Ausblenden der Nachricht:", err);
+    return { success: false, error: "Fehler beim Ausblenden der Nachricht." };
+  }
+}
+
+/** Meldet eine Nachricht an den Admin und blendet sie aus. */
+export async function reportMessageAction(
+  messageId: string,
+  reason: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!(REPORT_REASONS as readonly string[]).includes(reason)) {
+    return { success: false, error: "Bitte einen Grund wählen." };
+  }
+  try {
+    if (!(await reportMessage(user.id, messageId, reason))) {
+      return { success: false, error: "Nachricht nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Melden der Nachricht:", err);
+    return { success: false, error: "Fehler beim Melden der Nachricht." };
+  }
+}
+
+/** Markiert angezeigte Nachrichten als gelesen. Fehler sind hier nur ein Logeintrag wert. */
+export async function markMessagesReadAction(messageIds: string[]): Promise<void> {
+  const user = await requireUser();
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+  try {
+    await markMessagesRead(user.id, messageIds.slice(0, 200));
+  } catch (err) {
+    logger.error("Fehler beim Markieren als gelesen:", err);
+  }
+}
+
+/** Erlaubte Pausen in Stunden; `null` hebt die Pause auf. */
+const PAUSE_HOURS = [1, 8, 24, 168];
+
+/** Pausiert die Benachrichtigungen für ein eigenes Kennzeichen. */
+export async function setPlatePauseAction(
+  plateId: string,
+  hours: number | null,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  if (hours !== null && !PAUSE_HOURS.includes(hours)) {
+    return { success: false, error: "Ungültige Dauer." };
+  }
+  try {
+    const until = hours === null ? null : new Date(Date.now() + hours * 3_600_000);
+    if (!(await setPlatePause(user.id, plateId, until))) {
+      return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Pausieren:", err);
+    return { success: false, error: "Fehler beim Pausieren." };
+  }
+}
+
+/** Entfernt ein eigenes Kennzeichen samt Beweisfoto. */
+export async function removePlate(plateId: string): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+
+  try {
+    const { deleted, proofPath } = await deletePlate(user.id, plateId);
+    if (!deleted) {
+      return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+    if (proofPath) {
+      await deleteProof(proofPath).catch((err: unknown) => {
+        // prune-proofs.mjs räumt eine liegengebliebene Datei später ab.
+        logger.error("Beweisfoto des entfernten Kennzeichens konnte nicht gelöscht werden:", err);
+      });
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Entfernen des Kennzeichens:", err);
+    return { success: false, error: "Fehler beim Entfernen des Kennzeichens." };
   }
 }
 
@@ -104,5 +209,60 @@ export async function uploadProof(
     }
     logger.error("Fehler beim Hochladen des Bildes:", err);
     return { success: false, error: "Fehler beim Hochladen des Bildes." };
+  }
+}
+
+/**
+ * Kennzeichen in einer Organisation beanspruchen (0014). Kein Foto: die
+ * Verwaltung gibt frei, oder die Fuhrparkliste tut es sofort. Ob der Nutzer
+ * dort Mitglied ist, prüft die Policy `verified_plates_insert_own`.
+ */
+export async function claimOrgPlate(
+  _prevState: { success: boolean; error?: string } | null,
+  formData: FormData,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  const plateNumber = formData.get("plateNumber");
+  const orgId = formData.get("orgId");
+
+  if (typeof orgId !== "string" || !/^[0-9a-f-]{36}$/.test(orgId)) {
+    return { success: false, error: "Organisation nicht gefunden." };
+  }
+  if (typeof plateNumber !== "string" || !plateNumber.trim()) {
+    return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
+  }
+  const parsed = parsePlate(plateNumber);
+  if (!parsed.ok) return { success: false, error: plateErrorMessage(parsed.reason) };
+
+  try {
+    await claimPlateQuery(user.id, parsed.plate, generateVerificationCode, orgId);
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    if (err instanceof PlateAlreadyClaimedError || err instanceof TooManyOpenClaimsError) {
+      return { success: false, error: err.message };
+    }
+    logger.error("Fehler beim Registrieren des Org-Kennzeichens:", err);
+    return {
+      success: false,
+      error: "Kennzeichen konnte nicht registriert werden. Ist deine Mitgliedschaft bestätigt?",
+    };
+  }
+}
+
+/** Mitgliedschaft an einem Standort beenden; Kennzeichen der Organisation verfallen. */
+export async function leaveSiteAction(
+  siteId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  try {
+    if (!(await leaveSite(user.id, siteId))) {
+      return { success: false, error: "Mitgliedschaft nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Austritt:", err);
+    return { success: false, error: "Austritt fehlgeschlagen." };
   }
 }

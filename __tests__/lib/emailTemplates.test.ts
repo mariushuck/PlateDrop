@@ -1,4 +1,4 @@
-import { emailChangeEmail, passwordResetEmail } from "@/lib/email/templates";
+import { emailChangeEmail, passwordResetEmail, plateSupersededEmail } from "@/lib/email/templates";
 
 describe("E-Mail-Vorlagen: HTML-Maskierung", () => {
   it("maskiert eine bösartige neue E-Mail-Adresse im HTML-Teil", () => {
@@ -16,5 +16,15 @@ describe("E-Mail-Vorlagen: HTML-Maskierung", () => {
 
     expect(html).not.toContain('"><img');
     expect(html).toContain("&quot;&gt;&lt;img");
+  });
+});
+
+describe("E-Mail-Vorlage: Kennzeichen neu vergeben", () => {
+  it("nennt das Kennzeichen und verlinkt das Dashboard", () => {
+    const mail = plateSupersededEmail("KA-AB-1234", "https://example.test/dashboard");
+
+    expect(mail.subject).toContain("KA-AB-1234");
+    expect(mail.text).toContain("https://example.test/dashboard");
+    expect(mail.html).toContain("<strong>KA-AB-1234</strong>");
   });
 });

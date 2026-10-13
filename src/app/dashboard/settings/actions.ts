@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 import { requireUser } from "@/lib/auth/session";
-import { exportUserData } from "@/lib/db/queries";
+import { exportUserData, saveNotificationSettings } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
 
 export async function changePassword(
@@ -113,13 +113,81 @@ export async function exportMyData(): Promise<{ filename: string; json: string }
 
   const payload = {
     exportiert_am: new Date().toISOString(),
-    konto: { id: user.id, email: user.email, email_bestaetigt: user.emailVerified },
+    konto: {
+      id: user.id,
+      email: user.email,
+      anzeigename: user.name,
+      email_bestaetigt: user.emailVerified,
+    },
     kennzeichen: data.plates,
     nachrichten_an_meine_kennzeichen: data.messages,
+    mitgliedschaften: data.memberships,
   };
 
   return {
     filename: `platedrop-datenexport-${new Date().toISOString().slice(0, 10)}.json`,
     json: JSON.stringify(payload, null, 2),
   };
+}
+
+/** Liest eine volle Stunde 0–23 aus dem Formular; leer = keine. */
+function hourField(value: FormDataEntryValue | null): number | null | undefined {
+  if (value === null || value === "") return null;
+  const hour = Number(value);
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : undefined;
+}
+
+export async function saveNotificationSettingsAction(
+  _prev: { error: string | null; success: boolean },
+  formData: FormData,
+): Promise<{ error: string | null; success: boolean }> {
+  const user = await requireUser();
+  const quietStart = hourField(formData.get("quietStart"));
+  const quietEnd = hourField(formData.get("quietEnd"));
+
+  if (quietStart === undefined || quietEnd === undefined) {
+    return { error: "Ungültige Uhrzeit.", success: false };
+  }
+  if ((quietStart === null) !== (quietEnd === null)) {
+    return { error: "Bitte Beginn und Ende der Ruhezeit wählen.", success: false };
+  }
+
+  try {
+    await saveNotificationSettings(user.id, {
+      email_enabled: formData.get("emailEnabled") === "on",
+      quiet_start: quietStart,
+      quiet_end: quietEnd,
+    });
+    return { error: null, success: true };
+  } catch (err) {
+    logger.error("Fehler beim Speichern der Benachrichtigungs-Einstellungen:", err);
+    return { error: "Einstellungen konnten nicht gespeichert werden.", success: false };
+  }
+}
+
+/** Höchstlänge des Anzeigenamens. */
+const MAX_DISPLAY_NAME = 50;
+
+/**
+ * Anzeigename – sichtbar nur in Organisationen, die Absender zeigen (0014).
+ * Leer bedeutet „Mitglied“.
+ */
+export async function changeDisplayName(
+  _prev: { error: string | null; success: boolean },
+  formData: FormData,
+): Promise<{ error: string | null; success: boolean }> {
+  await requireUser();
+  const raw = formData.get("name");
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name.length > MAX_DISPLAY_NAME) {
+    return { error: `Höchstens ${MAX_DISPLAY_NAME} Zeichen.`, success: false };
+  }
+
+  try {
+    await auth.api.updateUser({ body: { name }, headers: await headers() });
+    return { error: null, success: true };
+  } catch (err) {
+    logger.error("Fehler beim Ändern des Anzeigenamens:", err);
+    return { error: "Anzeigename konnte nicht gespeichert werden.", success: false };
+  }
 }

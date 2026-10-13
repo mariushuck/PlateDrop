@@ -27,13 +27,15 @@ function runPrune(env: Record<string, string> = {}) {
 describe("scripts/prune-messages.mjs", () => {
   beforeEach(migrateFresh);
 
-  it("löscht nichts, wenn MESSAGE_RETENTION_DAYS nicht gesetzt ist", async () => {
+  // Seit 0012 Pflicht: die Datenschutzerklärung nennt die Frist, und ausgeblendete
+  // Nachrichten dürfen nicht unbegrenzt liegen bleiben.
+  it("bricht ab und löscht nichts, wenn MESSAGE_RETENTION_DAYS fehlt", async () => {
     await seedMessage("KA-AB-1234", "bleibt");
     await backdateMessages("400 days");
 
-    const { stdout } = await runPrune();
-
-    expect(stdout).toContain("nicht gesetzt");
+    await expect(runPrune({ MESSAGE_RETENTION_DAYS: "" })).rejects.toMatchObject({
+      stderr: expect.stringContaining("MESSAGE_RETENTION_DAYS"),
+    });
     expect(await messageCount()).toBe(1);
   });
 
