@@ -31,3 +31,14 @@ export interface Message {
   message_text: string;
   created_at: Date;
 }
+
+/** Offene Meldung für die Admin-Ansicht (0012). */
+export interface OpenReport {
+  id: string;
+  reason: string;
+  created_at: Date;
+  message_id: string;
+  plate_number: string;
+  message_text: string;
+  message_created_at: Date;
+}

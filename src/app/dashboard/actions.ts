@@ -5,12 +5,15 @@ import { requireUser } from "@/lib/auth/session";
 import {
   claimPlate as claimPlateQuery,
   deletePlate,
+  hideMessage,
   PlateAlreadyClaimedError,
   plateBelongsToUser,
+  reportMessage,
   setProofPath,
   TooManyOpenClaimsError,
 } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
+import { REPORT_REASONS } from "@/lib/messages/reportReasons";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { generateVerificationCode } from "@/lib/utils/verificationCode";
@@ -46,6 +49,44 @@ export async function claimPlate(
     }
     logger.error("Fehler beim Registrieren des Kennzeichens:", err);
     return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };
+  }
+}
+
+/** Blendet eine Nachricht für den Empfänger aus. */
+export async function hideMessageAction(
+  messageId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  try {
+    if (!(await hideMessage(user.id, messageId))) {
+      return { success: false, error: "Nachricht nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Ausblenden der Nachricht:", err);
+    return { success: false, error: "Fehler beim Ausblenden der Nachricht." };
+  }
+}
+
+/** Meldet eine Nachricht an den Admin und blendet sie aus. */
+export async function reportMessageAction(
+  messageId: string,
+  reason: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!(REPORT_REASONS as readonly string[]).includes(reason)) {
+    return { success: false, error: "Bitte einen Grund wählen." };
+  }
+  try {
+    if (!(await reportMessage(user.id, messageId, reason))) {
+      return { success: false, error: "Nachricht nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Melden der Nachricht:", err);
+    return { success: false, error: "Fehler beim Melden der Nachricht." };
   }
 }
 

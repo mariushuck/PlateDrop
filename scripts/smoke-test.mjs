@@ -420,6 +420,54 @@ async function main() {
   ).text();
   check("Nach dem Nachreichen ist es beim Admin wieder gelistet", adminAfter.includes(plateNumber));
 
+  step("9) Melden und Abhilfe durch den Admin");
+  await pool.query(
+    "UPDATE verified_plates SET is_verified = true, verification_status = 'approved' WHERE id = $1",
+    [plateId],
+  );
+  const reported = await pool.query(
+    "INSERT INTO messages (plate_number, message_text) VALUES ($1, $2) RETURNING id",
+    [plateNumber, `Smoke-Meldung ${STAMP}`],
+  );
+  const reportedId = reported.rows[0].id;
+  // Die Seite einmal abrufen, damit der Dev-Server die Actions kompiliert.
+  await fetch(`${APP_URL}/dashboard`, { headers: { cookie: cookies } });
+  const report = await callAction(
+    "app/dashboard/page",
+    "reportMessageAction",
+    "/dashboard",
+    cookies,
+    [reportedId, "Beleidigung"],
+  );
+  check("Melden meldet Erfolg", report.body.includes('"success":true'), report.body.slice(0, 200));
+  const dashboardAfterReport = await (
+    await fetch(`${APP_URL}/dashboard`, { headers: { cookie: cookies } })
+  ).text();
+  check(
+    "Gemeldete Nachricht ist für den Empfänger ausgeblendet",
+    !dashboardAfterReport.includes(`Smoke-Meldung ${STAMP}`),
+  );
+
+  await pool.query("UPDATE users SET is_admin = true WHERE email = $1", [STRANGER_EMAIL]);
+  const adminReports = await (
+    await fetch(`${APP_URL}/admin`, { headers: { cookie: strangerCookies } })
+  ).text();
+  check("Admin sieht die gemeldete Nachricht", adminReports.includes(`Smoke-Meldung ${STAMP}`));
+  const removal = await callAction(
+    "app/admin/page",
+    "deleteReportedMessageAction",
+    "/admin",
+    strangerCookies,
+    [reportedId],
+  );
+  check(
+    "Löschen meldet Erfolg",
+    removal.body.includes('"success":true'),
+    removal.body.slice(0, 200),
+  );
+  const afterRemoval = await pool.query("SELECT 1 FROM messages WHERE id = $1", [reportedId]);
+  check("Gemeldete Nachricht ist gelöscht", afterRemoval.rowCount === 0);
+
   // --- Aufräumen ------------------------------------------------------------
   await pool.query("DELETE FROM users WHERE email = ANY($1)", [[OWNER_EMAIL, STRANGER_EMAIL]]);
   await execFileAsync("docker", [

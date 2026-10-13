@@ -1,6 +1,6 @@
 import "server-only";
 import { withAnon, withUser } from "./context";
-import type { Message, PendingVerification, VerifiedPlate } from "./types";
+import type { Message, OpenReport, PendingVerification, VerifiedPlate } from "./types";
 
 /** SQLSTATE 23505 – unique_violation. */
 const UNIQUE_VIOLATION = "23505";
@@ -120,6 +120,7 @@ export function listMessagesForUser(userId: string): Promise<Message[]> {
         WHERE vp.user_id = $1
           AND vp.is_verified = true
           AND m.created_at >= app.message_read_since(vp.created_at)
+          AND m.hidden_at IS NULL
         ORDER BY m.created_at DESC`,
       [userId],
     );
@@ -180,6 +181,77 @@ export async function claimPlate(
       throw error;
     }
   }
+}
+
+/**
+ * Blendet eine Nachricht für ihren Empfänger aus. Der Inhalt bleibt für eine
+ * Meldung erhalten, bis die Löschfrist greift.
+ *
+ * Der Filter über `verified_plates` ist die zweite Ebene neben der Policy
+ * `messages_update_hide_own` (0012).
+ */
+export function hideMessage(userId: string, messageId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE messages m SET hidden_at = now()
+        WHERE m.id = $1
+          AND EXISTS (
+            SELECT 1 FROM verified_plates vp
+             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
+               AND m.created_at >= app.message_read_since(vp.created_at)
+          )`,
+      [messageId, userId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/**
+ * Meldet eine Nachricht an den Admin und blendet sie für den Melder aus.
+ * Wiederholtes Melden derselben Nachricht ändert nichts.
+ *
+ * @returns `false`, wenn der Nutzer die Nachricht nicht lesen darf.
+ */
+export function reportMessage(userId: string, messageId: string, reason: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const hidden = await client.query(
+      `UPDATE messages m SET hidden_at = coalesce(m.hidden_at, now())
+        WHERE m.id = $1
+          AND EXISTS (
+            SELECT 1 FROM verified_plates vp
+             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
+               AND m.created_at >= app.message_read_since(vp.created_at)
+          )`,
+      [messageId, userId],
+    );
+    if ((hidden.rowCount ?? 0) === 0) return false;
+
+    await client.query(
+      `INSERT INTO message_reports (message_id, reporter_id, reason) VALUES ($1, $2, $3)
+       ON CONFLICT ON CONSTRAINT message_reports_once DO NOTHING`,
+      [messageId, userId, reason],
+    );
+    return true;
+  });
+}
+
+/**
+ * Pausiert die Benachrichtigungen für ein eigenes Kennzeichen bis `until`
+ * (`null` hebt die Pause auf). Läuft über `app.set_plate_pause`, die nur die
+ * eigene Zeile und nur diese Spalte ändert (0012).
+ */
+export function setPlatePause(
+  userId: string,
+  plateId: string,
+  until: Date | null,
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ ok: boolean }>(
+      "SELECT app.set_plate_pause($1, $2) AS ok",
+      [plateId, until],
+    );
+    return rows[0].ok;
+  });
 }
 
 export interface UserDataExport {
@@ -348,6 +420,48 @@ export function listPendingVerifications(userId: string): Promise<PendingVerific
         ORDER BY vp.created_at ASC`,
     );
     return rows;
+  });
+}
+
+/**
+ * Offene Meldungen samt gemeldeter Nachricht, älteste zuerst. Ein Admin sieht
+ * über `messages_select_reported_admin` nur gemeldete Nachrichten.
+ */
+export function listOpenReports(userId: string): Promise<OpenReport[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<OpenReport>(
+      `SELECT r.id, r.reason, r.created_at, m.id AS message_id, m.plate_number, m.message_text,
+              m.created_at AS message_created_at
+         FROM message_reports r
+         JOIN messages m ON m.id = r.message_id
+        WHERE app.is_admin() AND r.resolved_at IS NULL
+        ORDER BY r.created_at ASC`,
+    );
+    return rows;
+  });
+}
+
+/** Schließt eine Meldung, ohne die Nachricht zu löschen. */
+export function resolveReport(userId: string, reportId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      "UPDATE message_reports SET resolved_at = now() WHERE id = $1 AND app.is_admin()",
+      [reportId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Löscht eine gemeldete Nachricht; ihre Meldungen fallen per Kaskade mit weg. */
+export function deleteReportedMessage(userId: string, messageId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `DELETE FROM messages m
+        WHERE m.id = $1 AND app.is_admin()
+          AND EXISTS (SELECT 1 FROM message_reports r WHERE r.message_id = m.id)`,
+      [messageId],
+    );
+    return (rowCount ?? 0) > 0;
   });
 }
 

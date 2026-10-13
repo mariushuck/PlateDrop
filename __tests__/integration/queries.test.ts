@@ -591,3 +591,102 @@ describe("canReadProof", () => {
     await expect(canReadProof(owner, "user-owner/gibt-es-nicht.jpg")).resolves.toBe(false);
   });
 });
+
+async function firstMessageId(): Promise<string> {
+  const { rows } = await withAdmin((client) =>
+    client.query<{ id: string }>("SELECT id FROM messages ORDER BY created_at LIMIT 1"),
+  );
+  return rows[0].id;
+}
+
+describe("Empfänger-Kontrolle", () => {
+  beforeEach(migrateFresh);
+
+  it("blendet eine Nachricht für den Empfänger aus", async () => {
+    const { hideMessage, listMessagesForUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "lästig");
+    const id = await firstMessageId();
+
+    await expect(hideMessage(stranger, id)).resolves.toBe(false);
+    await expect(hideMessage(owner, id)).resolves.toBe(true);
+    await expect(listMessagesForUser(owner)).resolves.toEqual([]);
+  });
+
+  it("meldet und blendet in einem Schritt aus, ein zweites Melden ist harmlos", async () => {
+    const { reportMessage, listMessagesForUser } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "beleidigend");
+    const id = await firstMessageId();
+
+    await expect(reportMessage(owner, id, "Beleidigung")).resolves.toBe(true);
+    await expect(reportMessage(owner, id, "Beleidigung")).resolves.toBe(true);
+
+    await expect(listMessagesForUser(owner)).resolves.toEqual([]);
+    const reports = await withAdmin((client) =>
+      client.query<{ reason: string }>("SELECT reason FROM message_reports"),
+    );
+    expect(reports.rows).toEqual([{ reason: "Beleidigung" }]);
+  });
+
+  it("lässt nicht melden, was der Nutzer nicht lesen darf", async () => {
+    const { reportMessage } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "privat");
+
+    await expect(reportMessage(stranger, await firstMessageId(), "Spam")).resolves.toBe(false);
+  });
+
+  it("zeigt einem Admin offene Meldungen samt Nachricht und lässt ihn entscheiden", async () => {
+    const { reportMessage, listOpenReports, resolveReport, deleteReportedMessage } =
+      await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "erste");
+    await seedMessage("KA-AB-1234", "zweite");
+    const ids = (
+      await withAdmin((client) =>
+        client.query<{ id: string }>("SELECT id FROM messages ORDER BY message_text"),
+      )
+    ).rows.map((r) => r.id);
+    await reportMessage(owner, ids[0], "Spam");
+    await reportMessage(owner, ids[1], "Bedrohung");
+
+    await expect(listOpenReports(owner)).resolves.toEqual([]);
+    const open = await listOpenReports(admin);
+    expect(open.map((r) => [r.message_text, r.reason]).sort()).toEqual([
+      ["erste", "Spam"],
+      ["zweite", "Bedrohung"],
+    ]);
+
+    const first = open.find((r) => r.message_text === "erste");
+    const second = open.find((r) => r.message_text === "zweite");
+    await expect(resolveReport(owner, first?.id ?? "")).resolves.toBe(false);
+    await expect(resolveReport(admin, first?.id ?? "")).resolves.toBe(true);
+    await expect(deleteReportedMessage(admin, second?.message_id ?? "")).resolves.toBe(true);
+
+    await expect(listOpenReports(admin)).resolves.toEqual([]);
+    const left = await withAdmin((client) =>
+      client.query<{ message_text: string }>("SELECT message_text FROM messages"),
+    );
+    expect(left.rows).toEqual([{ message_text: "erste" }]);
+  });
+
+  it("setzt die Pause nur am eigenen Kennzeichen", async () => {
+    const { setPlatePause } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    const until = new Date(Date.now() + 86_400_000);
+
+    await expect(setPlatePause(stranger, plateId, until)).resolves.toBe(false);
+    await expect(setPlatePause(owner, plateId, until)).resolves.toBe(true);
+    await expect(setPlatePause(owner, plateId, null)).resolves.toBe(true);
+  });
+});

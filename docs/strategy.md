@@ -109,7 +109,7 @@ Hostingdienst verlangt der Digital Services Act ein Melde- und Abhilfeverfahren.
 | --- | --- |
 | Nachricht ausblenden | Spalte `hidden_at timestamptz` auf `messages`, UPDATE-Policy nur für den verifizierten Halter und nur auf diese Spalte (spaltenscharfer Grant wie in `0007`) |
 | Nachricht melden | Tabelle `message_reports (message_id, reporter_id, reason, created_at, resolved_at)`, Ansicht unter `/admin` |
-| Empfang pausieren | Spalte `paused_until` auf `verified_plates`; Nachrichten werden weiter angenommen (sonst verrät die Antwort, dass das Kennzeichen registriert ist), aber nicht angezeigt und nicht benachrichtigt |
+| Empfang pausieren | Spalte `paused_until` auf `verified_plates`; Nachrichten werden weiter angenommen (sonst verrät die Antwort, dass das Kennzeichen registriert ist), aber nicht benachrichtigt. **Umgesetzt (0012) mit einer Abweichung:** Nachrichten bleiben im Dashboard sichtbar, die Pause betrifft nur Benachrichtigungen; gegen Belästigung helfen Ausblenden und Melden |
 
 Ausblenden statt Löschen hält den Inhalt für eine Meldung oder eine Anzeige vor, bis die reguläre
 Löschfrist (`MESSAGE_RETENTION_DAYS`) greift. Diese Frist sollte mit diesem Schritt verpflichtend
@@ -169,7 +169,7 @@ genau der beseitigt das Gefühl, ins Leere zu schreiben.
 **Datenmodell.**
 
 ```sql
--- 0013_contact_tags.sql (Skizze)
+-- 00xx_contact_tags.sql (Skizze, Nummer bei Umsetzung)
 CREATE TABLE contact_tags (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     text        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -318,7 +318,7 @@ weil sie sonst ihren Zweck verlieren.
 **Datenmodell.**
 
 ```sql
--- 0012_message_types_and_notifications.sql (Skizze)
+-- 0013_message_types_and_notifications.sql (Skizze)
 ALTER TABLE messages ADD COLUMN message_type text;
 ALTER TABLE messages ALTER COLUMN message_text DROP NOT NULL;
 ALTER TABLE messages ADD CONSTRAINT messages_type_check
@@ -614,5 +614,6 @@ QR-Technik gebaut, und zwar im Rahmen von E für die Standort-Schilder. Die priv
 hier verfolgt, Test 3.9 (erweitert auf alle Segmente), die Verträge und die Rechtsfragen aus 3.5 in
 [go-to-market.md](go-to-market.md).
 
-Die Migrationsnummern der Skizzen sind seit 2026-10-13 um eins verschoben: `0010` belegt die
-better-auth-Anpassung (`0010_auth_account_issuer.sql`).
+Die Migrationsnummern der Skizzen folgen dem Stand der Umsetzung: `0010` belegt die
+better-auth-Anpassung, `0011` die Claim-Konkurrenz, `0012` Ausblenden/Melden/Pausieren; geplant
+sind `0013` für Nachrichtentypen und Benachrichtigung und `0014` für Organisationen.

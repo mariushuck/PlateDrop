@@ -195,6 +195,21 @@ Kennzeichen beansprucht. Dann den Halter per E-Mail informieren und den Altanspr
 Nachrichten an mehrdeutige Altkennzeichen werden bewusst **nicht** umgehängt. Bei ihnen lässt sich
 nicht feststellen, an welches Kennzeichen sie gingen.
 
+## A3a Meldungen bearbeiten
+
+Empfänger können eine Nachricht unter `/dashboard` melden (Grund: Beleidigung, Bedrohung, Spam,
+Sonstiges). Die Nachricht verschwindet dabei sofort aus ihrem Dashboard. Offene Meldungen stehen
+unter `/admin` ganz oben, mit Text, Kennzeichen, Grund und Datum. Du entscheidest:
+
+- **Nachricht löschen** – endgültig, die Meldung fällt mit weg. Das Log vermerkt Zeitpunkt,
+  Nachrichten-ID und deine Konto-ID, nicht den Inhalt.
+- **Behalten** – die Meldung ist erledigt, die Nachricht bleibt für den Empfänger ausgeblendet und
+  wird mit Ablauf von `MESSAGE_RETENTION_DAYS` gelöscht.
+
+Nur gemeldete Nachrichten sind für dich sichtbar; alle anderen bleiben auch dem Admin verborgen. Bei
+einer Bedrohung kann eine Anzeige angebracht sein – dann vor dem Löschen sichern, was die Polizei
+braucht (Text, Zeitpunkt, Kennzeichen).
+
 ## A4 In der Datenbank nachschlagen
 
 Alle Abfragen laufen über den Datenbank-Container. Nutzername und Datenbank stammen aus `.env`
@@ -528,7 +543,8 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | `users` | E-Mail-Adresse, Bestätigungsstatus, Anlagedatum |
 | `sessions` | **IP-Adresse im Klartext** und User-Agent je aktiver Sitzung, dazu das Ablaufdatum |
 | `verified_plates` | Kennzeichen, Status, Pfad zum Beweisfoto |
-| `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender** |
+| `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender**; `hidden_at`, wenn ausgeblendet |
+| `message_reports` | Meldungen: meldendes Konto, Grund, Zeitpunkt, erledigt-Zeitpunkt |
 | `message_throttle` | gesalzener SHA-256-Hash der Absender-IP, täglich rotierend; keine Klartext-IP |
 | Volume `proofs` | Fotos, auf denen Kennzeichen und Umfeld zu sehen sind |
 
@@ -649,13 +665,14 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 0 4 * * 0 cd /pfad/zu/platedrop && docker compose run --rm migrate node scripts/prune-sessions.mjs
 ```
 
-### Veraltete Rate-Limit-Zeilen und optionale Nachrichten-Frist
+### Veraltete Rate-Limit-Zeilen und Nachrichten-Frist
 
 - `scripts/prune-throttle.mjs` löscht Zeilen aus `message_throttle`, deren Tages-Hash nie wieder
   getroffen wird (Standard: älter als 2 Tage, einstellbar über `THROTTLE_RETAIN_DAYS`).
-- `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
-  Ohne gesetzte Variable passiert nichts – ob Nachrichten befristet aufbewahrt werden, ist eine
-  Produktentscheidung. Ist eine Frist gesetzt, nennt die Datenschutzerklärung sie als Speicherdauer.
+- `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind
+  (Pflicht, Vorgabe in `.env.example`: 90). Die Datenschutzerklärung zeigt denselben Wert als
+  Speicherdauer an. Fehlt die Variable, startet weder `web` noch `migrate`, und das Skript bricht
+  mit Fehler ab.
 
 ### Alles zusammen per Cron
 

@@ -43,6 +43,7 @@ describe("scripts/migrate.mjs", () => {
       "0009_message_read_window.sql",
       "0010_auth_account_issuer.sql",
       "0011_claim_competition.sql",
+      "0012_receiver_controls.sql",
     ]);
   });
 

@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Inbox, XCircle } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
+import MessageActions from "@/components/features/MessageActions";
 import ProofUploadForm from "@/components/features/ProofUploadForm";
 import RemovePlateButton from "@/components/features/RemovePlateButton";
 import { requireUser } from "@/lib/auth/session";
@@ -226,6 +227,7 @@ export default async function DashboardPage() {
                               minute: "2-digit",
                             })}
                           </p>
+                          <MessageActions messageId={msg.id} />
                         </div>
                       ))}
                     </div>

@@ -78,9 +78,8 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Smoke-Test erweitern** (`scripts/smoke-test.mjs`): `/api/health`, Security-Header (CSP,
   `X-Frame-Options`, kein `X-Powered-By`), Datenexport, Kontolöschung inklusive Entfernen des
   Foto-Verzeichnisses.
-- [ ] **Rate-Limit für Claim und Foto-Upload** je Nutzer. Heute bremst nichts das massenhafte
-  Beanspruchen von Kennzeichen oder Hochladen (Audit W1 nannte das fehlende Lockout). Zusammen mit
-  „höchstens 3 offene Claims“ aus P3 Phase A umsetzen.
+- [ ] **Rate-Limit für Foto-Uploads** je Nutzer. Claims sind seit `0011` auf drei offene begrenzt;
+  Uploads bremst weiterhin nichts (Audit W1 nannte das fehlende Lockout).
 - [ ] **Optional `FORCE ROW LEVEL SECURITY`** auf `verified_plates` und `messages` (Audit-Empfehlung
   zu W2, nicht umgesetzt). Nur mit neuer Migration und RLS-Suite.
 - [ ] **Skripte laden keine `.env`-Datei.** Lokal ohne Docker brauchen `pnpm db:migrate`,
@@ -144,32 +143,15 @@ Reihenfolge A → B → E, private Sticker zuletzt ([strategy.md §5](docs/strat
 Jede Phase: Migration mit RLS-Suite, Datenschutzerklärung und `docs/architecture.md` im selben Zug
 nachziehen.
 
-### Phase A — Fundament ([strategy.md §0](docs/strategy.md#0-fundament-zwei-lücken-die-jeder-hebel-voraussetzt))
+### Phase A — Fundament: erledigt (2026-10-13)
 
-- [ ] **Migration `0011` Claim-Konkurrenz**: `verified_plates_plate_unique` durch partielle
-  Unique-Indizes ersetzen (ein `approved` je Kennzeichen, ein offener Claim je Nutzer und
-  Kennzeichen), Status `expired` und `superseded`. `is_verified` muss bei diesen Übergängen auf
-  `false` gehen, sonst liest der abgelöste Halter weiter; am besten per `CHECK` an
-  `verification_status` koppeln. `idx_verified_plates_plate` behalten.
-- [ ] **`setPlateVerification` löst Konkurrenz auf**: in derselben Transaktion andere `pending` →
-  `rejected`, bisheriger `approved` → `superseded`; Mail an den abgelösten Halter.
-- [ ] **Höchstens 3 offene Claims je Nutzer** in `claimPlate` (zusammen mit dem P1-Rate-Limit).
-- [ ] **`prune-claims` in `scripts/maintenance.mjs`**: offene Claims ohne Foto nach 7 Tagen auf
-  `expired`.
-- [ ] **RLS-Test Halterwechsel** in `__tests__/integration/rls.test.ts`: alter Halter verliert den
-  Zugriff, neuer liest ab 30 Tage vor seinem Claim.
-- [ ] **Nachricht ausblenden**: `messages.hidden_at`, `messages_no_update` durch eine Policy nur für
-  den verifizierten Halter im Lesefenster ersetzen, Grant nur `UPDATE (hidden_at)`.
-- [ ] **Nachricht melden**: Tabelle `message_reports`, Melde-Aktion im Dashboard, Ansicht und
-  Erledigen unter `/admin` (DSA-Melde- und Abhilfeverfahren).
-- [ ] **Empfang pausieren**: `verified_plates.paused_until`. Nachrichten weiter annehmen (sonst
-  verrät die Antwort die Registrierung), aber nicht anzeigen und nicht benachrichtigen.
-- [ ] **`MESSAGE_RETENTION_DAYS` verpflichtend**: `requireEnv`, `.env.example`, admin.md B9,
-  Speicherdauer in der Datenschutzerklärung (hängt am P0-Bug zu den Retention-Variablen).
+Migrationen `0011` (Claim-Konkurrenz) und `0012` (Ausblenden, Melden, Pausieren); Details in
+[docs/architecture.md](docs/architecture.md). Offen ist nur die Oberfläche fürs Pausieren: Sie kommt
+mit den Benachrichtigungen in Phase B, weil die Pause nur dort wirkt.
 
 ### Phase B — Nachrichtentypen und Benachrichtigung ([strategy.md §2](docs/strategy.md#2-hebel-2--vordefinierte-nachrichten-und-benachrichtigung))
 
-- [ ] **Migration `0012`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
+- [ ] **Migration `0013`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
   `messages_has_content`; Tabellen `push_subscriptions` und `notification_outbox`; `AFTER INSERT`-
   Trigger, der nur für freigegebene, nicht pausierte Halter eine Outbox-Zeile anlegt (gleiche
   Antwortzeit für registrierte und unregistrierte Kennzeichen).
@@ -187,7 +169,8 @@ nachziehen.
 - [ ] **Web Push**: `public/sw.js`, `src/app/manifest.ts`, Paket `web-push`, VAPID-Variablen in
   `.env.example` und Compose, CSP um `worker-src 'self'`.
 - [ ] **Einstellungen** unter `/dashboard/settings`: Kanäle, Ruhezeiten (dringliche Typen
-  ignorieren sie), Push-Freigabe; Unit-Test für die Ruhezeiten-Logik.
+  ignorieren sie), Push-Freigabe; Unit-Test für die Ruhezeiten-Logik. Dazu die Oberfläche fürs
+  Pausieren je Kennzeichen (`setPlatePause`, Funktion seit `0012`).
 - [ ] **Bündeln**: höchstens eine Benachrichtigung pro Typ und Viertelstunde.
 - [ ] **Monitoring**: Alter des ältesten offenen Outbox-Eintrags in `/api/health`, Log-Warnung ab
   fünf Minuten.

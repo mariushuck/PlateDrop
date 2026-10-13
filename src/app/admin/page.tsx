@@ -1,8 +1,9 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
+import ReportActions from "@/components/features/ReportActions";
 import VerificationActions from "@/components/features/VerificationActions";
 import { requireAdmin } from "@/lib/auth/session";
-import { listPendingVerifications } from "@/lib/db/queries";
+import { listOpenReports, listPendingVerifications } from "@/lib/db/queries";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
 /**
@@ -14,7 +15,10 @@ import { isCanonicalPlate } from "@/lib/utils/plateUtils";
  */
 export default async function AdminPage() {
   const admin = await requireAdmin();
-  const pendingVerifications = await listPendingVerifications(admin.id);
+  const [pendingVerifications, openReports] = await Promise.all([
+    listPendingVerifications(admin.id),
+    listOpenReports(admin.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -25,6 +29,35 @@ export default async function AdminPage() {
           Überprüfen und genehmigen Sie ausstehende Kennzeichen-Verifizierungen
         </p>
       </div>
+
+      {openReports.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
+            Meldungen ({openReports.length})
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {openReports.map((report) => (
+              <div
+                key={report.id}
+                className="rounded-lg border border-red-200 bg-white p-4 shadow-sm dark:border-red-900/50 dark:bg-slate-800"
+              >
+                <p className="mb-1 text-xs font-semibold text-red-700 dark:text-red-400">
+                  {report.reason} · gemeldet am{" "}
+                  {new Date(report.created_at).toLocaleDateString("de-DE")}
+                </p>
+                <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                  an {report.plate_number}, gesendet am{" "}
+                  {new Date(report.message_created_at).toLocaleDateString("de-DE")}
+                </p>
+                <p className="mb-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-900 dark:bg-slate-700 dark:text-white">
+                  {report.message_text}
+                </p>
+                <ReportActions reportId={report.id} messageId={report.message_id} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Pending Verifications Grid */}
       {pendingVerifications.length === 0 ? (

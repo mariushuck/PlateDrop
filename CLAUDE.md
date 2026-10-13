@@ -96,6 +96,7 @@ Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.m
 - `0009` read window: `app.message_read_since()` and the rewritten `messages_select_if_verified_owner` policy
 - `0010` drops `accounts.issuer` and its unique index (better-auth 1.7.3+ no longer writes it)
 - `0011` claim competition: partial unique indexes instead of `UNIQUE (plate_number)`, statuses `expired`/`superseded`, `is_verified` coupled to the status, column-scoped `UPDATE` grant
+- `0012` receiver controls: `app.can_read_message()` (the single read condition), `messages.hidden_at`, `message_reports`, admins read/delete only reported messages, `verified_plates.paused_until` via `app.set_plate_pause()`
 
 ### Storage
 
@@ -116,6 +117,8 @@ Exactly three route handlers exist, and all are deliberate exceptions:
 - `src/app/api/health/route.ts` — **GET only, mutates nothing**. A container healthcheck / uptime monitor needs a URL. Runs `SELECT 1`, returns 200/503.
 
 **German plate normalization**: All plates go through `parsePlate` in `src/lib/utils/plateUtils.ts` before any DB query or insert. The stored form keeps separators — `DISTRICT-LETTERS-NUMBER[E|H]`, e.g. `KA-AB-1234` — because without the district/letters boundary `K-AB 1234` (Köln) and `KA-B 1234` (Karlsruhe) collapse into one value and the verified owner of one would read the other's messages. Input without that boundary (`KAAB1234`) is rejected as `ambiguous` unless only one split is valid (`BM123` → `B-M-123`). Districts may contain umlauts; the number has no leading zero. Migration `0008` enforces the same pattern as a `CHECK` on `verified_plates` and `messages` (`NOT VALID`: pre-0008 compact rows stay, see `docs/admin.md` A3). Write and read paths must use it identically or the join in `listMessagesForUser` stops matching.
+
+**Receiver controls** (migration `0012`): the recipient can hide a message (`UPDATE (hidden_at)` is the only column grant on `messages`) or report it (`message_reports`, reason from `src/lib/messages/reportReasons.ts`). Admins see and may delete **only reported** messages — every other message stays invisible to them. `paused_until` is set exclusively through the `SECURITY DEFINER` function `app.set_plate_pause()`: an UPDATE policy on approved plates would let the owner point `proof_image_url` at someone else's photo. The read condition lives in one SQL function, `app.can_read_message(plate, created_at)`, used by the SELECT and UPDATE policies and the report policy — change it there, not in a policy. `MESSAGE_RETENTION_DAYS` is mandatory; `prune-messages.mjs` fails without it.
 
 **Read window**: an owner reads messages from 30 days before their claim (`verified_plates.created_at`) onwards, never older ones — plates get reassigned. The boundary lives in one SQL function, `app.message_read_since()` (migration `0009`), used by the `messages` SELECT policy and by `listMessagesForUser` / `exportUserData`.
 
@@ -164,4 +167,4 @@ The repository is public under a proprietary license (`LICENSE`, `SECURITY.md`).
 
 ## Environment Variables
 
-See `.env.example` for the full annotated list. Required: `DATABASE_URL`, `DATABASE_ADMIN_URL`, `POSTGRES_*`, `APP_DB_PASSWORD`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SMTP_*`, `MAIL_FROM`, `PROOFS_DIR`, `RATE_LIMIT_SALT`, and `DOMAIN` for the proxy profile. Optional: `TRUSTED_PROXY_HOPS` (default 1), `MESSAGE_RETENTION_DAYS` (unset = keep messages), `THROTTLE_RETAIN_DAYS` (default 2), `BACKUP_RETENTION_DAYS` (default 14).
+See `.env.example` for the full annotated list. Required: `DATABASE_URL`, `DATABASE_ADMIN_URL`, `POSTGRES_*`, `APP_DB_PASSWORD`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SMTP_*`, `MAIL_FROM`, `PROOFS_DIR`, `RATE_LIMIT_SALT`, `MESSAGE_RETENTION_DAYS` (message retention in days, shown in the privacy policy), and `DOMAIN` for the proxy profile. Optional: `TRUSTED_PROXY_HOPS` (default 1), `THROTTLE_RETAIN_DAYS` (default 2), `BACKUP_RETENTION_DAYS` (default 14).

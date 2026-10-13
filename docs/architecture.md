@@ -155,6 +155,8 @@ erDiagram
     users ||--o{ accounts : "hat"
     users ||--o{ verified_plates : "beansprucht"
     verified_plates }o..o{ messages : "verknuepft ueber plate_number"
+    messages ||--o{ message_reports : "gemeldet als"
+    users ||--o{ message_reports : "meldet"
 
     users {
         text id PK
@@ -184,17 +186,26 @@ erDiagram
     verified_plates {
         uuid id PK
         text user_id FK
-        text plate_number UK
+        text plate_number
         boolean is_verified
         text verification_status
         text verification_code
         text proof_image_url
+        timestamptz paused_until
     }
     messages {
         uuid id PK
         text plate_number
         text message_text
         timestamptz created_at
+        timestamptz hidden_at
+    }
+    message_reports {
+        uuid id PK
+        uuid message_id FK
+        text reporter_id FK
+        text reason
+        timestamptz resolved_at
     }
     message_throttle {
         text ip_hash PK
@@ -244,8 +255,17 @@ deshalb mit `crypto.randomInt` statt `Math.random`, aus einem Alphabet ohne die 
 Zeichen `0/O` und `1/I` — der Code wird von Hand geschrieben und vom Foto abgelesen. Kollidiert ein
 Code mit dem Unique-Constraint, würfelt `claimPlate` bis zu fünfmal neu.
 
+`paused_until` (`0012`) pausiert die Benachrichtigungen für ein Kennzeichen. Gesetzt wird es nur
+über `app.set_plate_pause()`, nie per UPDATE (siehe §5).
+
 **`messages`** — eine anonyme Nachricht. Ein CHECK begrenzt den Text auf 1 bis 500 Zeichen und
-spiegelt damit die Validierung der Server Action auf Datenbankebene.
+spiegelt damit die Validierung der Server Action auf Datenbankebene. `hidden_at` (`0012`) setzt der
+Empfänger beim Ausblenden oder Melden; der Inhalt bleibt bis zur Löschfrist
+(`MESSAGE_RETENTION_DAYS`, Pflicht) erhalten, damit eine Meldung prüfbar bleibt.
+
+**`message_reports`** (`0012`) — Meldungen von Empfängern an den Betreiber (Melde- und
+Abhilfeverfahren nach DSA). Eine Meldung je Nachricht und Melder; Grund aus einer festen Liste
+(`src/lib/messages/reportReasons.ts`). Fällt mit der Nachricht per Kaskade weg.
 
 **`message_throttle`** — das rollierende Fenster je Absender. Enthält nur den gesalzenen Hash, nie
 eine IP-Adresse.
@@ -278,7 +298,8 @@ Durchsickern verdecken, weil sie die Variable selbst neu setzt.
 
 ### Die Policies im Einzelnen
 
-Alle aus [`0004_policies.sql`](../db/migrations/0004_policies.sql).
+Grundstock aus [`0004_policies.sql`](../db/migrations/0004_policies.sql); `0009`, `0011` und `0012`
+ändern und ergänzen (jeweils vermerkt).
 
 **`verified_plates`**
 
@@ -300,8 +321,23 @@ Policy unerreichbar; vorher hätte ein Halter sein offenes Kennzeichen per UPDAT
 | Policy | Wirkung |
 | --- | --- |
 | `messages_insert_public` | `WITH CHECK (true)` — jede Person darf schreiben, ohne Konto, ohne Login. Der Kern der App. |
-| `messages_select_if_verified_owner` | Lesen nur, wenn eine Zeile in `verified_plates` existiert, die dem Anfragenden gehört, auf dasselbe Kennzeichen lautet, `is_verified = true` trägt **und** die Nachricht frühestens 30 Tage vor dem Anspruch eingegangen ist (`app.message_read_since(vp.created_at)`, Migration 0009). Kennzeichen werden neu vergeben; ein neuer Halter soll nicht lesen, was an den Vorbesitzer ging. `listMessagesForUser` und `exportUserData` filtern zusätzlich mit derselben Funktion. |
-| `messages_no_update` / `messages_no_delete` | `USING (false)`. Zusätzlich fehlt der App-Rolle jedes UPDATE- und DELETE-Recht auf `messages`; der Versuch scheitert deshalb schon am Grant, bevor die Policy greift. Die Policies dokumentieren die Absicht und tragen, falls je ein Grant hinzukäme. |
+| `messages_select_if_verified_owner` | Lesen nur, wenn `app.can_read_message(plate_number, created_at)` gilt: eine Zeile in `verified_plates` gehört dem Anfragenden, lautet auf dasselbe Kennzeichen, trägt `is_verified = true`, **und** die Nachricht ist frühestens 30 Tage vor dem Anspruch eingegangen (`app.message_read_since(vp.created_at)`, Migration 0009). Kennzeichen werden neu vergeben; ein neuer Halter soll nicht lesen, was an den Vorbesitzer ging. Die Bedingung steht seit `0012` an genau einer Stelle (die Funktion); `listMessagesForUser` und `exportUserData` filtern zusätzlich mit derselben Grenze. |
+| `messages_update_hide_own` | Ändern nur durch den Empfänger (dieselbe Funktion). Der Grant erlaubt ausschließlich `UPDATE (hidden_at)`; Text, Kennzeichen und Zeitpunkt bleiben unveränderlich. |
+| `messages_select_reported_admin` | Ein Admin liest eine Nachricht nur, wenn sie gemeldet wurde. Alle übrigen bleiben auch für ihn unsichtbar. |
+| `messages_delete_reported_admin` | Löschen nur durch einen Admin und nur gemeldete Nachrichten. Empfänger und Absender können nicht löschen. |
+
+**`message_reports`**
+
+| Policy | Wirkung |
+| --- | --- |
+| `message_reports_insert_recipient` | Melden nur auf eigenen Namen und nur Nachrichten, die der Melder lesen darf. |
+| `message_reports_select_own` / `_select_admin` | Der Melder sieht seine Meldungen, ein Admin alle. |
+| `message_reports_update_admin` | Nur ein Admin schließt eine Meldung (`UPDATE (resolved_at)`). |
+
+**Pausieren ohne UPDATE-Recht.** `paused_until` setzt die `SECURITY DEFINER`-Funktion
+`app.set_plate_pause(plate, until)` nur an der eigenen Zeile. Eine UPDATE-Policy für freigegebene
+Kennzeichen wäre gefährlich: Sie gilt für die ganze Zeile, und der Halter könnte damit auch
+`proof_image_url` auf ein fremdes Beweisfoto setzen und es über `canReadProof` abrufen.
 
 ### Warum die Auth-Tabellen ohne RLS laufen
 
@@ -560,6 +596,16 @@ sequenceDiagram
     Note over B,DB: Erst danach ist ein Login moeglich
 ```
 
+### Nachricht ausblenden und melden
+
+Unter jeder Nachricht im Dashboard stehen „Ausblenden“ und „Melden“. Ausblenden setzt `hidden_at`
+(`hideMessage`); die Nachricht verschwindet aus `listMessagesForUser`, bleibt aber bis zur Löschfrist
+gespeichert. Melden (`reportMessage`) blendet aus und legt in derselben Transaktion eine Zeile in
+`message_reports` an. Der Admin sieht offene Meldungen samt Text unter `/admin` und entscheidet:
+„Nachricht löschen“ (`deleteReportedMessage`, protokolliert ohne Inhalt per `logger.info`) oder
+„Behalten“ (`resolveReport`). Beide Wege prüfen die Admin-Rolle in der Server Action, im SQL
+(`app.is_admin()`) und über die Policies.
+
 ### Datenexport und Kontolöschung
 
 Beides steht jeder angemeldeten Person unter `/dashboard/settings` zur Verfügung (Art. 15, 17 und 20
@@ -612,6 +658,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0009_message_read_window.sql` | `app.message_read_since()` und die Lese-Policy mit 30-Tage-Fenster |
 | `0010_auth_account_issuer.sql` | Entfernt `accounts.issuer` samt Unique-Index; better-auth schreibt die Spalte ab 1.7.3 nicht mehr |
 | `0011_claim_competition.sql` | Nur der freigegebene Claim ist eindeutig, Status `expired`/`superseded`, `is_verified` an den Status gekoppelt, spaltenscharfes `UPDATE` auf `verified_plates` |
+| `0012_receiver_controls.sql` | `app.can_read_message()`, Ausblenden (`hidden_at`), `message_reports`, Admin liest/löscht nur Gemeldetes, `paused_until` mit `app.set_plate_pause()` |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -666,7 +713,7 @@ Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 - **Healthcheck.** `/api/health` prüft die Datenbankverbindung; der `web`-Container meldet darüber
   seinen Zustand an Docker.
 - **Datenpflege und Sicherung.** `scripts/maintenance.mjs` bündelt die Prune-Skripte (abgelaufene
-  Sitzungen, verfallene Claims ohne Foto, alte Rate-Limit-Zeilen, optional alte Nachrichten, verwaiste Fotos),
+  Sitzungen, verfallene Claims ohne Foto, alte Rate-Limit-Zeilen, Nachrichten nach `MESSAGE_RETENTION_DAYS`, verwaiste Fotos),
   `scripts/backup.sh` sichert Datenbank und Fotos. Beide sind für Cron gedacht; Einrichtung und
   Rhythmus stehen in der [Admin-Anleitung, B4 und B9](admin.md#b9-regelmäßige-wartung).
 

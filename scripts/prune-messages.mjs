@@ -2,10 +2,10 @@
 /**
  * Löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
  *
- * Standardmäßig ist keine Frist gesetzt: Ob und wie lange Nachrichten
- * aufbewahrt werden, ist eine Produktentscheidung. Ist `MESSAGE_RETENTION_DAYS`
- * auf eine positive Zahl gesetzt, entfernt dieser Job ältere Nachrichten —
- * damit die Datenschutzerklärung eine konkrete Speicherfrist nennen kann.
+ * Die Frist ist Pflicht (seit Migration 0012): Die Datenschutzerklärung nennt
+ * sie als Speicherdauer, und ausgeblendete oder gemeldete Nachrichten sollen
+ * nicht unbegrenzt liegen bleiben. Fehlt sie, bricht der Job mit Fehler ab,
+ * statt still nichts zu tun.
  *
  *   MESSAGE_RETENTION_DAYS=90 docker compose run --rm migrate node scripts/prune-messages.mjs
  */
@@ -15,10 +15,7 @@ const retention = Number.parseInt(process.env.MESSAGE_RETENTION_DAYS ?? "", 10);
 
 async function main() {
   if (!Number.isInteger(retention) || retention <= 0) {
-    console.log(
-      "MESSAGE_RETENTION_DAYS ist nicht gesetzt – Nachrichten werden nicht automatisch gelöscht.",
-    );
-    return;
+    throw new Error("MESSAGE_RETENTION_DAYS muss eine positive Zahl von Tagen sein.");
   }
 
   const connectionString = process.env.DATABASE_ADMIN_URL;

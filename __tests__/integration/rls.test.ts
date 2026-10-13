@@ -167,9 +167,8 @@ describe("RLS: messages", () => {
     expect(visible.rows).toHaveLength(0);
   });
 
-  // Nachrichten sind unveränderlich. Das setzen zwei Ebenen durch: die App-Rolle
-  // bekommt gar kein UPDATE/DELETE-Recht (greift zuerst), und zusätzlich stehen
-  // Policies mit USING (false) da, falls je ein Grant hinzukäme.
+  // Der Inhalt einer Nachricht ist unveränderlich: die App-Rolle darf nur
+  // hidden_at ändern (Grant, 0012), und das nur als Empfänger (Policy).
   it("lässt eine Nachricht nicht ändern", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
@@ -185,17 +184,140 @@ describe("RLS: messages", () => {
     expect(stored.rows).toEqual([{ message_text: "unveränderlich" }]);
   });
 
-  it("lässt eine Nachricht nicht löschen", async () => {
+  // Löschen darf nur ein Admin, und nur eine gemeldete Nachricht (0012).
+  it("lässt den Empfänger eine Nachricht nicht löschen", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
     await seedMessage("KA-AB-1234", "unveränderlich");
 
-    await expect(asUser(owner, (client) => client.query("DELETE FROM messages"))).rejects.toThrow(
-      /permission denied|row-level security/i,
-    );
+    const deleted = await asUser(owner, (client) => client.query("DELETE FROM messages"));
+    expect(deleted.rowCount).toBe(0);
 
     const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
     expect(stored.rows).toHaveLength(1);
+  });
+});
+
+async function messageId(): Promise<string> {
+  const { rows } = await withAdmin((client) =>
+    client.query<{ id: string }>("SELECT id FROM messages LIMIT 1"),
+  );
+  return rows[0].id;
+}
+
+describe("RLS: Empfänger-Kontrolle (Ausblenden, Melden, Pausieren)", () => {
+  beforeEach(migrateFresh);
+
+  it("lässt den Empfänger eine Nachricht ausblenden, einen Fremden nicht", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "lästig");
+
+    const byStranger = await asUser(stranger, (client) =>
+      client.query("UPDATE messages SET hidden_at = now()"),
+    );
+    expect(byStranger.rowCount).toBe(0);
+
+    const byOwner = await asUser(owner, (client) =>
+      client.query("UPDATE messages SET hidden_at = now()"),
+    );
+    expect(byOwner.rowCount).toBe(1);
+  });
+
+  it("lässt den Empfänger melden, aber keine Nachricht, die er nicht lesen darf", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "beleidigend");
+    const id = await messageId();
+
+    await expect(
+      asUser(stranger, (client) =>
+        client.query(
+          "INSERT INTO message_reports (message_id, reporter_id, reason) VALUES ($1, $2, 'x')",
+          [id, stranger],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+
+    await asUser(owner, (client) =>
+      client.query(
+        "INSERT INTO message_reports (message_id, reporter_id, reason) VALUES ($1, $2, 'Beleidigung')",
+        [id, owner],
+      ),
+    );
+    const visibleToStranger = await asUser(stranger, (client) =>
+      client.query("SELECT id FROM message_reports"),
+    );
+    expect(visibleToStranger.rows).toHaveLength(0);
+  });
+
+  it("lässt nur einen Admin Meldungen sehen, erledigen und die Nachricht löschen", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedMessage("KA-AB-1234", "beleidigend");
+    await seedMessage("KA-AB-1234", "harmlos");
+    const reported = (
+      await withAdmin((client) =>
+        client.query<{ id: string }>("SELECT id FROM messages WHERE message_text = 'beleidigend'"),
+      )
+    ).rows[0].id;
+    await withAdmin((client) =>
+      client.query(
+        "INSERT INTO message_reports (message_id, reporter_id, reason) VALUES ($1, $2, 'x')",
+        [reported, owner],
+      ),
+    );
+
+    // Der Melder darf seine Meldung nicht selbst erledigen.
+    const byOwner = await asUser(owner, (client) =>
+      client.query("UPDATE message_reports SET resolved_at = now()"),
+    );
+    expect(byOwner.rowCount).toBe(0);
+
+    // Der Admin sieht nur die gemeldete Nachricht, nicht die übrigen.
+    const adminSees = await asUser(admin, (client) =>
+      client.query<{ message_text: string }>("SELECT message_text FROM messages"),
+    );
+    expect(adminSees.rows).toEqual([{ message_text: "beleidigend" }]);
+
+    const deleted = await asUser(admin, (client) => client.query("DELETE FROM messages"));
+    expect(deleted.rowCount).toBe(1);
+    const left = await withAdmin((client) =>
+      client.query<{ message_text: string }>("SELECT message_text FROM messages"),
+    );
+    expect(left.rows).toEqual([{ message_text: "harmlos" }]);
+  });
+
+  it("lässt den Halter nur die Pause des eigenen Kennzeichens setzen", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+
+    const byStranger = await asUser(stranger, (client) =>
+      client.query<{ ok: boolean }>(
+        "SELECT app.set_plate_pause($1, now() + interval '1 day') AS ok",
+        [plateId],
+      ),
+    );
+    expect(byStranger.rows[0].ok).toBe(false);
+
+    const byOwner = await asUser(owner, (client) =>
+      client.query<{ ok: boolean }>(
+        "SELECT app.set_plate_pause($1, now() + interval '1 day') AS ok",
+        [plateId],
+      ),
+    );
+    expect(byOwner.rows[0].ok).toBe(true);
+
+    // Direkt per UPDATE kommt der Halter an die Spalte nicht heran.
+    await expect(
+      asUser(owner, (client) =>
+        client.query("UPDATE verified_plates SET paused_until = NULL WHERE id = $1", [plateId]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
   });
 });
 

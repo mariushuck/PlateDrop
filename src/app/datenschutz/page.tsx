@@ -13,7 +13,13 @@ export const metadata: Metadata = {
  */
 const PLACEHOLDER = "[Platzhalter – vor Go-Live ersetzen]";
 
+// Liest die Speicherfrist zur Laufzeit; beim Docker-Build ist sie nicht gesetzt.
+export const dynamic = "force-dynamic";
+
 export default function Datenschutz() {
+  // Pflichtvariable (docker-compose.yml); dieselbe Frist wendet prune-messages.mjs an.
+  const retentionDays = process.env.MESSAGE_RETENTION_DAYS ?? PLACEHOLDER;
+
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900">
       {/* Header */}
@@ -92,6 +98,14 @@ export default function Datenschutz() {
               <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO – berechtigtes Interesse
               an einem funktionsfähigen, missbrauchsgeschützten Dienst und am Schutz der
               angeschriebenen Halter:innen.
+            </p>
+            <p className="mt-2">
+              <strong>Ausblenden und Melden:</strong> Empfänger:innen können eine Nachricht
+              ausblenden oder dem Betreiber melden. Gespeichert werden dabei der Zeitpunkt, bei
+              einer Meldung zusätzlich das meldende Konto und der gewählte Grund. Eine gemeldete
+              Nachricht sieht der Betreiber, um über ihre Löschung zu entscheiden (Art. 16 DSA);
+              alle übrigen Nachrichten bleiben auch für ihn unsichtbar. Rechtsgrundlage ist Art. 6
+              Abs. 1 lit. c und f DSGVO.
             </p>
           </section>
 
@@ -212,10 +226,14 @@ export default function Datenschutz() {
             </h2>
             <ul className="list-inside list-disc space-y-1">
               <li>
-                <strong>Nachrichten:</strong> werden gespeichert, bis die Halter:in oder der Betrieb
-                sie entfernt. Eine automatische Löschung nach fester Frist greift nur, wenn der
-                Betreiber eine Speicherdauer festgelegt hat ({PLACEHOLDER} – Frist eintragen oder
-                diesen Zusatz streichen).
+                <strong>Nachrichten:</strong> höchstens {retentionDays} Tage ab Eingang; danach
+                werden sie durch eine regelmäßige Bereinigung gelöscht. Ausgeblendete Nachrichten
+                bleiben bis dahin gespeichert, damit eine Meldung noch geprüft werden kann. Der
+                Betreiber kann eine gemeldete Nachricht früher löschen.
+              </li>
+              <li>
+                <strong>Meldungen:</strong> zusammen mit der gemeldeten Nachricht, also ebenfalls
+                höchstens {retentionDays} Tage.
               </li>
               <li>
                 <strong>Konto- und Verifizierungsdaten:</strong> für die Dauer des Kontos; nach
@@ -278,7 +296,7 @@ export default function Datenschutz() {
           {/* Last Updated */}
           <div className="mt-12 rounded-lg bg-slate-100 p-4 dark:bg-slate-800">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              <strong>Stand:</strong> August 2026
+              <strong>Stand:</strong> Oktober 2026
             </p>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               Diese Datenschutzerklärung wird angepasst, sobald sich die beschriebene Verarbeitung

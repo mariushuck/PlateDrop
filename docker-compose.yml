@@ -39,7 +39,7 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD fehlt}
       PROOFS_DIR: /data/proofs
       # Für die Wartungsskripte, die per `docker compose run --rm migrate …` laufen.
-      MESSAGE_RETENTION_DAYS: ${MESSAGE_RETENTION_DAYS:-}
+      MESSAGE_RETENTION_DAYS: ${MESSAGE_RETENTION_DAYS:?MESSAGE_RETENTION_DAYS fehlt}
       THROTTLE_RETAIN_DAYS: ${THROTTLE_RETAIN_DAYS:-}
     volumes:
       # Für die Wartungsskripte, die neben der Datenbank auch die Dateien
@@ -60,6 +60,8 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL fehlt}
       RATE_LIMIT_SALT: ${RATE_LIMIT_SALT:?RATE_LIMIT_SALT fehlt}
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      # Die Datenschutzerklärung nennt die Frist als Speicherdauer.
+      MESSAGE_RETENTION_DAYS: ${MESSAGE_RETENTION_DAYS:?MESSAGE_RETENTION_DAYS fehlt}
       PROOFS_DIR: /data/proofs
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
