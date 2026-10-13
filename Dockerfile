@@ -24,7 +24,14 @@ CMD ["pnpm", "dev"]
 # --- Build ------------------------------------------------------------------
 FROM deps AS builder
 COPY . .
-RUN pnpm build
+# Server-Module prüfen Pflichtvariablen schon beim Import (src/lib/env.ts), und
+# `next build` lädt sie beim Sammeln der Seiten. .env gelangt nie ins Image
+# (.dockerignore), deshalb hier Platzhalter wie in der CI – nur für diesen
+# Schritt, nicht im Runner. Zur Laufzeit gelten die echten Werte aus Compose.
+RUN BETTER_AUTH_URL=http://build.invalid \
+    BETTER_AUTH_SECRET=build-only-placeholder-not-a-secret \
+    RATE_LIMIT_SALT=build-only-placeholder \
+    pnpm build
 
 # --- Produktion -------------------------------------------------------------
 FROM base AS runner
