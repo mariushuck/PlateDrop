@@ -592,6 +592,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0007_users_column_grants.sql` | Spaltenscharfes `UPDATE` auf `users` für die App-Rolle, ohne `is_admin` |
 | `0008_plate_format.sql` | Kanonisches Kennzeichenformat: wandelt eindeutige Altzeilen um, entzieht mehrdeutigen die Freigabe, `CHECK` auf beiden Tabellen (`NOT VALID`) |
 | `0009_message_read_window.sql` | `app.message_read_since()` und die Lese-Policy mit 30-Tage-Fenster |
+| `0010_auth_account_issuer.sql` | Entfernt `accounts.issuer` samt Unique-Index; better-auth schreibt die Spalte ab 1.7.3 nicht mehr |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -601,9 +602,10 @@ jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelauf
 nachträgliche Änderung käme auf bestehenden Installationen nie an. Schemaänderungen kommen immer als
 neue, höher nummerierte Datei.
 
-Das Auth-Schema in `0002` lässt sich bei einem better-auth-Upgrade mit
-[`scripts/generate-auth-schema.mjs`](../scripts/generate-auth-schema.mjs) neu erzeugen — gegen eine
-leere Datenbank, sonst enthält der Plan nur die Differenz zum Ist-Zustand.
+Bei einem better-auth-Upgrade erzeugt
+[`scripts/generate-auth-schema.mjs`](../scripts/generate-auth-schema.mjs) das erwartete Auth-Schema —
+gegen eine leere Datenbank, sonst enthält der Plan nur die Differenz zum Ist-Zustand. Weicht es von
+`0002` plus Folgemigrationen ab, kommt die Änderung als neue Migration (Beispiel: `0010`).
 
 ---
 
