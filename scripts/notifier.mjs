@@ -44,6 +44,17 @@ const transport = nodemailer.createTransport({
 });
 const from = process.env.MAIL_FROM ?? "PlateDrop <noreply@platedrop.local>";
 
+/**
+ * Lesbare Fehlerursache. Ein Verbindungsfehler bei IPv4 und IPv6 kommt als
+ * AggregateError mit leerer `message`; die Ursache steht dann in `code` bzw.
+ * in den einzelnen Fehlern.
+ */
+function describeError(error) {
+  if (error?.message) return error.message;
+  const inner = error?.errors?.map((e) => e.message || e.code).filter(Boolean);
+  return error?.code ?? (inner?.length ? inner.join("; ") : String(error));
+}
+
 function log(level, message, meta = {}) {
   const line = JSON.stringify({ level, time: new Date().toISOString(), message, ...meta });
   (level === "error" ? console.error : console.log)(line);
@@ -104,12 +115,12 @@ async function processBatch() {
           `UPDATE notification_outbox
               SET attempts = $2, next_attempt_at = $3, last_error = $4
             WHERE id = $1`,
-          [row.id, attempts, new Date(Date.now() + backoffMs(attempts)), String(error.message)],
+          [row.id, attempts, new Date(Date.now() + backoffMs(attempts)), describeError(error)],
         );
         log(attempts >= MAX_ATTEMPTS ? "error" : "warn", "Benachrichtigung fehlgeschlagen", {
           outboxId: row.id,
           attempts,
-          error: error.message,
+          error: describeError(error),
         });
       }
     }
