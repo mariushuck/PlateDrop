@@ -1,19 +1,21 @@
 # TODO
 
-Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-12 (Branch `dev`).
-Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md), ein Abgleich von Code und Doku, ein
-Repo-Audit vom 2026-10-12 und die Produktstrategie in [docs/strategy.md](docs/strategy.md).
+Was als Nächstes ansteht, nach Priorität. Stand: 2026-10-13 (Branch `dev`).
+Herkunft der Punkte: offene Reste aus [AUDIT.md](AUDIT.md), ein Abgleich von Code und Doku,
+Repo-Audits vom 2026-10-12 und 2026-10-13, die Produktstrategie in [docs/strategy.md](docs/strategy.md)
+und der Markteintrittsplan in [docs/go-to-market.md](docs/go-to-market.md).
 
 Erledigtes hier abhaken und bei Gelegenheit entfernen. Was sich am Verhalten ändert, gehört
 zusätzlich in [docs/architecture.md](docs/architecture.md) bzw. [docs/admin.md](docs/admin.md).
 
 ## Richtung
 
-PlateDrop geht in Richtung **Nische / B2B** (Einstieg Firmenparkplätze, danach Wohnanlagen), nicht
-in den Massenmarkt. Im Privatmarkt ist die Monetarisierbarkeit begrenzt; dort bleibt die App
-kostenlos. Begründung, Geschäftsmodell und die nicht-technischen Schritte (Nutzertests, Gespräche
-mit Facility-Managern als Go/No-Go, AV-Verträge, Arbeitgeberklärung) stehen in
-[docs/strategy.md](docs/strategy.md). Hier stehen nur die technischen Pakete (P3). P0 bleibt
+PlateDrop geht in Richtung **Nische / B2B**, nicht in den Massenmarkt: **ein universelles Produkt für
+Privatgelände** (Firmenparkplätze, Wohnanlagen über Hausverwaltungen, private Parkflächen), kein
+Sonderbau je Segment (Entscheidung 2026-10-13). Im Privatmarkt bleibt die App kostenlos. Begründung
+und Geschäftsmodell stehen in [docs/strategy.md](docs/strategy.md), Segmente, Vertrieb, Pilot und die
+nicht-technischen Schritte (Gespräche als Go/No-Go, AV-Verträge, Arbeitgeberklärung) in
+[docs/go-to-market.md](docs/go-to-market.md). Hier stehen nur die technischen Pakete (P3). P0 bleibt
 Voraussetzung für jeden öffentlichen Start.
 
 ---
@@ -116,6 +118,19 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Upload-Weg ungetestet.** Der Smoke-Test schreibt das Foto direkt ins Volume und setzt den Pfad
   per SQL, deshalb fiel das 1-MB-Limit nicht auf. Ein ~2 MB großes JPEG über die echte Action
   hochladen und danach `pending` prüfen.
+- [ ] **Kein Weg, einen Claim zurückzuziehen oder ein Kennzeichen zu entfernen.** Die Policy
+  `verified_plates_delete_own` existiert, aber keine Query, Action oder UI. Ein Tippfehler-Claim
+  sperrt das fremde Kennzeichen bis zur Kontolöschung, ein verkauftes Auto bekommt weiter
+  Nachrichten. `deletePlate` in `queries.ts` (mit `user_id`-Filter), Server Action, Button im
+  Dashboard, Foto per `deleteProof` entfernen; Query- und RLS-Test.
+- [ ] **Zweite gleiche Rückmeldung bleibt stumm.** `src/app/page.tsx` und
+  `src/components/features/ClaimPlateForm.tsx` hängen ihren Effekt an `state?.success` /
+  `state?.error`. Zweite erfolgreiche Nachricht in Folge: kein Toast, das Formular wird nicht
+  geleert; zweimal dieselbe Fehlermeldung (z. B. Rate-Limit): kein Toast. Effekt an `state` hängen,
+  Komponententest für zwei Erfolge nacheinander.
+- [ ] **CI nach dem Runner-Wechsel prüfen**: `ubuntu-latest` wird ab 2026-10-19 Ubuntu 26
+  (Hinweis in den Run-Annotations). Ersten Lauf danach kontrollieren, bei Problemen `ubuntu-24.04`
+  pinnen.
 
 ## P2 — Verbesserungen
 
@@ -126,8 +141,19 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Begründung bei Ablehnungen**: Admins können heute keinen Grund angeben, Halter sehen nur
   einen Standardtext (admin.md A3).
 - [ ] **Optional Breached-Password-Check** bei Registrierung und Passwortwechsel (Audit W14).
-- [ ] **Aufräumen**: Next-Boilerplate `public/{file,globe,next,vercel,window}.svg` wird nirgends
-  verwendet und kann weg.
+- [ ] **Gleiche Datei nach Fehler nicht erneut wählbar** (`ProofUploadForm.tsx`): `input.value`
+  wird nach einem Fehler nicht zurückgesetzt, deshalb feuert `onChange` bei derselben Datei nicht.
+- [ ] **Unbehandelte Fehler statt Validierungsmeldung.** `formData.get(...) as string` in
+  `dropMessage`, `claimPlate` und den Auth-/Settings-Actions wirft bei einem Datei-Wert (`.trim`
+  fehlt) einen 500er. `uploadProof` mit einer `plateId`, die keine UUID ist, wirft 22P02 außerhalb
+  des `try` (`plateBelongsToUser`). Typ bzw. UUID-Format vorab prüfen.
+- [ ] **`x-real-ip`-Fallback streichen** (`src/lib/utils/rateLimit.ts`): Hinter Caddy ist er tot,
+  weil Caddy immer `X-Forwarded-For` setzt; bei falsch gesetztem `TRUSTED_PROXY_HOPS` ohne Proxy ist
+  der Header frei fälschbar (Rest von Audit W8).
+- [ ] **Build loggt „Could not validate the database schema“** (seit better-auth 1.7.7): `next build`
+  ohne erreichbare DB prüft better-auth das Schema und meldet einen Fehler, der Build läuft aber
+  durch. Prüfen, ob sich die Validierung beim Build abschalten lässt, damit echte Fehler im Log
+  auffallen.
 - [ ] **Verwaistes Foto bei DB-Fehler in `uploadProof`**: wirft `setProofPath`, bleibt die Datei bis
   zum nächsten Prune liegen. Im `catch` `deleteProof(objectPath)` aufrufen wie im `!updated`-Zweig.
 - [ ] **Toter Code in `deleteAccount`**: `deleted` ist nach dem `try` immer `true`, `return { error:
@@ -145,7 +171,7 @@ nachziehen.
 
 ### Phase A — Fundament ([strategy.md §0](docs/strategy.md#0-fundament-zwei-lücken-die-jeder-hebel-voraussetzt))
 
-- [ ] **Migration `0010` Claim-Konkurrenz**: `verified_plates_plate_unique` durch partielle
+- [ ] **Migration `0011` Claim-Konkurrenz**: `verified_plates_plate_unique` durch partielle
   Unique-Indizes ersetzen (ein `approved` je Kennzeichen, ein offener Claim je Nutzer und
   Kennzeichen), Status `expired` und `superseded`. `is_verified` muss bei diesen Übergängen auf
   `false` gehen, sonst liest der abgelöste Halter weiter; am besten per `CHECK` an
@@ -168,7 +194,7 @@ nachziehen.
 
 ### Phase B — Nachrichtentypen und Benachrichtigung ([strategy.md §2](docs/strategy.md#2-hebel-2--vordefinierte-nachrichten-und-benachrichtigung))
 
-- [ ] **Migration `0011`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
+- [ ] **Migration `0012`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
   `messages_has_content`; Tabellen `push_subscriptions` und `notification_outbox`; `AFTER INSERT`-
   Trigger, der nur für freigegebene, nicht pausierte Halter eine Outbox-Zeile anlegt (gleiche
   Antwortzeit für registrierte und unregistrierte Kennzeichen).
@@ -192,9 +218,10 @@ nachziehen.
   fünf Minuten.
 - [ ] **Datenschutzerklärung**: Push-Dienste der Browserhersteller, Speicherdauer der Abos.
 
-### Phase E — Mandanten-MVP ([strategy.md §3](docs/strategy.md#3-hebel-3--b2b-nische-statt-massenmarkt))
+### Phase E — Mandanten-MVP für Privatgelände ([strategy.md §3](docs/strategy.md#3-hebel-3--b2b-nische-statt-massenmarkt), [go-to-market.md](docs/go-to-market.md))
 
-Erst bauen, wenn die Gespräche aus strategy.md §3.9 ein Go ergeben haben.
+Erst bauen, wenn die Gespräche aus go-to-market.md Phase 0 ein Go ergeben haben. Alles generisch für
+jedes Gelände; Segmente unterscheiden sich nur in Einstellungen, nicht im Code.
 
 - [ ] **Token- und QR-Technik** (aus Hebel 1, hier zuerst gebraucht): `src/lib/tags/token.ts`
   (`crypto.randomBytes(16)`, base64url), QR serverseitig als SVG, Fehlerkorrektur M/Q.
@@ -214,6 +241,22 @@ Erst bauen, wenn die Gespräche aus strategy.md §3.9 ein Go ergeben haben.
 - [ ] **Kennzeichen-Import** aus Fuhrpark- oder Parkausweisliste, Freigabe durch Org-Admin statt
   Foto.
 - [ ] **Aggregierte Statistik** (Vorfälle pro Woche), nie pro Person.
+- [ ] **Standort-Scope**: Mitglieder und Kennzeichen an Standorte (`org_sites`) binden; eine
+  Nachricht über den Standort-QR erreicht nur Mitglieder dieses Standorts (Hausverwaltung mit
+  vielen Objekten, Firma mit mehreren Werken). Eigene RLS-Tests.
+- [ ] **Beitritt per Standort-Link/QR** mit Freigabe durch den Org-Admin, zusätzlich zur
+  Mail-Einladung. In Wohnanlagen treten Bewohner selbst bei, statt dass die Verwaltung Mieterdaten
+  importiert.
+- [ ] **Aushang-PDF je Standort** (QR, Kurz-URL, kurzer Text) als GET-Route; in `CLAUDE.md` als
+  weitere Route-Ausnahme dokumentieren.
+- [ ] **`scripts/create-org.mjs`**: Organisation, ersten Standort und ersten Org-Admin anlegen, mit
+  Owner-Zugang wie `set-admin.mjs`. Kein Self-Service-Onboarding im Pilot.
+- [ ] **Offboarding**: Org-Admin entfernt ein Mitglied (Auszug, Austritt), dessen Freigaben in der
+  Organisation enden sofort; RLS-Test.
+- [ ] **Vertragsende**: Export und Löschung aller Daten einer Organisation (Art. 28 Abs. 3 lit. g
+  DSGVO), als Skript für den Betreiber.
+- [ ] **Betreiber-Seite** `/betreiber`: statisch, Nutzen und Ablauf, Kontakt per `mailto`;
+  Datenschutzerklärung um den B2B-Fall (Auftragsverarbeitung) ergänzen.
 - [ ] **Vor dem ersten zahlenden Kunden**: Fehler-Aggregation aus P2 und Uptime-Monitoring auf
   `/api/health`.
 
