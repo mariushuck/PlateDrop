@@ -473,6 +473,7 @@ sequenceDiagram
     App-->>H: Code anzeigen
     Note over H: Code auf Zettel schreiben,<br/>hinter die Scheibe legen,<br/>mit Kennzeichen fotografieren
     H->>App: Foto hochladen
+    Note over App: Next nimmt Server-Action-Bodies bis 6 MB an<br/>(experimental.serverActions.bodySizeLimit)
     App->>App: Groesse pruefen (max. 5 MB)
     App->>DB: plateBelongsToUser()
     DB-->>App: eigene Zeile oder nichts
@@ -487,6 +488,11 @@ sequenceDiagram
     App->>DB: is_verified = true
     Note over H,DB: Erst jetzt greift<br/>messages_select_if_verified_owner
 ```
+
+Der Halter kann jedes eigene Kennzeichen im Dashboard entfernen (`removePlate` →
+`deletePlate`, Policy `verified_plates_delete_own`), etwa nach einem Tippfehler oder einem
+Fahrzeugverkauf. Das Beweisfoto wird dabei gelöscht; danach liest er keine Nachrichten mehr an
+dieses Kennzeichen.
 
 ### Beweisfoto abrufen
 

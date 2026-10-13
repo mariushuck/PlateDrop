@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, Inbox, XCircle } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
 import ProofUploadForm from "@/components/features/ProofUploadForm";
+import RemovePlateButton from "@/components/features/RemovePlateButton";
 import { requireUser } from "@/lib/auth/session";
 import { listMessagesForUser, listPlatesForUser } from "@/lib/db/queries";
 import type { Message } from "@/lib/db/types";
@@ -123,6 +124,7 @@ export default async function DashboardPage() {
                 ) : (
                   <ProofUploadForm plateId={plate.id} />
                 )}
+                <RemovePlateButton plateId={plate.id} />
               </div>
             ))}
           </div>
@@ -159,13 +161,6 @@ export default async function DashboardPage() {
               Kein verifiziertes Kennzeichen.
               <br />
               Schließen Sie die Verifizierung ab, um Nachrichten zu lesen.
-            </p>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 py-12 dark:bg-slate-700">
-            <Inbox className="h-8 w-8 text-slate-400 dark:text-slate-500" />
-            <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-              Noch keine Nachrichten für Ihre Kennzeichen.
             </p>
           </div>
         ) : (
@@ -210,6 +205,7 @@ export default async function DashboardPage() {
                       ))}
                     </div>
                   )}
+                  <RemovePlateButton plateId={plate.id} />
                 </div>
               );
             })}

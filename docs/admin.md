@@ -386,7 +386,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 
 `scripts/backup.sh` läuft in einem `postgres:18-alpine`-Container (passende `pg_dump`-Version),
 schreibt `platedrop-<Datum>.sql.gz` und `proofs-<Datum>.tar.gz` in das `backups`-Volume und löscht
-Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Für einen Zeitplan siehe
+Sicherungen, die älter als `BACKUP_RETENTION_DAYS` (Standard 14) sind. Scheitert `pg_dump`, bricht
+das Skript mit einem Fehlercode ab, bevor es aufräumt, und hinterlässt keine halbe Sicherung; ein
+Cron-Job sollte diesen Fehlercode melden. Für einen Zeitplan siehe
 [Regelmäßige Wartung](#b9-regelmäßige-wartung).
 
 ## B5 Zurückspielen
@@ -625,12 +627,6 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 - `scripts/prune-messages.mjs` löscht Nachrichten, die älter als `MESSAGE_RETENTION_DAYS` sind.
   Ohne gesetzte Variable passiert nichts – ob Nachrichten befristet aufbewahrt werden, ist eine
   Produktentscheidung. Ist eine Frist gesetzt, nennt die Datenschutzerklärung sie als Speicherdauer.
-
-> **Bekannte Lücke:** Der `migrate`-Service in `docker-compose.yml` reicht `MESSAGE_RETENTION_DAYS`
-> und `THROTTLE_RETAIN_DAYS` derzeit nicht in den Container durch — Werte aus `.env` kommen dort
-> nicht an, eine Nachrichtenfrist würde still ignoriert. Bis zur Korrektur (siehe
-> [TODO.md](../TODO.md)) den Wert beim Aufruf explizit mitgeben:
-> `docker compose run --rm -e MESSAGE_RETENTION_DAYS=90 migrate node scripts/maintenance.mjs`.
 
 ### Alles zusammen per Cron
 

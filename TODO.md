@@ -35,18 +35,6 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Produktions-`.env`**: alle Secrets frisch mit `openssl rand -base64 32`,
   `BETTER_AUTH_URL=https://<domain>`, `TRUSTED_PROXY_HOPS` passend zum tatsächlichen Proxy-Setup
   (admin.md B1/B2).
-- [ ] **Bug: Retention-Variablen erreichen den `migrate`-Container nicht.** `docker-compose.yml`
-  reicht `MESSAGE_RETENTION_DAYS` und `THROTTLE_RETAIN_DAYS` nicht durch; per Cron über
-  `docker compose run --rm migrate node scripts/maintenance.mjs` gesetzte Fristen werden still
-  ignoriert. Beide in `services.migrate.environment` ergänzen, danach den Hinweis „Bekannte Lücke"
-  in admin.md B9 entfernen.
-- [ ] **Bug: Beweisfotos über 1 MB scheitern.** Next.js nimmt Server-Action-Requests standardmäßig nur
-  bis 1 MB an; `uploadProof` erlaubt 5 MB, Caddy 8 MB. Ein normales Handyfoto bricht mit „Ein Fehler
-  ist aufgetreten“ ab. In `next.config.ts` `experimental.serverActions.bodySizeLimit: "6mb"` setzen
-  (gilt auch für `dropMessage`; Caddy deckelt bei 8 MB).
-- [ ] **Bug: `scripts/backup.sh` meldet Erfolg trotz gescheitertem `pg_dump`.** `set -eu` prüft in
-  `pg_dump | gzip` nur `gzip`; es entsteht eine leere Sicherung, und nach `BACKUP_RETENTION_DAYS`
-  sind alle guten Sicherungen weggeräumt. `set -euo pipefail` (Busybox-ash kann das).
 - [ ] **Cron-Jobs einrichten** für `scripts/maintenance.mjs` (täglich) und den `backup`-Service
   (täglich), siehe admin.md B9.
 - [ ] **Backups außer Haus und verschlüsselt** ablegen; das Volume `backups` liegt auf demselben
@@ -115,19 +103,6 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **HEIC-Beweisfotos sind in Chrome/Firefox nicht sichtbar.** Der Admin sieht ein kaputtes Bild
   und kann nur ablehnen. HEIC aus `ALLOWED_TYPES` und `sniffImageType` streichen, damit der Nutzer
   sofort eine klare Meldung bekommt (vorher prüfen, ob iPhones beim Upload ohnehin JPEG liefern).
-- [ ] **Upload-Weg ungetestet.** Der Smoke-Test schreibt das Foto direkt ins Volume und setzt den Pfad
-  per SQL, deshalb fiel das 1-MB-Limit nicht auf. Ein ~2 MB großes JPEG über die echte Action
-  hochladen und danach `pending` prüfen.
-- [ ] **Kein Weg, einen Claim zurückzuziehen oder ein Kennzeichen zu entfernen.** Die Policy
-  `verified_plates_delete_own` existiert, aber keine Query, Action oder UI. Ein Tippfehler-Claim
-  sperrt das fremde Kennzeichen bis zur Kontolöschung, ein verkauftes Auto bekommt weiter
-  Nachrichten. `deletePlate` in `queries.ts` (mit `user_id`-Filter), Server Action, Button im
-  Dashboard, Foto per `deleteProof` entfernen; Query- und RLS-Test.
-- [ ] **Zweite gleiche Rückmeldung bleibt stumm.** `src/app/page.tsx` und
-  `src/components/features/ClaimPlateForm.tsx` hängen ihren Effekt an `state?.success` /
-  `state?.error`. Zweite erfolgreiche Nachricht in Folge: kein Toast, das Formular wird nicht
-  geleert; zweimal dieselbe Fehlermeldung (z. B. Rate-Limit): kein Toast. Effekt an `state` hängen,
-  Komponententest für zwei Erfolge nacheinander.
 - [ ] **CI nach dem Runner-Wechsel prüfen**: `ubuntu-latest` wird ab 2026-10-19 Ubuntu 26
   (Hinweis in den Run-Annotations). Ersten Lauf danach kontrollieren, bei Problemen `ubuntu-24.04`
   pinnen.

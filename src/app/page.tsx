@@ -32,7 +32,7 @@ export default function Home() {
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state?.success, state?.error]);
+  }, [state]);
 
   const isFormValid =
     plateInput.trim() &&

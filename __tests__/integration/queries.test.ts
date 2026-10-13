@@ -271,6 +271,37 @@ describe("plateBelongsToUser", () => {
   });
 });
 
+describe("deletePlate", () => {
+  beforeEach(migrateFresh);
+
+  it("entfernt das eigene Kennzeichen und gibt den Fotopfad zurück", async () => {
+    const { deletePlate } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/foto.jpg" });
+
+    await expect(deletePlate(owner, plateId)).resolves.toEqual({
+      deleted: true,
+      proofPath: "user-owner/foto.jpg",
+    });
+    const left = await withAdmin((client) => client.query("SELECT id FROM verified_plates"));
+    expect(left.rows).toHaveLength(0);
+  });
+
+  it("lässt ein fremdes Kennzeichen stehen", async () => {
+    const { deletePlate } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234");
+
+    await expect(deletePlate(stranger, plateId)).resolves.toEqual({
+      deleted: false,
+      proofPath: null,
+    });
+    const left = await withAdmin((client) => client.query("SELECT id FROM verified_plates"));
+    expect(left.rows).toHaveLength(1);
+  });
+});
+
 describe("setProofPath", () => {
   beforeEach(migrateFresh);
 

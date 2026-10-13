@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/session";
 import {
   claimPlate as claimPlateQuery,
+  deletePlate,
   PlateAlreadyClaimedError,
   plateBelongsToUser,
   setProofPath,
@@ -44,6 +45,29 @@ export async function claimPlate(
     }
     logger.error("Fehler beim Registrieren des Kennzeichens:", err);
     return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };
+  }
+}
+
+/** Entfernt ein eigenes Kennzeichen samt Beweisfoto. */
+export async function removePlate(plateId: string): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+
+  try {
+    const { deleted, proofPath } = await deletePlate(user.id, plateId);
+    if (!deleted) {
+      return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+    if (proofPath) {
+      await deleteProof(proofPath).catch((err: unknown) => {
+        // prune-proofs.mjs räumt eine liegengebliebene Datei später ab.
+        logger.error("Beweisfoto des entfernten Kennzeichens konnte nicht gelöscht werden:", err);
+      });
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Entfernen des Kennzeichens:", err);
+    return { success: false, error: "Fehler beim Entfernen des Kennzeichens." };
   }
 }
 

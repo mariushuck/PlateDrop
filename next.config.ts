@@ -53,6 +53,14 @@ const nextConfig: NextConfig = {
   // Kein `X-Powered-By: Next.js` – gibt nur die Framework-Version preis.
   poweredByHeader: false,
 
+  experimental: {
+    serverActions: {
+      // Standard ist 1 MB, ein Handyfoto ist größer. uploadProof prüft selbst
+      // auf 5 MB; Caddy deckelt bei 8 MB.
+      bodySizeLimit: "6mb",
+    },
+  },
+
   // Beweisfotos kommen jetzt vom eigenen Origin über /api/proofs und werden
   // dort pro Abruf autorisiert. `remotePatterns` für Supabase Storage entfällt.
 

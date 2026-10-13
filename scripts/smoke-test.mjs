@@ -102,9 +102,56 @@ async function signIn(email) {
   return { response, cookies };
 }
 
+/**
+ * Ruft eine Server Action so auf, wie es der Browser tut. Die Action-ID steht im
+ * Manifest des laufenden Containers (`.next/dev/…` im Dev-, `.next/…` im
+ * Produktionsmodus); die Seite muss vorher einmal abgerufen worden sein, damit
+ * der Dev-Server sie kompiliert hat.
+ *
+ * Argumente werden wie bei Reacts `encodeReply` kodiert: das Wurzelmodell als
+ * JSON im Feld "0", ein FormData-Argument als `$K<n>` mit Feldern `_<n>_<name>`.
+ * Nur für den Rauchtest; ändert React das Format, schlägt dieser Schritt fehl.
+ */
+async function callAction(worker, exportedName, pagePath, cookie, args) {
+  const { stdout } = await execFileAsync("docker", [
+    "compose",
+    "exec",
+    "-T",
+    "web",
+    "sh",
+    "-c",
+    "cat .next/dev/server/server-reference-manifest.json 2>/dev/null || cat .next/server/server-reference-manifest.json",
+  ]);
+  const manifest = JSON.parse(stdout);
+  const actionId = Object.entries(manifest.node).find(
+    ([, entry]) => entry.exportedName === exportedName && worker in entry.workers,
+  )?.[0];
+  if (!actionId) throw new Error(`Action ${exportedName} nicht im Manifest`);
+
+  const body = new FormData();
+  const model = args.map((arg, index) => {
+    if (typeof arg === "string") return arg;
+    const ref = index + 1;
+    for (const [name, value] of Object.entries(arg))
+      body.append(`_${ref}_${name}`, value, "foto.jpg");
+    return `$K${ref}`;
+  });
+  body.append("0", JSON.stringify(model));
+
+  const response = await fetch(`${APP_URL}${pagePath}`, {
+    method: "POST",
+    headers: { cookie, Origin: APP_URL, "Next-Action": actionId, Accept: "text/x-component" },
+    body,
+  });
+  return { status: response.status, body: await response.text() };
+}
+
 // --- Ablauf -----------------------------------------------------------------
 
 async function main() {
+  // Reste eines abgebrochenen Laufs, sonst kollidieren die festen Codes unten.
+  await pool.query("DELETE FROM users WHERE email LIKE 'smoke-%@example.test'");
+
   step("0) Erreichbarkeit");
   const home = await fetch(APP_URL);
   check("Startseite liefert 200", home.status === 200, `Status ${home.status}`);
@@ -251,6 +298,61 @@ async function main() {
     traversal.status === 404 || traversal.status === 400,
     `Status ${traversal.status}`,
   );
+
+  step("6b) Upload über die echte Server Action");
+  // ~2 MB, also über dem 1-MB-Standardlimit von Next für Server Actions. Die
+  // Typerkennung prüft nur die JPEG-Signatur am Anfang.
+  const uploadPlate = await pool.query(
+    `INSERT INTO verified_plates (user_id, plate_number, verification_code)
+     VALUES ($1, $2, 'PD-SMUP') RETURNING id`,
+    [ownerId, `KA-SU-${1000 + (STAMP % 9000)}`],
+  );
+  const uploadPlateId = uploadPlate.rows[0].id;
+  const jpeg = new Uint8Array(2 * 1024 * 1024);
+  jpeg.set([0xff, 0xd8, 0xff, 0xe0]);
+  const upload = await callAction("app/dashboard/page", "uploadProof", "/dashboard", cookies, [
+    uploadPlateId,
+    { proof: new Blob([jpeg], { type: "image/jpeg" }) },
+  ]);
+  check("Upload-Action antwortet mit 200", upload.status === 200, `Status ${upload.status}`);
+  check(
+    "Upload-Action meldet Erfolg",
+    upload.body.includes('"success":true'),
+    upload.body.slice(0, 200),
+  );
+  const uploaded = await pool.query(
+    "SELECT proof_image_url, verification_status FROM verified_plates WHERE id = $1",
+    [uploadPlateId],
+  );
+  check(
+    "Foto ist hinterlegt und wartet auf Prüfung",
+    uploaded.rows[0]?.proof_image_url?.endsWith(".jpg") &&
+      uploaded.rows[0]?.verification_status === "pending",
+    JSON.stringify(uploaded.rows[0]),
+  );
+
+  const remove = await callAction("app/dashboard/page", "removePlate", "/dashboard", cookies, [
+    uploadPlateId,
+  ]);
+  check(
+    "Entfernen-Action meldet Erfolg",
+    remove.body.includes('"success":true'),
+    remove.body.slice(0, 200),
+  );
+  const afterRemove = await pool.query("SELECT 1 FROM verified_plates WHERE id = $1", [
+    uploadPlateId,
+  ]);
+  check("Kennzeichen ist entfernt", afterRemove.rowCount === 0);
+  const { stdout: leftover } = await execFileAsync("docker", [
+    "compose",
+    "exec",
+    "-T",
+    "web",
+    "sh",
+    "-c",
+    `ls /data/proofs/${ownerId} | grep -c ${uploadPlateId} || true`,
+  ]);
+  check("Beweisfoto des entfernten Kennzeichens ist gelöscht", leftover.trim() === "0", leftover);
 
   step("7) Passwort-Reset verschickt eine E-Mail mit Token");
   await fetch(`${MAILPIT_API}/messages`, { method: "DELETE" });

@@ -293,6 +293,26 @@ describe("RLS: verified_plates", () => {
     expect(stored.rows).toEqual([{ is_verified: true }]);
   });
 
+  // Geschützt doppelt: DELETE mit WHERE sieht nur Zeilen, die auch
+  // verified_plates_select_own freigibt. Erst wenn beide Policies fallen, schlägt
+  // der Test fehl (geprüft).
+  it("lässt den Halter sein Kennzeichen entfernen, ein fremdes nicht", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const ownPlate = await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+    const foreignPlate = await seedPlate(stranger, "M-XY-9999");
+
+    const deleted = await asUser(owner, (client) =>
+      client.query("DELETE FROM verified_plates WHERE id = ANY($1)", [[ownPlate, foreignPlate]]),
+    );
+    expect(deleted.rowCount).toBe(1);
+
+    const stored = await withAdmin((client) =>
+      client.query<{ plate_number: string }>("SELECT plate_number FROM verified_plates"),
+    );
+    expect(stored.rows).toEqual([{ plate_number: "M-XY-9999" }]);
+  });
+
   it("gibt einem Nicht-Admin keine fremden Verifizierungen preis", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     const nonAdmin = await seedUser("user-plain", "plain@example.com", false);

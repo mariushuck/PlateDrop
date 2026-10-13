@@ -217,6 +217,27 @@ export function plateBelongsToUser(userId: string, plateId: string): Promise<boo
   });
 }
 
+/**
+ * Entfernt ein eigenes Kennzeichen – Tippfehler, verkauftes Auto. Danach liest
+ * der Nutzer keine Nachrichten mehr daran, und andere können es beanspruchen.
+ *
+ * @returns den hinterlegten Fotopfad, damit der Aufrufer die Datei löscht.
+ */
+export function deletePlate(
+  userId: string,
+  plateId: string,
+): Promise<{ deleted: boolean; proofPath: string | null }> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ proof_image_url: string | null }>(
+      "DELETE FROM verified_plates WHERE id = $1 AND user_id = $2 RETURNING proof_image_url",
+      [plateId, userId],
+    );
+    return rows.length > 0
+      ? { deleted: true, proofPath: rows[0].proof_image_url }
+      : { deleted: false, proofPath: null };
+  });
+}
+
 export interface SetProofPathResult {
   /** `false`, wenn das Kennzeichen dem Nutzer nicht gehört. */
   updated: boolean;

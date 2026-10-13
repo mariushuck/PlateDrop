@@ -37,7 +37,7 @@ export default function ClaimPlateForm({ action }: ClaimPlateFormProps) {
     }, 0);
 
     return () => window.clearTimeout(showTimer);
-  }, [state?.success]);
+  }, [state]);
 
   return (
     <div className="space-y-4">
