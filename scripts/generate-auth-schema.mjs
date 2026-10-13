@@ -11,7 +11,7 @@
  *
  * Das Ergebnis wird von Hand in 0002_auth.sql übernommen (Kommentare, DEFAULT
  * auf is_admin). Ob es zur Laufzeit-Konfiguration passt, prüft der
- * Integrationstest __tests__/integration/auth.test.ts.
+ * Integrationstest __tests__/integration/authHardening.test.ts.
  */
 import { randomUUID } from "node:crypto";
 import { getMigrations } from "better-auth/db/migration";

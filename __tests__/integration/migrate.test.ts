@@ -41,6 +41,7 @@ describe("scripts/migrate.mjs", () => {
       "0007_users_column_grants.sql",
       "0008_plate_format.sql",
       "0009_message_read_window.sql",
+      "0010_auth_account_issuer.sql",
     ]);
   });
 
