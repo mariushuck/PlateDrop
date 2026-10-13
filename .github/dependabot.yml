@@ -10,6 +10,11 @@ updates:
       # eigenen PR aufmacht.
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Die Typen folgen der Node-Major im Dockerfile und in der CI (22), nicht
+      # der neuesten Node-Version.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
