@@ -4,6 +4,7 @@ import ReportActions from "@/components/features/ReportActions";
 import VerificationActions from "@/components/features/VerificationActions";
 import { requireAdmin } from "@/lib/auth/session";
 import { listOpenReports, listPendingVerifications } from "@/lib/db/queries";
+import { messageType } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
 /**
@@ -50,7 +51,8 @@ export default async function AdminPage() {
                   {new Date(report.message_created_at).toLocaleDateString("de-DE")}
                 </p>
                 <p className="mb-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-900 dark:bg-slate-700 dark:text-white">
-                  {report.message_text}
+                  {(report.message_type && messageType(report.message_type)?.text) ??
+                    report.message_text}
                 </p>
                 <ReportActions reportId={report.id} messageId={report.message_id} />
               </div>

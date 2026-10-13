@@ -316,14 +316,15 @@ cp .env.example .env      # danach ausfüllen, siehe B2 und B3
 dcp --profile proxy up -d --build
 ```
 
-Das startet vier Dienste:
+Das startet fünf Dienste:
 
-| Dienst    | Aufgabe                                                          |
-| --------- | ---------------------------------------------------------------- |
-| `db`      | PostgreSQL 18, nur im internen Netz erreichbar                    |
-| `migrate` | einmaliger Lauf, spielt offene Migrationen ein, beendet sich dann |
-| `web`     | die Anwendung, nicht direkt nach außen exponiert                  |
-| `proxy`   | Caddy auf Port 80 und 443, holt das TLS-Zertifikat selbst         |
+| Dienst     | Aufgabe                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| `db`       | PostgreSQL 18, nur im internen Netz erreichbar                    |
+| `migrate`  | einmaliger Lauf, spielt offene Migrationen ein, beendet sich dann |
+| `web`      | die Anwendung, nicht direkt nach außen exponiert                  |
+| `notifier` | verschickt die Benachrichtigungs-Mails an Halter                  |
+| `proxy`    | Caddy auf Port 80 und 443, holt das TLS-Zertifikat selbst         |
 
 Voraussetzung für TLS: `DOMAIN` in `.env` zeigt auf deine echte Domain, und deren A-/AAAA-Record
 zeigt auf den Server. Caddy fordert das Zertifikat dann beim ersten Aufruf automatisch an.
@@ -335,7 +336,9 @@ Sonst liest das Absenderlimit eine falsche oder eine vom Client gefälschte IP (
 [technische Doku, Rate-Limiting](architecture.md#6-rate-limiting)).
 
 Ob alles läuft, zeigt `dcp ps`: `web` steht nach etwa 20 Sekunden auf `healthy`. Der Status kommt
-vom Healthcheck gegen `/api/health`, der die Datenbankverbindung prüft.
+vom Healthcheck gegen `/api/health`, der die Datenbankverbindung prüft. Die Antwort enthält
+zusätzlich `outboxLagSeconds`; ein Uptime-Monitor sollte warnen, wenn der Wert über einigen Minuten
+liegt (siehe B7).
 
 ## B2 Secrets
 
@@ -501,6 +504,7 @@ Vor größeren Updates: erst sichern (B4).
 ```bash
 dcp logs -f web        # Anwendung
 dcp logs migrate       # Migrationen, nur der letzte Lauf
+dcp logs -f notifier   # Versand der Benachrichtigungs-Mails
 dcp logs db            # Datenbank
 dcp logs proxy         # Caddy, inklusive Zertifikatsvorgängen
 dcp ps                 # Was läuft, was ist gesund
@@ -526,6 +530,8 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Beweisfoto liefert 401 | keine gültige Session | erneut anmelden |
 | App startet nicht, Fehler zur Datenbank | `APP_DB_PASSWORD` und das Passwort in `DATABASE_URL` weichen voneinander ab | beide Werte in `.env` vergleichen, dann `dcp up -d` |
 | `docker compose` meldet `… fehlt` oder die App `Pflicht-Umgebungsvariable … ist nicht gesetzt` | Pflichtvariable leer oder nicht gesetzt | `.env` gegen `.env.example` und B2 prüfen |
+| Halter bekommt keine Benachrichtigung | `notifier` läuft nicht, SMTP lehnt ab, E-Mail in den Einstellungen abgeschaltet, Kennzeichen pausiert oder Ruhezeit | `dcp ps notifier`, `dcp logs notifier`; offene Einträge: `SELECT id, attempts, next_attempt_at, last_error FROM notification_outbox WHERE sent_at IS NULL ORDER BY id DESC LIMIT 10;` |
+| Log-Warnung „Benachrichtigungen stauen sich“, `/api/health` zeigt ein hohes `outboxLagSeconds` | Die älteste fällige Benachrichtigung wartet länger als 5 Minuten – meist steht `notifier` oder der SMTP-Relay | `dcp up -d notifier`, dann `dcp logs notifier`; nach 10 Fehlversuchen gibt er einen Eintrag auf (`attempts = 10`) |
 | `web` bleibt `unhealthy` | `/api/health` antwortet 503: Datenbank nicht erreichbar | `dcp exec web node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>r.text()).then(console.log)"`, dann `dcp logs db` |
 | Login-Cookie wird nicht gesetzt, Anmeldung „verpufft" | `BETTER_AUTH_URL` passt nicht zur aufgerufenen Adresse (falsche Domain, `http` statt `https`) | Wert in `.env` mit der URL im Browser vergleichen, dann `dcp up -d web` |
 | `migrate` bricht ab | fehlerhafte Migrationsdatei; die Transaktion wurde zurückgerollt | `dcp logs migrate`, Datei korrigieren, `dcp up -d migrate` |
@@ -545,6 +551,8 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | `verified_plates` | Kennzeichen, Status, Pfad zum Beweisfoto |
 | `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender**; `hidden_at`, wenn ausgeblendet |
 | `message_reports` | Meldungen: meldendes Konto, Grund, Zeitpunkt, erledigt-Zeitpunkt |
+| `notification_settings` | E-Mail an/aus, Ruhezeiten je Konto |
+| `notification_outbox` | Benachrichtigungen: Konto, Kennzeichen, Typ, Versandzeitpunkt; erledigte nach 30 Tagen gelöscht |
 | `message_throttle` | gesalzener SHA-256-Hash der Absender-IP, täglich rotierend; keine Klartext-IP |
 | Volume `proofs` | Fotos, auf denen Kennzeichen und Umfeld zu sehen sind |
 
@@ -674,10 +682,15 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
   Speicherdauer an. Fehlt die Variable, startet weder `web` noch `migrate`, und das Skript bricht
   mit Fehler ab.
 
+### Versendete Benachrichtigungen entfernen
+
+`scripts/prune-outbox.mjs` löscht Einträge aus `notification_outbox`, die versendet oder nach zehn
+Fehlversuchen aufgegeben wurden, sobald sie älter als 30 Tage sind. Offene Einträge bleiben.
+
 ### Alles zusammen per Cron
 
 `scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-claims`, `prune-throttle`,
-`prune-messages` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
+`prune-messages`, `prune-outbox` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
 Schritte nicht.
 
 ```cron

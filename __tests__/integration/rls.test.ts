@@ -48,9 +48,9 @@ describe("RLS: messages", () => {
 
   it("erlaubt anonymes Schreiben", async () => {
     await asUser(null, (client) =>
-      client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
+      client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
         "KA-AB-1234",
-        "Dein Licht ist an.",
+        "licht_an",
       ]),
     );
 
@@ -118,13 +118,50 @@ describe("RLS: messages", () => {
     expect(readNext.rows).toEqual([{ message_text: "an den neuen Halter" }]);
   });
 
+  // Anonyme Absender wählen nur aus dem Katalog (0013). Freitext bliebe sonst
+  // das größte Missbrauchs- und Haftungsrisiko.
+  it("lässt anonym keinen Freitext schreiben", async () => {
+    await expect(
+      asUser(null, (client) =>
+        client.query(
+          "INSERT INTO messages (plate_number, message_type, message_text) VALUES ($1, $2, $3)",
+          ["KA-AB-1234", "licht_an", "beliebiger Text"],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it("lässt anonym nur Katalog-Typen schreiben", async () => {
+    await expect(
+      asUser(null, (client) =>
+        client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+          "KA-AB-1234",
+          "erfunden",
+        ]),
+      ),
+    ).rejects.toThrow(/messages_type_check/);
+  });
+
+  // Zeitstempel und Status setzt die Datenbank. Ein rückdatierter created_at
+  // würde das Stundenlimit je Kennzeichen umgehen.
+  it("lässt beim Schreiben weder Zeitpunkt noch Status vorgeben", async () => {
+    await expect(
+      asUser(null, (client) =>
+        client.query(
+          "INSERT INTO messages (plate_number, message_type, created_at) VALUES ($1, $2, $3)",
+          ["KA-AB-1234", "licht_an", "2020-01-01"],
+        ),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
   it("lässt anonym nur Kennzeichen in kanonischer Form schreiben", async () => {
     // Im Kompaktformat wären K-AB-1234 und KA-B-1234 derselbe Wert.
     await expect(
       asUser(null, (client) =>
-        client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
+        client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
           "KAB1234",
-          "an wen?",
+          "licht_an",
         ]),
       ),
     ).rejects.toThrow(/messages_plate_format_check/);

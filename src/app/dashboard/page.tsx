@@ -1,11 +1,15 @@
 import { AlertCircle, CheckCircle2, Inbox, XCircle } from "lucide-react";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
+import MarkMessagesRead from "@/components/features/MarkMessagesRead";
 import MessageActions from "@/components/features/MessageActions";
+import PlatePauseControl from "@/components/features/PlatePauseControl";
 import ProofUploadForm from "@/components/features/ProofUploadForm";
 import RemovePlateButton from "@/components/features/RemovePlateButton";
+import { MessageTypeIcon } from "@/components/ui/MessageTypeIcon";
 import { requireUser } from "@/lib/auth/session";
 import { listMessagesForUser, listPlatesForUser } from "@/lib/db/queries";
 import type { Message } from "@/lib/db/types";
+import { messageType } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 import { claimPlate } from "./actions";
 
@@ -157,6 +161,8 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      <MarkMessagesRead messageIds={messages.filter((m) => !m.read_at).map((m) => m.id)} />
+
       {/* Section C: Messages Inbox */}
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="mb-4 flex items-center gap-2">
@@ -200,9 +206,18 @@ export default async function DashboardPage() {
                   className="border-t border-slate-200 pt-6 first:border-t-0 first:pt-0 dark:border-slate-700"
                 >
                   {/* Plate Header */}
-                  <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
+                  <div className="inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
                     {plate.plate_number}
                   </div>
+                  <PlatePauseControl
+                    plateId={plate.id}
+                    pausedUntil={
+                      plate.paused_until && new Date(plate.paused_until) > new Date()
+                        ? new Date(plate.paused_until).toISOString()
+                        : null
+                    }
+                  />
+                  <div className="mb-4" />
 
                   {plateMessages.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -210,26 +225,40 @@ export default async function DashboardPage() {
                     </p>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      {plateMessages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-700"
-                        >
-                          <p className="text-sm text-slate-900 dark:text-white">
-                            {msg.message_text}
-                          </p>
-                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                            {new Date(msg.created_at).toLocaleDateString("de-DE", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                          <MessageActions messageId={msg.id} />
-                        </div>
-                      ))}
+                      {plateMessages.map((msg) => {
+                        const type = msg.message_type ? messageType(msg.message_type) : undefined;
+                        return (
+                          <div
+                            key={msg.id}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-700"
+                          >
+                            <div className="flex items-start gap-3">
+                              <MessageTypeIcon
+                                icon={type?.icon}
+                                className="mt-0.5 h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300"
+                              />
+                              <p className="flex-1 text-sm text-slate-900 dark:text-white">
+                                {type?.text ?? msg.message_text}
+                              </p>
+                              {!msg.read_at && (
+                                <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
+                                  neu
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(msg.created_at).toLocaleDateString("de-DE", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <MessageActions messageId={msg.id} />
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   <RemovePlateButton plateId={plate.id} />

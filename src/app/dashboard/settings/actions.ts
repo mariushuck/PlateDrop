@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 import { auth } from "@/lib/auth/server";
 import { requireUser } from "@/lib/auth/session";
-import { exportUserData } from "@/lib/db/queries";
+import { exportUserData, saveNotificationSettings } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
 
 export async function changePassword(
@@ -122,4 +122,39 @@ export async function exportMyData(): Promise<{ filename: string; json: string }
     filename: `platedrop-datenexport-${new Date().toISOString().slice(0, 10)}.json`,
     json: JSON.stringify(payload, null, 2),
   };
+}
+
+/** Liest eine volle Stunde 0–23 aus dem Formular; leer = keine. */
+function hourField(value: FormDataEntryValue | null): number | null | undefined {
+  if (value === null || value === "") return null;
+  const hour = Number(value);
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : undefined;
+}
+
+export async function saveNotificationSettingsAction(
+  _prev: { error: string | null; success: boolean },
+  formData: FormData,
+): Promise<{ error: string | null; success: boolean }> {
+  const user = await requireUser();
+  const quietStart = hourField(formData.get("quietStart"));
+  const quietEnd = hourField(formData.get("quietEnd"));
+
+  if (quietStart === undefined || quietEnd === undefined) {
+    return { error: "Ungültige Uhrzeit.", success: false };
+  }
+  if ((quietStart === null) !== (quietEnd === null)) {
+    return { error: "Bitte Beginn und Ende der Ruhezeit wählen.", success: false };
+  }
+
+  try {
+    await saveNotificationSettings(user.id, {
+      email_enabled: formData.get("emailEnabled") === "on",
+      quiet_start: quietStart,
+      quiet_end: quietEnd,
+    });
+    return { error: null, success: true };
+  } catch (err) {
+    logger.error("Fehler beim Speichern der Benachrichtigungs-Einstellungen:", err);
+    return { error: "Einstellungen konnten nicht gespeichert werden.", success: false };
+  }
 }

@@ -313,6 +313,12 @@ sind, kann er pro Organisation freigeschaltet werden.
 Einstellungen pro Nutzer: Kanäle an oder aus, Ruhezeiten. Dringliche Typen ignorieren Ruhezeiten,
 weil sie sonst ihren Zweck verlieren.
 
+**Stand der Umsetzung (2026-10-13, Migration `0013`).** Katalog, Outbox, Notifier, E-Mail,
+Ruhezeiten, Bündeln und Pausieren sind gebaut. Web Push folgt später als eigener Schritt, wenn ein
+Pilot es verlangt; E-Mail kommt auf dem Handy ebenfalls in Minuten an. Abweichend von der Skizze
+pollt der Notifier nur (alle 5 s) statt zusätzlich `LISTEN/NOTIFY` zu nutzen – für Minuten-Latenz
+genügt das.
+
 ### 2.3 Umsetzung im Code
 
 **Datenmodell.**

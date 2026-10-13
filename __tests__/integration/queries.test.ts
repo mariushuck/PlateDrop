@@ -32,26 +32,24 @@ describe("insertMessage", () => {
   it("speichert eine Nachricht ohne angemeldeten Nutzer", async () => {
     const { insertMessage } = await loadQueries();
 
-    await insertMessage("KA-AB-1234", "Dein Licht ist an.");
+    await insertMessage("KA-AB-1234", "licht_an");
 
     const stored = await withAdmin((client) =>
-      client.query<{ plate_number: string; message_text: string }>(
-        "SELECT plate_number, message_text FROM messages",
+      client.query<{ plate_number: string; message_type: string }>(
+        "SELECT plate_number, message_type FROM messages",
       ),
     );
-    expect(stored.rows).toEqual([
-      { plate_number: "KA-AB-1234", message_text: "Dein Licht ist an." },
-    ]);
+    expect(stored.rows).toEqual([{ plate_number: "KA-AB-1234", message_type: "licht_an" }]);
   });
 
   it("meldet das Erreichen des Kennzeichen-Limits als PlateRateLimitError", async () => {
     const { insertMessage, PlateRateLimitError } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", `Nachricht ${i}`);
+      await insertMessage("KA-AB-1234", "licht_an");
     }
 
-    await expect(insertMessage("KA-AB-1234", "eine zu viel")).rejects.toBeInstanceOf(
+    await expect(insertMessage("KA-AB-1234", "licht_an")).rejects.toBeInstanceOf(
       PlateRateLimitError,
     );
   });
@@ -60,10 +58,10 @@ describe("insertMessage", () => {
     const { insertMessage } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", `Nachricht ${i}`);
+      await insertMessage("KA-AB-1234", "licht_an");
     }
 
-    await expect(insertMessage("M-XY-9999", "anderes Kennzeichen")).resolves.toBeUndefined();
+    await expect(insertMessage("M-XY-9999", "licht_an")).resolves.toBeUndefined();
   });
 });
 

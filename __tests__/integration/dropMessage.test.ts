@@ -51,22 +51,24 @@ describe("dropMessage", () => {
       null,
       form({
         plateNumber: "ka ab 1234",
-        messageText: "  Dein Licht ist an.  ",
+        messageType: "licht_an",
+        // Freitext von anonymen Absendern wird ignoriert, nie gespeichert.
+        messageText: "Eigener Text",
       }),
     );
 
     expect(result).toEqual({ success: true });
 
     const stored = await withAdmin((client) =>
-      client.query<{ plate_number: string; message_text: string }>(
-        "SELECT plate_number, message_text FROM messages",
+      client.query<{ plate_number: string; message_type: string; message_text: string | null }>(
+        "SELECT plate_number, message_type, message_text FROM messages",
       ),
     );
     // Gespeichert wird die kanonische Form mit Trennstrichen — dieselbe Form
     // landet auch beim Claim in verified_plates, sonst würde das Lesen später
     // nicht mehr treffen.
     expect(stored.rows).toEqual([
-      { plate_number: "KA-AB-1234", message_text: "Dein Licht ist an." },
+      { plate_number: "KA-AB-1234", message_type: "licht_an", message_text: null },
     ]);
   });
 
@@ -74,7 +76,10 @@ describe("dropMessage", () => {
     const { dropMessage } = await loadActions();
 
     // KAAB1234 kann KA-AB-1234 oder KAA-B-1234 sein.
-    const result = await dropMessage(null, form({ plateNumber: "KAAB1234", messageText: "Hallo" }));
+    const result = await dropMessage(
+      null,
+      form({ plateNumber: "KAAB1234", messageType: "licht_an" }),
+    );
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Ortskürzel und Buchstaben trennen");
@@ -90,7 +95,7 @@ describe("dropMessage", () => {
       null,
       form({
         plateNumber: "kein-kennzeichen",
-        messageText: "Hallo",
+        messageType: "licht_an",
       }),
     );
 
@@ -101,27 +106,19 @@ describe("dropMessage", () => {
     expect(stored.rows).toHaveLength(0);
   });
 
-  it("weist eine leere Nachricht ab", async () => {
+  it("verlangt eine Nachricht aus dem Katalog", async () => {
     const { dropMessage } = await loadActions();
 
-    const result = await dropMessage(null, form({ plateNumber: "KA-AB-1234", messageText: "   " }));
-
-    expect(result).toEqual({ success: false, error: "Nachricht darf nicht leer sein." });
-  });
-
-  it("weist eine Nachricht über 500 Zeichen ab", async () => {
-    const { dropMessage } = await loadActions();
-
-    const result = await dropMessage(
+    const missing = await dropMessage(null, form({ plateNumber: "KA-AB-1234" }));
+    const unknown = await dropMessage(
       null,
-      form({
-        plateNumber: "KA-AB-1234",
-        messageText: "x".repeat(501),
-      }),
+      form({ plateNumber: "KA-AB-1234", messageType: "freitext" }),
     );
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("500 Zeichen");
+    expect(missing).toEqual({ success: false, error: "Bitte wählen Sie eine Nachricht aus." });
+    expect(unknown).toEqual({ success: false, error: "Bitte wählen Sie eine Nachricht aus." });
+    const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
+    expect(stored.rows).toHaveLength(0);
   });
 
   it("bremst denselben Absender nach zehn Nachrichten pro Minute", async () => {
@@ -135,7 +132,7 @@ describe("dropMessage", () => {
           null,
           form({
             plateNumber: `KA-AB-${1000 + i}`,
-            messageText: `Nachricht ${i}`,
+            messageType: "licht_an",
           }),
         ),
       );
@@ -152,7 +149,7 @@ describe("dropMessage", () => {
     const { dropMessage } = await loadActions();
 
     for (let i = 0; i < 11; i++) {
-      await dropMessage(null, form({ plateNumber: `KA-AB-${1000 + i}`, messageText: "x" }));
+      await dropMessage(null, form({ plateNumber: `KA-AB-${1000 + i}`, messageType: "licht_an" }));
     }
 
     headerValues.set("x-forwarded-for", "198.51.100.4");
@@ -160,7 +157,7 @@ describe("dropMessage", () => {
       null,
       form({
         plateNumber: "M-XY-9999",
-        messageText: "andere IP",
+        messageType: "licht_an",
       }),
     );
 
@@ -178,7 +175,7 @@ describe("dropMessage", () => {
         null,
         form({
           plateNumber: "KA-AB-1234",
-          messageText: `Nachricht ${i}`,
+          messageType: "licht_an",
         }),
       );
       expect(ok).toEqual({ success: true });
@@ -189,7 +186,7 @@ describe("dropMessage", () => {
       null,
       form({
         plateNumber: "KA-AB-1234",
-        messageText: "eine zu viel",
+        messageType: "licht_an",
       }),
     );
 

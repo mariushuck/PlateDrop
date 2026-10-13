@@ -130,10 +130,12 @@ async function callAction(worker, exportedName, pagePath, cookie, args) {
 
   const body = new FormData();
   const model = args.map((arg, index) => {
-    if (typeof arg === "string") return arg;
+    if (arg === null || typeof arg === "string") return arg;
     const ref = index + 1;
-    for (const [name, value] of Object.entries(arg))
-      body.append(`_${ref}_${name}`, value, "foto.jpg");
+    for (const [name, value] of Object.entries(arg)) {
+      if (value instanceof Blob) body.append(`_${ref}_${name}`, value, "foto.jpg");
+      else body.append(`_${ref}_${name}`, value);
+    }
     return `$K${ref}`;
   });
   body.append("0", JSON.stringify(model));
@@ -467,6 +469,28 @@ async function main() {
   );
   const afterRemoval = await pool.query("SELECT 1 FROM messages WHERE id = $1", [reportedId]);
   check("Gemeldete Nachricht ist gelöscht", afterRemoval.rowCount === 0);
+
+  step("10) Anonyme Nachricht löst eine E-Mail aus");
+  await fetch(`${MAILPIT_API}/messages`, { method: "DELETE" });
+  await fetch(APP_URL); // Startseite kompilieren lassen (Dev-Server)
+  const drop = await callAction("app/page", "dropMessage", "/", "", [
+    null,
+    { plateNumber: plateNumber, messageType: "licht_an" },
+  ]);
+  check("Nachricht angenommen", drop.body.includes('"success":true'), drop.body.slice(0, 200));
+  const notification = await mailFor(OWNER_EMAIL);
+  check("Benachrichtigung zugestellt", notification !== null);
+  check(
+    "Betreff nennt das Kennzeichen",
+    notification?.Subject === `PlateDrop: Nachricht für ${plateNumber}`,
+    notification?.Subject,
+  );
+  check(
+    "Mail nennt nur den Nachrichtentyp",
+    (notification?.Text ?? "").includes("Am Fahrzeug brennt noch Licht."),
+  );
+  const health = await (await fetch(`${APP_URL}/api/health`)).json();
+  check("Healthcheck meldet den Outbox-Rückstand", typeof health.outboxLagSeconds === "number");
 
   // --- Aufräumen ------------------------------------------------------------
   await pool.query("DELETE FROM users WHERE email = ANY($1)", [[OWNER_EMAIL, STRANGER_EMAIL]]);

@@ -90,6 +90,31 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Verschickt Benachrichtigungen aus notification_outbox (scripts/notifier.mjs).
+  # Getrennt von `web`, damit die Antwortzeit des öffentlichen Formulars nicht
+  # verrät, ob hinter einem Kennzeichen ein Konto steht.
+  notifier:
+    build:
+      context: .
+      target: runner
+    command: ["node", "scripts/notifier.mjs"]
+    restart: unless-stopped
+    environment:
+      DATABASE_ADMIN_URL: postgres://${POSTGRES_USER:-platedrop_owner}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/${POSTGRES_DB:-platedrop}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL fehlt}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-PlateDrop <noreply@platedrop.local>}
+      NOTIFIER_POLL_MS: ${NOTIFIER_POLL_MS:-5000}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
   # Optional: `docker compose --profile proxy up`
   proxy:
     image: caddy:2-alpine

@@ -32,7 +32,7 @@ pnpm test:db:down     # Tear the test containers down
 pnpm smoke            # End-to-end HTTP test against a running `docker compose up`
 pnpm db:migrate       # Apply db/migrations/*.sql
 pnpm db:set-admin     # scripts/set-admin.mjs <email> [--revoke], needs DATABASE_ADMIN_URL
-pnpm db:prune         # scripts/maintenance.mjs: prune sessions, stale claims, throttle rows, old messages, orphaned proofs
+pnpm db:prune         # scripts/maintenance.mjs: prune sessions, stale claims, throttle rows, old messages, sent notifications, orphaned proofs
 ```
 
 Run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
@@ -41,7 +41,7 @@ Run the whole stack: `docker compose up -d` (app on :3000, Mailpit on :8025).
 
 ## What PlateDrop Is
 
-**Shadow-Drop**: Anyone can anonymously send a message to any German license plate without an account. Only a registered, plate-verified owner can read messages sent to their plate. This asymmetric privacy model (public write, authenticated read) is the core design constraint — never break it.
+**Shadow-Drop**: Anyone can anonymously send a message to any German license plate without an account — chosen from a fixed catalog, never free text (`src/lib/messages/catalog.json`). Only a registered, plate-verified owner can read messages sent to their plate, and gets an e-mail when one arrives. This asymmetric privacy model (public write, authenticated read) is the core design constraint — never break it.
 
 ## Architecture
 
@@ -96,6 +96,7 @@ Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.m
 - `0009` read window: `app.message_read_since()` and the rewritten `messages_select_if_verified_owner` policy
 - `0010` drops `accounts.issuer` and its unique index (better-auth 1.7.3+ no longer writes it)
 - `0011` claim competition: partial unique indexes instead of `UNIQUE (plate_number)`, statuses `expired`/`superseded`, `is_verified` coupled to the status, column-scoped `UPDATE` grant
+- `0013` message types and notifications: `messages.message_type` (catalog `CHECK`), no anonymous free text, column-scoped `INSERT`, `read_at`, `notification_settings`, `notification_outbox` + `AFTER INSERT` trigger, `app.outbox_lag_seconds()`
 - `0012` receiver controls: `app.can_read_message()` (the single read condition), `messages.hidden_at`, `message_reports`, admins read/delete only reported messages, `verified_plates.paused_until` via `app.set_plate_pause()`
 
 ### Storage
@@ -120,6 +121,8 @@ Exactly three route handlers exist, and all are deliberate exceptions:
 
 **Receiver controls** (migration `0012`): the recipient can hide a message (`UPDATE (hidden_at)` is the only column grant on `messages`) or report it (`message_reports`, reason from `src/lib/messages/reportReasons.ts`). Admins see and may delete **only reported** messages — every other message stays invisible to them. `paused_until` is set exclusively through the `SECURITY DEFINER` function `app.set_plate_pause()`: an UPDATE policy on approved plates would let the owner point `proof_image_url` at someone else's photo. The read condition lives in one SQL function, `app.can_read_message(plate, created_at)`, used by the SELECT and UPDATE policies and the report policy — change it there, not in a policy. `MESSAGE_RETENTION_DAYS` is mandatory; `prune-messages.mjs` fails without it.
 
+**Message types and notifications** (migration `0013`): `src/lib/messages/catalog.json` is the single source for message codes, texts, icons and urgency — the app reads it, `scripts/notifier.mjs` reads it, and the `CHECK` in `0013` lists the same codes (a unit test compares them; `MessageTypeIcon` maps the icon names). Anonymous inserts carry `message_type` only; the policy rejects `message_text`, and the column grant keeps `created_at`/`hidden_at`/`read_at` out of reach. Mail is **never** sent from a Server Action — response time would reveal whether a plate is registered. An `AFTER INSERT` trigger writes `notification_outbox` rows only for approved, unpaused holders with e-mail on (bundled per type within 15 minutes); the `notifier` service sends them with `FOR UPDATE SKIP LOCKED`, quiet hours (Europe/Berlin, urgent types ignore them) and backoff. `/api/health` reports `outboxLagSeconds` but stays `ok`. Web Push is not built yet.
+
 **Read window**: an owner reads messages from 30 days before their claim (`verified_plates.created_at`) onwards, never older ones — plates get reassigned. The boundary lives in one SQL function, `app.message_read_since()` (migration `0009`), used by the `messages` SELECT policy and by `listMessagesForUser` / `exportUserData`.
 
 **Rate limiting**: per sender via a salted, daily-rotating SHA-256 hash of the IP (`check_message_rate`, 10/minute) and per plate via a DB trigger (`enforce_message_rate_limit`, 20/hour). The raw IP is never stored. The client IP is read from `X-Forwarded-For` at position `length - TRUSTED_PROXY_HOPS` (default 1 = the Caddy proxy), never the client-controlled first entry; `TRUSTED_PROXY_HOPS=0` disables header trust.
@@ -134,12 +137,12 @@ Exactly three route handlers exist, and all are deliberate exceptions:
 
 ## Docker
 
-- `docker-compose.yml` — base: `db`, one-shot `migrate`, `web`, optional `proxy` (profile `proxy`)
+- `docker-compose.yml` — base: `db`, one-shot `migrate`, `web`, `notifier`, optional `proxy` (profile `proxy`)
 - `docker-compose.override.yml` — development, loaded automatically: hot reload plus Mailpit
 - `docker-compose.prod.yml` — production: standalone build, database not exposed, plus the one-shot `backup` service (profile `backup`, runs `scripts/backup.sh`)
 - `docker-compose.test.yml` — throwaway Postgres and Mailpit for the integration tests
 
-`web` and `migrate` share one image (the `runner` stage); the standalone output already contains `pg`. The maintenance scripts (`scripts/prune-*.mjs`, `maintenance.mjs`, `set-admin.mjs`) run through `docker compose run --rm migrate node scripts/…`. `web` has a healthcheck against `/api/health`.
+`web`, `migrate` and `notifier` share one image (the `runner` stage); the standalone output already contains `pg`, the Dockerfile adds `nodemailer` and the message catalog for the notifier. The builder stage runs `pnpm build` with placeholder values for the required variables (like CI) because server modules check them on import. The maintenance scripts (`scripts/prune-*.mjs`, `maintenance.mjs`, `set-admin.mjs`) run through `docker compose run --rm migrate node scripts/…`. `web` has a healthcheck against `/api/health`.
 
 Note: since `postgres:18` the data volume mounts at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.
 

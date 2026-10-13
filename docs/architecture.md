@@ -24,6 +24,7 @@ flowchart LR
     Vol[("Volume proofs<br/>Beweisfotos")]
     SMTP["SMTP<br/>Mailpit / Relay"]
     Migrate["migrate<br/>One-shot"]
+    Notifier["notifier<br/>Outbox-Versand"]
 
     Browser -->|HTTPS| Proxy
     Proxy -->|HTTP| Web
@@ -31,6 +32,8 @@ flowchart LR
     Web -->|Dateisystem| Vol
     Web -->|nodemailer| SMTP
     Migrate -->|"Rolle platedrop_owner"| DB
+    Notifier -->|"Rolle platedrop_owner,<br/>notification_outbox"| DB
+    Notifier -->|nodemailer| SMTP
     Migrate -.->|"läuft vor web"| Web
 ```
 
@@ -39,11 +42,13 @@ flowchart LR
 | `db` | PostgreSQL 18. Hält Nutzer, Sitzungen, Kennzeichen, Nachrichten und die Rate-Limit-Fenster. |
 | `migrate` | Läuft einmal vor `web`, legt die App-Rolle an und spielt offene Migrationen ein. Beendet sich danach. |
 | `web` | Die Anwendung. Rendert serverseitig, nimmt Mutationen über Server Actions entgegen. Healthcheck gegen `/api/health`. |
+| `notifier` | Dauerprozess `scripts/notifier.mjs`. Holt fällige Einträge aus `notification_outbox` und verschickt die Benachrichtigungs-Mails (seit `0013`). Getrennt von `web`, damit die Antwortzeit des öffentlichen Formulars nicht verrät, ob hinter einem Kennzeichen ein Konto steht. |
 | `proxy` | Caddy, optional über das Compose-Profil `proxy`. TLS-Terminierung, HSTS, holt Zertifikate selbst. |
 | `backup` | Nur in Produktion, Compose-Profil `backup`. Einmaliger Lauf von `scripts/backup.sh`: Dump plus Foto-Archiv ins Volume `backups`. |
 
-`web` und `migrate` teilen sich dasselbe Image: Der standalone-Build von Next.js enthält bereits
-`pg`, ein zweites Image wäre reiner Ballast. Über `migrate` laufen auch die Wartungsskripte
+`web`, `migrate` und `notifier` teilen sich dasselbe Image: Der standalone-Build von Next.js enthält
+bereits `pg`, ein zweites Image wäre reiner Ballast. Für den Notifier kopiert das Dockerfile
+zusätzlich `nodemailer` (die App bündelt es in ihre Server-Chunks) und den Nachrichtenkatalog. Über `migrate` laufen auch die Wartungsskripte
 (`docker compose run --rm migrate node scripts/…`), weil der Service als Owner verbindet und das
 Foto-Volume eingebunden hat.
 
@@ -157,6 +162,8 @@ erDiagram
     verified_plates }o..o{ messages : "verknuepft ueber plate_number"
     messages ||--o{ message_reports : "gemeldet als"
     users ||--o{ message_reports : "meldet"
+    users ||--o| notification_settings : "stellt ein"
+    messages ||--o{ notification_outbox : "loest aus"
 
     users {
         text id PK
@@ -196,9 +203,24 @@ erDiagram
     messages {
         uuid id PK
         text plate_number
+        text message_type
         text message_text
         timestamptz created_at
         timestamptz hidden_at
+        timestamptz read_at
+    }
+    notification_settings {
+        text user_id PK
+        boolean email_enabled
+        smallint quiet_start
+        smallint quiet_end
+    }
+    notification_outbox {
+        bigint id PK
+        uuid message_id FK
+        text user_id FK
+        integer attempts
+        timestamptz sent_at
     }
     message_reports {
         uuid id PK
@@ -263,6 +285,20 @@ spiegelt damit die Validierung der Server Action auf Datenbankebene. `hidden_at`
 Empfänger beim Ausblenden oder Melden; der Inhalt bleibt bis zur Löschfrist
 (`MESSAGE_RETENTION_DAYS`, Pflicht) erhalten, damit eine Meldung prüfbar bleibt.
 
+Seit `0013` trägt eine Nachricht `message_type` (Code aus
+[`catalog.json`](../src/lib/messages/catalog.json), per CHECK auf dieselbe Liste begrenzt; ein
+Unit-Test gleicht beide ab) und `read_at` (gesetzt, sobald der Empfänger sie im Dashboard sieht).
+`message_text` ist nur noch für Altbestand gefüllt; anonyme Absender schreiben keinen Freitext.
+`messages_has_content` verlangt Typ oder Text.
+
+**`notification_settings`** (`0013`) — je Nutzer E-Mail an/aus und Ruhezeiten (volle Stunden,
+Europe/Berlin). Ohne Zeile gelten die Standards (an, keine Ruhezeit).
+
+**`notification_outbox`** (`0013`) — eine Zeile je fälliger Benachrichtigung: Kennzeichen, Typ,
+Versuche, nächster Versuch, `sent_at`. RLS an, keine Policy, kein Grant für die App-Rolle; nur der
+Trigger und der Notifier (als Owner) kommen heran. `prune-outbox.mjs` löscht erledigte Einträge
+nach 30 Tagen.
+
 **`message_reports`** (`0012`) — Meldungen von Empfängern an den Betreiber (Melde- und
 Abhilfeverfahren nach DSA). Eine Meldung je Nachricht und Melder; Grund aus einer festen Liste
 (`src/lib/messages/reportReasons.ts`). Fällt mit der Nachricht per Kaskade weg.
@@ -320,9 +356,9 @@ Policy unerreichbar; vorher hätte ein Halter sein offenes Kennzeichen per UPDAT
 
 | Policy | Wirkung |
 | --- | --- |
-| `messages_insert_public` | `WITH CHECK (true)` — jede Person darf schreiben, ohne Konto, ohne Login. Der Kern der App. |
+| `messages_insert_public` | Jede Person darf schreiben, ohne Konto, ohne Login – der Kern der App. Seit `0013` nur ohne Freitext (`message_text IS NULL`). Der Grant erlaubt nur `INSERT (plate_number, message_type, message_text)`; Zeitpunkt, `hidden_at` und `read_at` setzt die Datenbank, sonst ließe sich das Stundenlimit je Kennzeichen mit einem rückdatierten `created_at` umgehen. |
 | `messages_select_if_verified_owner` | Lesen nur, wenn `app.can_read_message(plate_number, created_at)` gilt: eine Zeile in `verified_plates` gehört dem Anfragenden, lautet auf dasselbe Kennzeichen, trägt `is_verified = true`, **und** die Nachricht ist frühestens 30 Tage vor dem Anspruch eingegangen (`app.message_read_since(vp.created_at)`, Migration 0009). Kennzeichen werden neu vergeben; ein neuer Halter soll nicht lesen, was an den Vorbesitzer ging. Die Bedingung steht seit `0012` an genau einer Stelle (die Funktion); `listMessagesForUser` und `exportUserData` filtern zusätzlich mit derselben Grenze. |
-| `messages_update_hide_own` | Ändern nur durch den Empfänger (dieselbe Funktion). Der Grant erlaubt ausschließlich `UPDATE (hidden_at)`; Text, Kennzeichen und Zeitpunkt bleiben unveränderlich. |
+| `messages_update_hide_own` | Ändern nur durch den Empfänger (dieselbe Funktion). Der Grant erlaubt ausschließlich `UPDATE (hidden_at, read_at)`; Text, Typ, Kennzeichen und Zeitpunkt bleiben unveränderlich. |
 | `messages_select_reported_admin` | Ein Admin liest eine Nachricht nur, wenn sie gemeldet wurde. Alle übrigen bleiben auch für ihn unsichtbar. |
 | `messages_delete_reported_admin` | Löschen nur durch einen Admin und nur gemeldete Nachrichten. Empfänger und Absender können nicht löschen. |
 
@@ -471,12 +507,12 @@ sequenceDiagram
     participant Q as queries.ts
     participant DB as PostgreSQL
 
-    B->>A: Kennzeichen + Text
+    B->>A: Kennzeichen + Nachrichtentyp
     A->>A: parsePlate()
     alt ungueltig oder mehrdeutig
         A-->>B: Hinweis, z. B. Ortskuerzel abtrennen
     else kanonisch, z. B. KA-AB-1234
-        A->>A: Text pruefen (1..500 Zeichen)
+        A->>A: Typ gegen den Katalog pruefen (kein Freitext)
         A->>A: IP salzen und hashen
         A->>Q: checkMessageRate(hash)
         Q->>DB: check_message_rate()
@@ -491,11 +527,46 @@ sequenceDiagram
                 DB-->>Q: check_violation
                 A-->>B: Zu viele Anfragen
             else gespeichert
+                DB->>DB: AFTER-INSERT-Trigger legt Outbox-Zeile an (nur fuer freigegebene Halter)
                 A-->>B: Erfolg
             end
         end
     end
 ```
+
+Die Antwort ist für registrierte und unregistrierte Kennzeichen gleich schnell: Der Trigger legt nur
+eine Zeile an, verschickt wird außerhalb des Requests.
+
+### Benachrichtigung verschicken
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant N as notifier
+    participant DB as PostgreSQL
+    participant S as SMTP
+
+    loop alle NOTIFIER_POLL_MS (5 s)
+        N->>DB: faellige Outbox-Zeilen, FOR UPDATE SKIP LOCKED, max. 20
+        alt E-Mail inzwischen abgeschaltet
+            N->>DB: als erledigt markieren
+        else Ruhezeit und Typ nicht dringlich
+            N->>DB: next_attempt_at = Ende der Ruhezeit
+        else senden
+            N->>S: Mail mit Typ und Kennzeichen, Link zum Dashboard
+            alt zugestellt
+                N->>DB: sent_at = now()
+            else Fehler
+                N->>DB: attempts + 1, Backoff 30 s bis 1 h, nach 10 Versuchen aufgegeben
+            end
+        end
+    end
+```
+
+Der Trigger `app.enqueue_notifications()` legt eine Zeile nur an, wenn ein freigegebener Halter
+existiert, das Kennzeichen nicht pausiert ist, der Halter E-Mails nicht abgeschaltet hat und für
+denselben Halter, dasselbe Kennzeichen und denselben Typ in den letzten 15 Minuten keine Zeile
+entstanden ist (Bündeln). Dringliche Typen (`urgent` im Katalog) ignorieren Ruhezeiten.
 
 ### Kennzeichen verifizieren
 
@@ -659,6 +730,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0010_auth_account_issuer.sql` | Entfernt `accounts.issuer` samt Unique-Index; better-auth schreibt die Spalte ab 1.7.3 nicht mehr |
 | `0011_claim_competition.sql` | Nur der freigegebene Claim ist eindeutig, Status `expired`/`superseded`, `is_verified` an den Status gekoppelt, spaltenscharfes `UPDATE` auf `verified_plates` |
 | `0012_receiver_controls.sql` | `app.can_read_message()`, Ausblenden (`hidden_at`), `message_reports`, Admin liest/löscht nur Gemeldetes, `paused_until` mit `app.set_plate_pause()` |
+| `0013_message_types_and_notifications.sql` | `message_type` mit Katalog-CHECK, kein anonymer Freitext, spaltenscharfes INSERT, `read_at`, `notification_settings`, `notification_outbox` mit Trigger, `app.outbox_lag_seconds()` |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -711,7 +783,10 @@ Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
   Fehlern `error` und `stack`), in der Entwicklung lesbarer Text. Ein externer Fehlerdienst ist
   nicht angebunden; er ließe sich hier an einer Stelle andocken.
 - **Healthcheck.** `/api/health` prüft die Datenbankverbindung; der `web`-Container meldet darüber
-  seinen Zustand an Docker.
+  seinen Zustand an Docker. Zusätzlich liefert es `outboxLagSeconds`, das Alter der ältesten
+  fälligen Benachrichtigung (über `app.outbox_lag_seconds()`, die Outbox selbst bleibt gesperrt).
+  Ab 300 Sekunden schreibt es eine Log-Warnung; der Status bleibt `ok`, damit ein hängender
+  Notifier nicht den `web`-Container neu starten lässt.
 - **Datenpflege und Sicherung.** `scripts/maintenance.mjs` bündelt die Prune-Skripte (abgelaufene
   Sitzungen, verfallene Claims ohne Foto, alte Rate-Limit-Zeilen, Nachrichten nach `MESSAGE_RETENTION_DAYS`, verwaiste Fotos),
   `scripts/backup.sh` sichert Datenbank und Fotos. Beide sind für Cron gedacht; Einrichtung und

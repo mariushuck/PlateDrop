@@ -32,6 +32,19 @@ services:
       mailpit:
         condition: service_started
 
+  notifier:
+    build:
+      target: dev
+    environment:
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      mailpit:
+        condition: service_started
+
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped

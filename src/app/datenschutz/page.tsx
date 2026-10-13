@@ -82,8 +82,9 @@ export default function Datenschutz() {
               3. Anonyme Nachrichten
             </h2>
             <p className="mb-2">
-              <strong>Gespeicherte Daten:</strong> das normalisierte Kennzeichen, der
-              Nachrichtentext (1–500 Zeichen) und der Zeitpunkt der Einreichung. Es wird{" "}
+              <strong>Gespeicherte Daten:</strong> das normalisierte Kennzeichen, die gewählte
+              vordefinierte Nachricht (z. B. „Licht ist an“) und der Zeitpunkt der Einreichung.
+              Freitext können anonyme Absender nicht eingeben. Es wird{" "}
               <strong>kein Absenderkennzeichen</strong> gespeichert – weder Name noch Konto noch
               IP-Adresse.
             </p>
@@ -168,9 +169,13 @@ export default function Datenschutz() {
             <p className="mb-2">
               Zur Bestätigung der E-Mail-Adresse, für die Passwort-Zurücksetzung und für die
               Bestätigung einer E-Mail-Änderung versendet PlateDrop E-Mails an die Adresse der
-              jeweiligen Nutzer:in. Der Versand läuft über einen vom Betreiber konfigurierten
-              SMTP-Dienst ({PLACEHOLDER} – Anbieter im Auftragsverarbeitungs- vertrag). Übermittelt
-              werden Empfängeradresse und E-Mail-Inhalt.
+              jeweiligen Nutzer:in. Verifizierte Halter:innen erhalten außerdem eine
+              Benachrichtigung, wenn eine Nachricht an ihr Kennzeichen eingeht; sie nennt nur die
+              Art der Nachricht und das Kennzeichen. Benachrichtigungen lassen sich in den
+              Kontoeinstellungen abschalten, mit Ruhezeiten versehen oder je Kennzeichen pausieren.
+              Der Versand läuft über einen vom Betreiber konfigurierten SMTP-Dienst ({PLACEHOLDER} –
+              Anbieter im Auftragsverarbeitungs- vertrag). Übermittelt werden Empfängeradresse und
+              E-Mail-Inhalt.
             </p>
             <p>
               <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. b und lit. f DSGVO.
@@ -230,6 +235,11 @@ export default function Datenschutz() {
                 werden sie durch eine regelmäßige Bereinigung gelöscht. Ausgeblendete Nachrichten
                 bleiben bis dahin gespeichert, damit eine Meldung noch geprüft werden kann. Der
                 Betreiber kann eine gemeldete Nachricht früher löschen.
+              </li>
+              <li>
+                <strong>Benachrichtigungen:</strong> der Versandauftrag (Konto, Kennzeichen, Art der
+                Nachricht, Zeitpunkt) wird 30 Tage nach dem Versand gelöscht, die Einstellungen mit
+                dem Konto.
               </li>
               <li>
                 <strong>Meldungen:</strong> zusammen mit der gemeldeten Nachricht, also ebenfalls

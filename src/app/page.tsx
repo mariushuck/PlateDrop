@@ -3,15 +3,14 @@
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { MESSAGE_TYPES } from "@/lib/messages/catalog";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { dropMessage } from "./actions";
-
-const MAX_MESSAGE_LENGTH = 500;
 
 export default function Home() {
   const [state, formAction, isPending] = useActionState(dropMessage, null);
   const [plateInput, setPlateInput] = useState("");
-  const [messageInput, setMessageInput] = useState("");
+  const [messageType, setMessageType] = useState("");
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -26,7 +25,7 @@ export default function Home() {
       toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
         setPlateInput("");
-        setMessageInput("");
+        setMessageType("");
         formRef.current?.reset();
       });
     } else if (state?.error) {
@@ -34,11 +33,7 @@ export default function Home() {
     }
   }, [state]);
 
-  const isFormValid =
-    plateInput.trim() &&
-    !plateError &&
-    messageInput.trim() &&
-    messageInput.length <= MAX_MESSAGE_LENGTH;
+  const isFormValid = plateInput.trim() && !plateError && messageType;
 
   return (
     <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
@@ -96,43 +91,47 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Message Textarea */}
-          <div className="flex flex-1 flex-col gap-2">
-            <div className="flex items-center justify-between gap-4">
-              <label
-                htmlFor="messageText"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
-                Nachricht
-              </label>
-
-              <span
-                className={`text-xs font-medium ${
-                  messageInput.length > MAX_MESSAGE_LENGTH
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-slate-500 dark:text-slate-400"
-                }`}
-              >
-                {messageInput.length} / {MAX_MESSAGE_LENGTH}
-              </span>
+          {/* Message Type Selection */}
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-semibold text-slate-900 dark:text-white">
+              Was ist los?
+            </legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {MESSAGE_TYPES.map((type) => (
+                <label
+                  key={type.code}
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
+                    messageType === type.code
+                      ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                      : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="messageType"
+                    value={type.code}
+                    checked={messageType === type.code}
+                    onChange={() => setMessageType(type.code)}
+                    disabled={isPending}
+                    className="sr-only"
+                  />
+                  {type.label}
+                </label>
+              ))}
             </div>
+          </fieldset>
 
-            <textarea
-              id="messageText"
-              name="messageText"
-              placeholder="Schreibe deine anonyme Nachricht hier..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              disabled={isPending}
-              maxLength={MAX_MESSAGE_LENGTH}
-              rows={6}
-              className="w-full flex-1 rounded-lg border-2 border-slate-300 bg-white p-4 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
-            />
-
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Bleibe respektvoll und konstruktiv
-            </p>
-          </div>
+          <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-100">
+            Tier oder Kind im heißen oder kalten Auto, Unfall oder Gefahr? Bitte sofort{" "}
+            <a href="tel:110" className="font-semibold underline">
+              110
+            </a>{" "}
+            oder{" "}
+            <a href="tel:112" className="font-semibold underline">
+              112
+            </a>{" "}
+            anrufen. PlateDrop ist kein Notrufkanal.
+          </p>
 
           {/* Error Display */}
           {state?.error && (

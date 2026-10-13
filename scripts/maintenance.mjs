@@ -19,6 +19,7 @@ const STEPS = [
   ["prune-claims.mjs", []],
   ["prune-throttle.mjs", []],
   ["prune-messages.mjs", []],
+  ["prune-outbox.mjs", []],
   ["prune-proofs.mjs", ["--delete"]],
 ];
 

@@ -52,6 +52,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Ein eigenes Migrations-Image wäre reiner Ballast.
 COPY --chown=nextjs:nodejs scripts ./scripts
 COPY --chown=nextjs:nodejs db/migrations ./db/migrations
+# Der Notifier liest die Texte der Nachrichtentypen aus derselben Datei wie die App.
+COPY --chown=nextjs:nodejs src/lib/messages/catalog.json ./src/lib/messages/catalog.json
+# ... und braucht nodemailer als Modul. Die App bündelt es in ihre Server-Chunks,
+# im standalone-Output fehlt es deshalb; es hat keine eigenen Abhängigkeiten.
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.pnpm/nodemailer@*/node_modules/nodemailer ./node_modules/nodemailer
 
 # Mount-Point für das proofs-Volume; muss dem Runtime-User gehören.
 RUN mkdir -p /data/proofs && chown -R nextjs:nodejs /data

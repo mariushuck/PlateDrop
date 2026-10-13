@@ -5,16 +5,20 @@ Kennzeichen gesendet werden. Lesen dürfen sie nur angemeldete Nutzer, die das j
 verifiziert haben.
 
 Die Anwendung läuft vollständig selbst betrieben — eigener Postgres, eigene Auth, eigener
-Dateispeicher, eigener Mailversand, je ein Container und ein optionaler Reverse Proxy.
+Dateispeicher, eigener Mailversand samt Benachrichtigungsdienst, je ein Container und ein
+optionaler Reverse Proxy.
 
 ## Kernidee
 
 PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 
 1. Öffentlich kann jede Person eine Nachricht an ein Kennzeichen senden, ohne Konto und ohne Login.
+   Gewählt wird aus festen Nachrichten („Licht ist an“, „Blockiert Ausfahrt“ …), Freitext gibt es
+   für anonyme Absender nicht.
 2. Beim Speichern wird das Kennzeichen normalisiert, damit Leerzeichen, Bindestriche und
    Kleinbuchstaben konsistent verarbeitet werden.
-3. Lesen ist nur nach Anmeldung und Kennzeichen-Verifizierung möglich.
+3. Lesen ist nur nach Anmeldung und Kennzeichen-Verifizierung möglich. Der verifizierte Halter
+   bekommt eine E-Mail, sobald eine Nachricht eintrifft; er kann sie ausblenden oder melden.
 4. Ein Admin prüft die Verifizierungen und gibt sie frei oder lehnt sie ab.
 
 Diese Asymmetrie ist die zentrale Entwurfsvorgabe. Wie sie durchgesetzt wird, steht in der
@@ -36,7 +40,9 @@ docker compose up -d
 - Postfach (Mailpit): <http://localhost:8025> — hier landen in der Entwicklung alle E-Mails
 - Postgres: `localhost:5432`
 
-Die Migrationen spielt der One-shot-Service `migrate` vor dem Start der App ein.
+Die Migrationen spielt der One-shot-Service `migrate` vor dem Start der App ein. Der Service
+`notifier` verschickt die Benachrichtigungs-Mails; in der Entwicklung landen sie ebenfalls in
+Mailpit. Nach Änderungen an `scripts/notifier.mjs` `docker compose restart notifier`.
 
 **Nach einer Änderung an den Abhängigkeiten** (`package.json`, `pnpm-lock.yaml`) mit
 `docker compose up -d --build --renew-anon-volumes` starten. Der Dev-Container hält `node_modules`

@@ -6,9 +6,11 @@ import {
   claimPlate as claimPlateQuery,
   deletePlate,
   hideMessage,
+  markMessagesRead,
   PlateAlreadyClaimedError,
   plateBelongsToUser,
   reportMessage,
+  setPlatePause,
   setProofPath,
   TooManyOpenClaimsError,
 } from "@/lib/db/queries";
@@ -87,6 +89,42 @@ export async function reportMessageAction(
   } catch (err) {
     logger.error("Fehler beim Melden der Nachricht:", err);
     return { success: false, error: "Fehler beim Melden der Nachricht." };
+  }
+}
+
+/** Markiert angezeigte Nachrichten als gelesen. Fehler sind hier nur ein Logeintrag wert. */
+export async function markMessagesReadAction(messageIds: string[]): Promise<void> {
+  const user = await requireUser();
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+  try {
+    await markMessagesRead(user.id, messageIds.slice(0, 200));
+  } catch (err) {
+    logger.error("Fehler beim Markieren als gelesen:", err);
+  }
+}
+
+/** Erlaubte Pausen in Stunden; `null` hebt die Pause auf. */
+const PAUSE_HOURS = [1, 8, 24, 168];
+
+/** Pausiert die Benachrichtigungen für ein eigenes Kennzeichen. */
+export async function setPlatePauseAction(
+  plateId: string,
+  hours: number | null,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  if (hours !== null && !PAUSE_HOURS.includes(hours)) {
+    return { success: false, error: "Ungültige Dauer." };
+  }
+  try {
+    const until = hours === null ? null : new Date(Date.now() + hours * 3_600_000);
+    if (!(await setPlatePause(user.id, plateId, until))) {
+      return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Pausieren:", err);
+    return { success: false, error: "Fehler beim Pausieren." };
   }
 }
 

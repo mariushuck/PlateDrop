@@ -149,37 +149,23 @@ Migrationen `0011` (Claim-Konkurrenz) und `0012` (Ausblenden, Melden, Pausieren)
 [docs/architecture.md](docs/architecture.md). Offen ist nur die Oberfläche fürs Pausieren: Sie kommt
 mit den Benachrichtigungen in Phase B, weil die Pause nur dort wirkt.
 
-### Phase B — Nachrichtentypen und Benachrichtigung ([strategy.md §2](docs/strategy.md#2-hebel-2--vordefinierte-nachrichten-und-benachrichtigung))
+### Phase B — Nachrichtentypen und Benachrichtigung: E-Mail erledigt (2026-10-13)
 
-- [ ] **Migration `0013`**: `messages.message_type` mit Katalog-`CHECK`, `message_text` nullable,
-  `messages_has_content`; Tabellen `push_subscriptions` und `notification_outbox`; `AFTER INSERT`-
-  Trigger, der nur für freigegebene, nicht pausierte Halter eine Outbox-Zeile anlegt (gleiche
-  Antwortzeit für registrierte und unregistrierte Kennzeichen).
-- [ ] **Katalog** in `src/lib/messages/catalog.ts` plus Unit-Test, der Katalog und Migration
-  abgleicht.
-- [ ] **Formular umstellen**: `src/app/page.tsx` / `dropMessage` nehmen `messageType` statt
-  Freitext; kein Freitext mehr für anonyme Absender; Hinweis auf 110/112 bei Notfällen mit Tier oder
-  Kind.
-- [ ] **Dashboard**: Typ-Text und Symbol, `read_at` beim Öffnen, Ausblenden/Melden aus Phase A.
-- [ ] **Notifier-Service**: `scripts/notifier.mjs` als Compose-Service aus dem `runner`-Image;
-  `SELECT … FOR UPDATE SKIP LOCKED`, `LISTEN/NOTIFY` plus Polling, Backoff, Push-Endpunkte bei
-  404/410 löschen; Test gegen Mailpit.
-- [ ] **E-Mail-Vorlage** in `src/lib/email/templates.ts` (nur Typ und Kennzeichen, kein weiterer
-  Inhalt).
-- [ ] **Web Push**: `public/sw.js`, `src/app/manifest.ts`, Paket `web-push`, VAPID-Variablen in
-  `.env.example` und Compose, CSP um `worker-src 'self'`.
-- [ ] **Einstellungen** unter `/dashboard/settings`: Kanäle, Ruhezeiten (dringliche Typen
-  ignorieren sie), Push-Freigabe; Unit-Test für die Ruhezeiten-Logik. Dazu die Oberfläche fürs
-  Pausieren je Kennzeichen (`setPlatePause`, Funktion seit `0012`).
-- [ ] **Bündeln**: höchstens eine Benachrichtigung pro Typ und Viertelstunde.
-- [ ] **Monitoring**: Alter des ältesten offenen Outbox-Eintrags in `/api/health`, Log-Warnung ab
-  fünf Minuten.
-- [ ] **Datenschutzerklärung**: Push-Dienste der Browserhersteller, Speicherdauer der Abos.
+Migration `0013`, Katalog, Formular, Dashboard, Outbox, Notifier, Einstellungen, Ruhezeiten,
+Bündeln, Pausieren und Monitoring in `/api/health` sind gebaut ([architecture.md](docs/architecture.md)).
+Offen ist nur Web Push, bewusst später:
+
+- [ ] **Web Push**: Tabelle `push_subscriptions`, `public/sw.js`, `src/app/manifest.ts`, Paket
+  `web-push`, VAPID-Variablen in `.env.example` und Compose, CSP um `worker-src 'self'`; Notifier
+  schickt zusätzlich Push und löscht Endpunkte bei 404/410; Push-Freigabe unter
+  `/dashboard/settings`; Datenschutzerklärung (Push-Dienste der Browserhersteller, Speicherdauer
+  der Abos). Auf iPhones nur als Home-Bildschirm-App – Onboarding muss das erklären.
 
 ### Phase E — Mandanten-MVP für Privatgelände ([strategy.md §3](docs/strategy.md#3-hebel-3--b2b-nische-statt-massenmarkt), [go-to-market.md](docs/go-to-market.md))
 
-Erst bauen, wenn die Gespräche aus go-to-market.md Phase 0 ein Go ergeben haben. Alles generisch für
-jedes Gelände; Segmente unterscheiden sich nur in Einstellungen, nicht im Code.
+Wird technisch vorbereitet, ohne die Gespräche aus go-to-market.md Phase 0 abzuwarten
+(Entscheidung 2026-10-13). Alles generisch für jedes Gelände; Segmente unterscheiden sich nur in
+Einstellungen, nicht im Code.
 
 - [ ] **Token- und QR-Technik** (aus Hebel 1, hier zuerst gebraucht): `src/lib/tags/token.ts`
   (`crypto.randomBytes(16)`, base64url), QR serverseitig als SVG, Fehlerkorrektur M/Q.

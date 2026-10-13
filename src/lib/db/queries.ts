@@ -1,6 +1,12 @@
 import "server-only";
 import { withAnon, withUser } from "./context";
-import type { Message, OpenReport, PendingVerification, VerifiedPlate } from "./types";
+import type {
+  Message,
+  NotificationSettings,
+  OpenReport,
+  PendingVerification,
+  VerifiedPlate,
+} from "./types";
 
 /** SQLSTATE 23505 – unique_violation. */
 const UNIQUE_VIOLATION = "23505";
@@ -52,17 +58,18 @@ function constraintName(error: unknown): string | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Speichert eine anonyme Nachricht. Das Kennzeichen muss bereits normalisiert
- * sein (siehe src/lib/utils/plateUtils.ts).
+ * Speichert eine anonyme Nachricht aus dem Katalog (src/lib/messages/catalog.ts).
+ * Das Kennzeichen muss bereits normalisiert sein (src/lib/utils/plateUtils.ts).
+ * Freitext gibt es für anonyme Absender nicht (Policy, 0013).
  *
  * @throws {PlateRateLimitError} wenn der Stunden-Deckel des Kennzeichens greift.
  */
-export async function insertMessage(plateNumber: string, messageText: string): Promise<void> {
+export async function insertMessage(plateNumber: string, messageType: string): Promise<void> {
   try {
     await withAnon((client) =>
-      client.query("INSERT INTO messages (plate_number, message_text) VALUES ($1, $2)", [
+      client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
         plateNumber,
-        messageText,
+        messageType,
       ]),
     );
   } catch (error) {
@@ -114,7 +121,7 @@ export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
 export function listMessagesForUser(userId: string): Promise<Message[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<Message>(
-      `SELECT m.id, m.plate_number, m.message_text, m.created_at
+      `SELECT m.id, m.plate_number, m.message_type, m.message_text, m.created_at, m.read_at
          FROM messages m
          JOIN verified_plates vp ON vp.plate_number = m.plate_number
         WHERE vp.user_id = $1
@@ -236,6 +243,67 @@ export function reportMessage(userId: string, messageId: string, reason: string)
 }
 
 /**
+ * Markiert Nachrichten als gelesen, sobald der Empfänger sie gesehen hat
+ * (Messgröße „Zeit bis zur Reaktion"). Bereits gelesene bleiben unverändert.
+ */
+export function markMessagesRead(userId: string, messageIds: string[]): Promise<void> {
+  return withUser(userId, async (client) => {
+    await client.query(
+      `UPDATE messages m SET read_at = now()
+        WHERE m.id = ANY($1::uuid[]) AND m.read_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM verified_plates vp
+             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
+               AND m.created_at >= app.message_read_since(vp.created_at)
+          )`,
+      [messageIds, userId],
+    );
+  });
+}
+
+/** Benachrichtigungs-Einstellungen; ohne gespeicherte Zeile gelten die Standards. */
+export function getNotificationSettings(userId: string): Promise<NotificationSettings> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<NotificationSettings>(
+      `SELECT email_enabled, quiet_start, quiet_end
+         FROM notification_settings WHERE user_id = $1`,
+      [userId],
+    );
+    return rows[0] ?? { email_enabled: true, quiet_start: null, quiet_end: null };
+  });
+}
+
+export function saveNotificationSettings(
+  userId: string,
+  settings: NotificationSettings,
+): Promise<void> {
+  return withUser(userId, async (client) => {
+    await client.query(
+      `INSERT INTO notification_settings (user_id, email_enabled, quiet_start, quiet_end)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id) DO UPDATE
+         SET email_enabled = EXCLUDED.email_enabled,
+             quiet_start = EXCLUDED.quiet_start,
+             quiet_end = EXCLUDED.quiet_end,
+             updated_at = now()`,
+      [userId, settings.email_enabled, settings.quiet_start, settings.quiet_end],
+    );
+  });
+}
+
+/**
+ * Alter des ältesten fälligen, noch nicht versendeten Outbox-Eintrags in
+ * Sekunden – für den Healthcheck. Die Outbox selbst bleibt für die App-Rolle
+ * gesperrt; die Funktion gibt nur diese Zahl heraus.
+ */
+export function outboxLagSeconds(): Promise<number> {
+  return withAnon(async (client) => {
+    const { rows } = await client.query<{ lag: number }>("SELECT app.outbox_lag_seconds() AS lag");
+    return Number(rows[0].lag);
+  });
+}
+
+/**
  * Pausiert die Benachrichtigungen für ein eigenes Kennzeichen bis `until`
  * (`null` hebt die Pause auf). Läuft über `app.set_plate_pause`, die nur die
  * eigene Zeile und nur diese Spalte ändert (0012).
@@ -261,7 +329,12 @@ export interface UserDataExport {
     is_verified: boolean;
     created_at: Date;
   }>;
-  messages: Array<{ plate_number: string; message_text: string; created_at: Date }>;
+  messages: Array<{
+    plate_number: string;
+    message_type: string | null;
+    message_text: string | null;
+    created_at: Date;
+  }>;
 }
 
 /**
@@ -280,7 +353,7 @@ export function exportUserData(userId: string): Promise<UserDataExport> {
       [userId],
     );
     const messages = await client.query<UserDataExport["messages"][number]>(
-      `SELECT m.plate_number, m.message_text, m.created_at
+      `SELECT m.plate_number, m.message_type, m.message_text, m.created_at
          FROM messages m
          JOIN verified_plates vp ON vp.plate_number = m.plate_number
         WHERE vp.user_id = $1
@@ -430,7 +503,7 @@ export function listPendingVerifications(userId: string): Promise<PendingVerific
 export function listOpenReports(userId: string): Promise<OpenReport[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<OpenReport>(
-      `SELECT r.id, r.reason, r.created_at, m.id AS message_id, m.plate_number, m.message_text,
+      `SELECT r.id, r.reason, r.created_at, m.id AS message_id, m.plate_number, m.message_type, m.message_text,
               m.created_at AS message_created_at
          FROM message_reports r
          JOIN messages m ON m.id = r.message_id
