@@ -8,6 +8,7 @@ import {
   PlateAlreadyClaimedError,
   plateBelongsToUser,
   setProofPath,
+  TooManyOpenClaimsError,
 } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
 import { deleteProof, saveProof, UnsupportedProofTypeError } from "@/lib/storage/proofs";
@@ -40,8 +41,8 @@ export async function claimPlate(
     revalidatePath("/dashboard");
     return { success: true };
   } catch (err) {
-    if (err instanceof PlateAlreadyClaimedError) {
-      return { success: false, error: "Dieses Kennzeichen ist bereits registriert." };
+    if (err instanceof PlateAlreadyClaimedError || err instanceof TooManyOpenClaimsError) {
+      return { success: false, error: err.message };
     }
     logger.error("Fehler beim Registrieren des Kennzeichens:", err);
     return { success: false, error: "Fehler beim Registrieren des Kennzeichens." };

@@ -90,6 +90,34 @@ describe("RLS: messages", () => {
     expect(visible.rows).toHaveLength(0);
   });
 
+  // Halterwechsel: der abgelöste Halter verliert den Zugriff sofort, der neue
+  // liest ab 30 Tage vor seinem eigenen Anspruch.
+  it("übergibt das Lesen beim Halterwechsel vom alten an den neuen Halter", async () => {
+    const previous = await seedUser("user-previous", "previous@example.com");
+    const next = await seedUser("user-next", "next@example.com");
+    await seedPlate(previous, "KA-AB-1234", {
+      status: "superseded",
+      createdAt: daysAgo(400),
+    });
+    await seedPlate(next, "KA-AB-1234", {
+      verified: true,
+      status: "approved",
+      createdAt: daysAgo(5),
+    });
+    await seedMessage("KA-AB-1234", "an den Vorbesitzer", daysAgo(100));
+    await seedMessage("KA-AB-1234", "an den neuen Halter", daysAgo(1));
+
+    const readPrevious = await asUser(previous, (client) =>
+      client.query("SELECT message_text FROM messages"),
+    );
+    const readNext = await asUser(next, (client) =>
+      client.query<{ message_text: string }>("SELECT message_text FROM messages"),
+    );
+
+    expect(readPrevious.rows).toHaveLength(0);
+    expect(readNext.rows).toEqual([{ message_text: "an den neuen Halter" }]);
+  });
+
   it("lässt anonym nur Kennzeichen in kanonischer Form schreiben", async () => {
     // Im Kompaktformat wären K-AB-1234 und KA-B-1234 derselbe Wert.
     await expect(
@@ -291,6 +319,59 @@ describe("RLS: verified_plates", () => {
       client.query<{ is_verified: boolean }>("SELECT is_verified FROM verified_plates"),
     );
     expect(stored.rows).toEqual([{ is_verified: true }]);
+  });
+
+  it("lässt den Halter das Kennzeichen seines Claims nicht umschreiben", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const plateId = await seedPlate(owner, "KA-AB-1234");
+
+    await expect(
+      asUser(owner, (client) =>
+        client.query("UPDATE verified_plates SET plate_number = 'M-XY-9999' WHERE id = $1", [
+          plateId,
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("koppelt is_verified fest an den Status approved", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    const plateId = await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+
+    await expect(
+      asUser(admin, (client) =>
+        client.query(
+          "UPDATE verified_plates SET verification_status = 'superseded' WHERE id = $1",
+          [plateId],
+        ),
+      ),
+    ).rejects.toThrow(/check constraint/i);
+  });
+
+  it("erlaubt mehrere offene Claims auf ein Kennzeichen, aber nur einen freigegebenen", async () => {
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+
+    await asUser(stranger, (client) =>
+      client.query(
+        `INSERT INTO verified_plates (user_id, plate_number, is_verified, verification_status)
+         VALUES ($1, 'KA-AB-1234', false, 'pending')`,
+        [stranger],
+      ),
+    );
+
+    await expect(
+      asUser(admin, (client) =>
+        client.query(
+          `UPDATE verified_plates SET is_verified = true, verification_status = 'approved'
+            WHERE user_id = $1`,
+          [stranger],
+        ),
+      ),
+    ).rejects.toThrow(/verified_plates_one_approved/);
   });
 
   // Geschützt doppelt: DELETE mit WHERE sieht nur Zeilen, die auch

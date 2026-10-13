@@ -38,6 +38,10 @@ export default async function DashboardPage() {
       !p.is_verified &&
       (p.verification_status === "pending" || p.verification_status === "rejected"),
   );
+  // Verfallen (ohne Foto nach 7 Tagen) oder durch einen neuen Halter abgelöst.
+  const endedPlates = allPlates.filter(
+    (p) => p.verification_status === "expired" || p.verification_status === "superseded",
+  );
   const totalApprovedMessages = messages.length;
 
   const hasNoContent = allPlates.length === 0 && messages.length === 0;
@@ -124,6 +128,27 @@ export default async function DashboardPage() {
                 ) : (
                   <ProofUploadForm plateId={plate.id} />
                 )}
+                <RemovePlateButton plateId={plate.id} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {endedPlates.length > 0 && (
+        <section className="mb-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-white">Beendet</h2>
+          <div className="space-y-4">
+            {endedPlates.map((plate) => (
+              <div key={plate.id}>
+                <div className="mb-2 inline-block rounded-lg border-2 border-slate-400 bg-slate-100 px-3 py-2 font-mono font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                  {plate.plate_number}
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {plate.verification_status === "superseded"
+                    ? "Eine andere Person wurde für dieses Kennzeichen bestätigt. Fährst du das Fahrzeug weiterhin, beanspruche es oben erneut."
+                    : "Ohne Foto nach 7 Tagen verfallen. Du kannst es oben erneut beanspruchen."}
+                </p>
                 <RemovePlateButton plateId={plate.id} />
               </div>
             ))}

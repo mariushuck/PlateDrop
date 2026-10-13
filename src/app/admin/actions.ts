@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/session";
 import { setPlateVerification } from "@/lib/db/queries";
+import { sendMail } from "@/lib/email/mailer";
+import { plateSupersededEmail } from "@/lib/email/templates";
+import { requireEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 const NOT_ALLOWED = "Sie haben keine Berechtigung für diese Aktion.";
@@ -28,10 +31,24 @@ async function setVerification(
   }
 
   try {
-    const changed = await setPlateVerification(user.id, plateId, approved);
+    const { changed, plateNumber, supersededEmails } = await setPlateVerification(
+      user.id,
+      plateId,
+      approved,
+    );
 
     if (!changed) {
       return { success: false, error: "Kennzeichen nicht gefunden." };
+    }
+
+    // Erst nach dem Commit: die Freigabe gilt, auch wenn eine Mail scheitert.
+    if (plateNumber) {
+      const mail = plateSupersededEmail(plateNumber, `${requireEnv("BETTER_AUTH_URL")}/dashboard`);
+      for (const to of supersededEmails) {
+        await sendMail({ to, ...mail }).catch((err: unknown) =>
+          logger.error("Mail an abgelösten Halter fehlgeschlagen:", err),
+        );
+      }
     }
 
     revalidatePath("/admin");

@@ -32,7 +32,7 @@ pnpm test:db:down     # Tear the test containers down
 pnpm smoke            # End-to-end HTTP test against a running `docker compose up`
 pnpm db:migrate       # Apply db/migrations/*.sql
 pnpm db:set-admin     # scripts/set-admin.mjs <email> [--revoke], needs DATABASE_ADMIN_URL
-pnpm db:prune         # scripts/maintenance.mjs: prune sessions, throttle rows, old messages, orphaned proofs
+pnpm db:prune         # scripts/maintenance.mjs: prune sessions, stale claims, throttle rows, old messages, orphaned proofs
 ```
 
 Run a single test file: `pnpm exec jest __tests__/utils/plateUtils.test.ts`
@@ -95,12 +95,15 @@ Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.m
 - `0008` canonical plate format: converts unambiguous legacy rows, revokes verification of ambiguous ones, adds the format `CHECK`
 - `0009` read window: `app.message_read_since()` and the rewritten `messages_select_if_verified_owner` policy
 - `0010` drops `accounts.issuer` and its unique index (better-auth 1.7.3+ no longer writes it)
+- `0011` claim competition: partial unique indexes instead of `UNIQUE (plate_number)`, statuses `expired`/`superseded`, `is_verified` coupled to the status, column-scoped `UPDATE` grant
 
 ### Storage
 
 Proof photos go to `PROOFS_DIR` under `<userId>/<plateId>-<timestamp>.<ext>`, handled by `src/lib/storage/proofs.ts`. The path is validated against a strict pattern before any filesystem access. The extension comes from the file's magic bytes (`sniffImageType`: JPEG, PNG, WebP, HEIC) — never from the submitted filename or the client-supplied content type. `uploadProof` checks plate ownership (`plateBelongsToUser`) **before** writing anything, and removes the replaced photo after a successful update.
 
 **Plate verification flow**: User claims plate → system generates verification code (format `XX-XXXX`, `src/lib/utils/verificationCode.ts`: `crypto.randomInt`, alphabet without 0/O/1/I, retried on a unique-constraint collision) → user writes code on paper, places behind windshield, photos it → user uploads photo → admin reviews it in `/admin` and approves/rejects. A rejected plate can be resubmitted; a new photo puts it back to `pending`. Only `is_verified = true` plates unlock message reading.
+
+**Claim competition** (migration `0011`): only the *approved* claim of a plate is unique (`verified_plates_one_approved`); several users may hold open claims on the same plate, so a squatter cannot lock out the real owner and a claim no longer reveals that the plate is registered. A user holds at most 3 `pending` claims (`MAX_OPEN_CLAIMS`). Approving runs in one transaction in `setPlateVerification`: the previous approved holder becomes `superseded` (and gets a mail), other pending claims become `rejected`. Statuses: `pending`, `approved`, `rejected`, `expired` (no photo after 7 days, `scripts/prune-claims.mjs`), `superseded`. A `CHECK` ties `is_verified` to `verification_status = 'approved'`, so a superseded or expired holder loses read access independent of the query layer. `platedrop_app` may only `UPDATE (proof_image_url, verification_status, is_verified)` on `verified_plates` — never `plate_number` or `user_id`. Owners can remove their own plates (`removePlate`).
 
 ### Mutations and routes
 

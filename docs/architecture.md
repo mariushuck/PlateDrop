@@ -232,9 +232,9 @@ Definiert in [`0003_app_tables.sql`](../db/migrations/0003_app_tables.sql).
 | Spalte | Bedeutung |
 | --- | --- |
 | `user_id` | Halter, `ON DELETE CASCADE` |
-| `plate_number` | kanonisch (`KA-AB-1234`, per CHECK erzwungen), projektweit eindeutig |
-| `is_verified` | Erst wenn `true`, sind Nachrichten lesbar |
-| `verification_status` | `pending`, `approved` oder `rejected`, per CHECK erzwungen |
+| `plate_number` | kanonisch (`KA-AB-1234`, per CHECK erzwungen). Eindeutig ist nur der freigegebene Claim (`verified_plates_one_approved`, `0011`); offene Claims mehrerer Nutzer dürfen nebeneinander stehen, derselbe Nutzer hat je Kennzeichen höchstens einen offenen (`verified_plates_one_open_per_user`) |
+| `is_verified` | Erst wenn `true`, sind Nachrichten lesbar. Per CHECK an `verification_status = 'approved'` gekoppelt (`0011`) |
+| `verification_status` | `pending`, `approved`, `rejected`, `expired` (ohne Foto nach 7 Tagen, `prune-claims.mjs`) oder `superseded` (durch einen neuen Halter abgelöst), per CHECK erzwungen |
 | `verification_code` | Code im Format `XX-XXXX`, den der Halter aufs Foto legt. Projektweit eindeutig (`0006`) |
 | `proof_image_url` | Objektpfad im Volume, nie eine öffentliche URL |
 
@@ -289,7 +289,11 @@ Alle aus [`0004_policies.sql`](../db/migrations/0004_policies.sql).
 | `verified_plates_insert_own` | Anlegen nur auf eigenen Namen **und** nur mit `is_verified = false` und Status `pending`. Ohne die letzten beiden Bedingungen könnte sich jemand beim Anlegen selbst freischalten. |
 | `verified_plates_update_proof_only` | Ändern nur an eigenen Zeilen, und das Ergebnis muss weiterhin unverifiziert sein mit Status `pending` oder `rejected`. Praktisch bleibt damit nur das Nachreichen des Fotos. Das gilt auch nach einer Ablehnung: Der Halter kann ein neues Foto nachreichen, wodurch der Status auf `pending` zurückspringt und das Kennzeichen wieder beim Admin erscheint. |
 | `verified_plates_update_admin` | Admins dürfen freigeben und ablehnen. |
-| `verified_plates_delete_own` | Ein Nutzer darf eigene Kennzeichen entfernen. |
+| `verified_plates_delete_own` | Ein Nutzer darf eigene Kennzeichen entfernen (Dashboard, `removePlate`). |
+
+Seit `0011` darf `platedrop_app` auf `verified_plates` nur noch `proof_image_url`,
+`verification_status` und `is_verified` ändern. `plate_number` und `user_id` sind für jede
+Policy unerreichbar; vorher hätte ein Halter sein offenes Kennzeichen per UPDATE umschreiben können.
 
 **`messages`**
 
@@ -489,6 +493,14 @@ sequenceDiagram
     Note over H,DB: Erst jetzt greift<br/>messages_select_if_verified_owner
 ```
 
+**Konkurrierende Claims (`0011`).** Mehrere Nutzer dürfen dasselbe Kennzeichen gleichzeitig
+beanspruchen; ein Nutzer hat höchstens drei offene Claims. Die Antwort auf einen Claim verrät damit
+nicht mehr, ob das Kennzeichen schon registriert ist. Bei der Freigabe löst `setPlateVerification`
+in einer Transaktion auf: ein bisher freigegebener Halter wird `superseded` (zuerst, sonst greift
+der Unique-Index) und bekommt eine Mail, andere offene Claims werden `rejected`. Der Admin sieht an
+der Karte, ob es schon einen freigegebenen Halter gibt. Über die CHECK-Kopplung verliert der
+abgelöste Halter seinen Lesezugriff sofort; der neue liest ab 30 Tage vor seinem eigenen Anspruch.
+
 Der Halter kann jedes eigene Kennzeichen im Dashboard entfernen (`removePlate` →
 `deletePlate`, Policy `verified_plates_delete_own`), etwa nach einem Tippfehler oder einem
 Fahrzeugverkauf. Das Beweisfoto wird dabei gelöscht; danach liest er keine Nachrichten mehr an
@@ -599,6 +611,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0008_plate_format.sql` | Kanonisches Kennzeichenformat: wandelt eindeutige Altzeilen um, entzieht mehrdeutigen die Freigabe, `CHECK` auf beiden Tabellen (`NOT VALID`) |
 | `0009_message_read_window.sql` | `app.message_read_since()` und die Lese-Policy mit 30-Tage-Fenster |
 | `0010_auth_account_issuer.sql` | Entfernt `accounts.issuer` samt Unique-Index; better-auth schreibt die Spalte ab 1.7.3 nicht mehr |
+| `0011_claim_competition.sql` | Nur der freigegebene Claim ist eindeutig, Status `expired`/`superseded`, `is_verified` an den Status gekoppelt, spaltenscharfes `UPDATE` auf `verified_plates` |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -653,7 +666,7 @@ Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 - **Healthcheck.** `/api/health` prüft die Datenbankverbindung; der `web`-Container meldet darüber
   seinen Zustand an Docker.
 - **Datenpflege und Sicherung.** `scripts/maintenance.mjs` bündelt die Prune-Skripte (abgelaufene
-  Sitzungen, alte Rate-Limit-Zeilen, optional alte Nachrichten, verwaiste Fotos),
+  Sitzungen, verfallene Claims ohne Foto, alte Rate-Limit-Zeilen, optional alte Nachrichten, verwaiste Fotos),
   `scripts/backup.sh` sichert Datenbank und Fotos. Beide sind für Cron gedacht; Einrichtung und
   Rhythmus stehen in der [Admin-Anleitung, B4 und B9](admin.md#b9-regelmäßige-wartung).
 

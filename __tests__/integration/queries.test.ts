@@ -196,14 +196,42 @@ describe("claimPlate", () => {
     expect(plate.verification_code).toBe("PD-FREE");
   });
 
-  it("meldet ein bereits vergebenes Kennzeichen als PlateAlreadyClaimedError", async () => {
-    const { claimPlate, PlateAlreadyClaimedError } = await loadQueries();
+  // Ein fremder offener oder freigegebener Claim sperrt niemanden mehr aus
+  // (Squatting, Halterwechsel); die Antwort verrät so auch nicht, ob das
+  // Kennzeichen schon registriert ist. Entschieden wird bei der Freigabe.
+  it("lässt ein fremd beanspruchtes Kennzeichen erneut beanspruchen", async () => {
+    const { claimPlate } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
     const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
+
+    const plate = await claimPlate(stranger, "KA-AB-1234", () => "PD-0000");
+
+    expect(plate).toMatchObject({ plate_number: "KA-AB-1234", verification_status: "pending" });
+  });
+
+  it("meldet einen doppelten eigenen Claim als PlateAlreadyClaimedError", async () => {
+    const { claimPlate, PlateAlreadyClaimedError } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234");
 
-    await expect(claimPlate(stranger, "KA-AB-1234", () => "PD-0000")).rejects.toBeInstanceOf(
+    await expect(claimPlate(owner, "KA-AB-1234", () => "PD-0000")).rejects.toBeInstanceOf(
       PlateAlreadyClaimedError,
+    );
+  });
+
+  it("erlaubt höchstens drei offene Claims je Nutzer", async () => {
+    const { claimPlate, TooManyOpenClaimsError } = await loadQueries();
+    const owner = await seedUser("user-owner", "owner@example.com");
+    await seedPlate(owner, "KA-AB-1");
+    await seedPlate(owner, "KA-AB-2");
+    await seedPlate(owner, "KA-AB-3");
+    // Freigegebene und abgelehnte zählen nicht als offen.
+    await seedPlate(owner, "KA-AB-4", { verified: true, status: "approved" });
+    await seedPlate(owner, "KA-AB-5", { status: "rejected" });
+
+    await expect(claimPlate(owner, "KA-AB-6", () => "PD-0006")).rejects.toBeInstanceOf(
+      TooManyOpenClaimsError,
     );
   });
 });
@@ -425,7 +453,11 @@ describe("Admin-Abläufe", () => {
     const admin = await seedUser("user-admin", "admin@example.com", true);
     const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/proof.jpg" });
 
-    await expect(setPlateVerification(admin, plateId, true)).resolves.toBe(true);
+    await expect(setPlateVerification(admin, plateId, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean; verification_status: string }>(
@@ -441,7 +473,11 @@ describe("Admin-Abläufe", () => {
     const admin = await seedUser("user-admin", "admin@example.com", true);
     const plateId = await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/proof.jpg" });
 
-    await expect(setPlateVerification(admin, plateId, false)).resolves.toBe(true);
+    await expect(setPlateVerification(admin, plateId, false)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean; verification_status: string }>(
@@ -451,13 +487,65 @@ describe("Admin-Abläufe", () => {
     expect(stored.rows).toEqual([{ is_verified: false, verification_status: "rejected" }]);
   });
 
+  it("löst bei der Freigabe die Konkurrenz um dasselbe Kennzeichen auf", async () => {
+    const { setPlateVerification } = await loadQueries();
+    const previous = await seedUser("user-previous", "previous@example.com");
+    const winner = await seedUser("user-winner", "winner@example.com");
+    const loser = await seedUser("user-loser", "loser@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(previous, "KA-AB-1234", { verified: true, status: "approved" });
+    const winnerPlate = await seedPlate(winner, "KA-AB-1234", { proofPath: "user-winner/a.jpg" });
+    await seedPlate(loser, "KA-AB-1234", { proofPath: "user-loser/b.jpg" });
+    await seedPlate(loser, "M-XY-9999"); // anderes Kennzeichen bleibt unberührt
+
+    await expect(setPlateVerification(admin, winnerPlate, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1234",
+      supersededEmails: ["previous@example.com"],
+    });
+
+    const stored = await withAdmin((client) =>
+      client.query<{ user_id: string; plate_number: string; verification_status: string }>(
+        `SELECT user_id, plate_number, verification_status FROM verified_plates
+          ORDER BY plate_number, user_id`,
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { user_id: "user-loser", plate_number: "KA-AB-1234", verification_status: "rejected" },
+      { user_id: "user-previous", plate_number: "KA-AB-1234", verification_status: "superseded" },
+      { user_id: "user-winner", plate_number: "KA-AB-1234", verification_status: "approved" },
+      { user_id: "user-loser", plate_number: "M-XY-9999", verification_status: "pending" },
+    ]);
+  });
+
+  it("zeigt dem Admin, ob es schon einen freigegebenen Halter gibt", async () => {
+    const { listPendingVerifications } = await loadQueries();
+    const previous = await seedUser("user-previous", "previous@example.com");
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const admin = await seedUser("user-admin", "admin@example.com", true);
+    await seedPlate(previous, "KA-AB-1234", { verified: true, status: "approved" });
+    await seedPlate(owner, "KA-AB-1234", { proofPath: "user-owner/a.jpg" });
+    await seedPlate(owner, "M-XY-9999", { proofPath: "user-owner/b.jpg" });
+
+    const pending = await listPendingVerifications(admin);
+
+    expect(pending.map((p) => [p.plate_number, p.has_approved_holder]).sort()).toEqual([
+      ["KA-AB-1234", true],
+      ["M-XY-9999", false],
+    ]);
+  });
+
   it("lässt einen Nicht-Admin kein fremdes Kennzeichen freischalten", async () => {
     const { setPlateVerification } = await loadQueries();
     const owner = await seedUser("user-owner", "owner@example.com");
     const plain = await seedUser("user-plain", "plain@example.com", false);
     const plateId = await seedPlate(owner, "KA-AB-1234");
 
-    await expect(setPlateVerification(plain, plateId, true)).resolves.toBe(false);
+    await expect(setPlateVerification(plain, plateId, true)).resolves.toEqual({
+      changed: false,
+      plateNumber: null,
+      supersededEmails: [],
+    });
 
     const stored = await withAdmin((client) =>
       client.query<{ is_verified: boolean }>("SELECT is_verified FROM verified_plates"),

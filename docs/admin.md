@@ -108,6 +108,23 @@ Mit der Freigabe wird `is_verified` gesetzt, und erst dann kann der Halter die N
 Kennzeichen lesen — und zwar die ab 30 Tage vor seinem Anspruch. Ältere bleiben unsichtbar, weil sie
 an einen früheren Halter gerichtet sein können (Migration 0009).
 
+### Mehrere Ansprüche auf dasselbe Kennzeichen
+
+Seit Migration 0011 dürfen mehrere Nutzer dasselbe Kennzeichen gleichzeitig beanspruchen, etwa nach
+einem Fahrzeugverkauf oder wenn jemand eine fremde Nummer blockiert hat. Gibt es schon einen
+freigegebenen Halter, zeigt die Karte unter `/admin` einen gelben Hinweis. Prüfe dann besonders
+genau, ob Code und Kennzeichen auf dem Foto zusammenpassen.
+
+Gibst du frei, passiert in einem Schritt:
+
+- der bisherige Halter wird auf `superseded` gesetzt, verliert sofort den Lesezugriff und bekommt eine
+  Mail; im Dashboard sieht er das Kennzeichen unter „Beendet“ und kann es erneut beanspruchen,
+- alle anderen offenen Ansprüche auf dieses Kennzeichen werden abgelehnt.
+
+Ansprüche ohne Foto verfallen nach 7 Tagen von selbst (`expired`, siehe
+[Regelmäßige Wartung](#b9-regelmäßige-wartung)). Ein Nutzer kann höchstens drei Ansprüche
+gleichzeitig offen haben.
+
 ### Was bei einer Ablehnung passiert
 
 Eine Ablehnung setzt den Status auf `rejected`. Der Halter sieht das Kennzeichen daraufhin in seinem
@@ -121,9 +138,10 @@ Prüfung nicht erfolgreich war und dass Code und Kennzeichen gut lesbar sein mü
 Sonderfall, den dieser Text nicht abdeckt, ist eine kurze E-Mail hilfreicher als eine wortlose
 Ablehnung.
 
-**Wenn ein Anspruch liegen bleibt:** Solange die Zeile existiert, ist die Kennzeichennummer durch den
-Unique-Constraint belegt — auch bei Status `rejected`. Meldet sich jemand, weil er sein Kennzeichen
-nicht registrieren kann, hilft ein Blick auf den bestehenden Anspruch:
+**Wenn ein Anspruch liegen bleibt:** Ein liegengebliebener Anspruch blockiert seit Migration 0011
+niemanden mehr; der echte Halter beansprucht das Kennzeichen einfach selbst, und deine Freigabe
+räumt den Rest ab. Halter können eigene Kennzeichen im Dashboard auch selbst entfernen. Willst du
+trotzdem nachsehen, wer ein Kennzeichen beansprucht:
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
@@ -132,7 +150,7 @@ docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
     WHERE vp.plate_number = 'KA-AB-1234';"
 ```
 
-Ist der Anspruch eindeutig verwaist, entfernst du ihn und gibst die Nummer frei:
+Einen eindeutig verwaisten Anspruch entfernst du so:
 
 ```bash
 docker compose exec -T db psql -U platedrop_owner -d platedrop -c \
@@ -487,7 +505,8 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Nach einem Passwort-Reset auf allen Geräten abgemeldet | Absicht: ein Reset beendet alle Sitzungen (`revokeSessionsOnPasswordReset`), damit eine übernommene Sitzung ihn nicht überlebt | auf jedem Gerät neu anmelden |
 | Login schlägt trotz richtigem Passwort fehl | Adresse ist noch nicht bestätigt — beide Fälle liefern absichtlich dieselbe Meldung | `SELECT email, "emailVerified" FROM users WHERE email='…';` |
 | `/admin` leitet nach `/dashboard` um | Konto hat keine Admin-Rechte | `SELECT is_admin FROM users WHERE email='…';`, dann A2 |
-| „Dieses Kennzeichen ist bereits registriert" beim eigenen Kennzeichen | Ein bestehender Anspruch belegt die Nummer — auch ein abgelehnter, den niemand weiterverfolgt | `SELECT * FROM verified_plates WHERE plate_number='…';`, dann A3 |
+| „Sie haben dieses Kennzeichen bereits beansprucht" | Der Nutzer hat schon einen offenen oder freigegebenen Anspruch auf dieses Kennzeichen | im Dashboard nachsehen; bei Bedarf dort entfernen und neu beanspruchen |
+| „Höchstens 3 Kennzeichen können gleichzeitig auf Prüfung warten" | Drei offene Ansprüche des Nutzers ohne Entscheidung | Foto nachreichen, prüfen oder einen Anspruch entfernen; ohne Foto verfallen sie nach 7 Tagen |
 | Beweisfoto liefert 404 | Datei fehlt im Volume, oder das Kennzeichen gehört jemand anderem | `dcp exec web ls /data/proofs/<nutzer-id>/`; 404 statt 403 ist Absicht und verrät nichts über fremde Pfade |
 | Beweisfoto liefert 401 | keine gültige Session | erneut anmelden |
 | App startet nicht, Fehler zur Datenbank | `APP_DB_PASSWORD` und das Passwort in `DATABASE_URL` weichen voneinander ab | beide Werte in `.env` vergleichen, dann `dcp up -d` |
@@ -599,6 +618,16 @@ Nutzers und hielte deshalb sämtliche fremden Fotos für verwaist.
 
 Ein sinnvoller Rhythmus ist monatlich, und nach jeder Kontolöschung.
 
+### Ansprüche ohne Foto verfallen lassen
+
+```bash
+docker compose run --rm migrate node scripts/prune-claims.mjs
+```
+
+Setzt offene Ansprüche, zu denen nach 7 Tagen noch kein Foto hochgeladen wurde, auf `expired`. Die
+Zeile bleibt stehen, damit der Nutzer im Dashboard sieht, was passiert ist; er kann das Kennzeichen
+erneut beanspruchen. Läuft täglich über `maintenance.mjs`.
+
 ### Abgelaufene Sitzungen entfernen
 
 ```bash
@@ -630,7 +659,7 @@ Wöchentlich ist ein guter Rhythmus. Auf einem Server bietet sich ein Cron-Eintr
 
 ### Alles zusammen per Cron
 
-`scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-throttle`,
+`scripts/maintenance.mjs` (`pnpm db:prune`) ruft `prune-sessions`, `prune-claims`, `prune-throttle`,
 `prune-messages` und `prune-proofs --delete` nacheinander auf – ein Fehlschlag stoppt die übrigen
 Schritte nicht.
 

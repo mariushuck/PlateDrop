@@ -73,6 +73,16 @@ export default async function AdminPage() {
                   </p>
                 </div>
 
+                {verification.has_approved_holder && (
+                  <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                      Für dieses Kennzeichen gibt es bereits einen freigegebenen Halter. Eine
+                      Freigabe löst ihn ab; er wird per Mail informiert.
+                    </p>
+                  </div>
+                )}
+
                 {isCanonicalPlate(verification.plate_number) ? (
                   <VerificationActions plateId={verification.id} />
                 ) : (

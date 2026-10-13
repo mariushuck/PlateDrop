@@ -1,11 +1,11 @@
 import "server-only";
 import { withAnon, withUser } from "./context";
-import type { Message, VerifiedPlate } from "./types";
+import type { Message, PendingVerification, VerifiedPlate } from "./types";
 
 /** SQLSTATE 23505 – unique_violation. */
 const UNIQUE_VIOLATION = "23505";
-/** Name des UNIQUE-Constraints auf verified_plates.plate_number. */
-const PLATE_UNIQUE_CONSTRAINT = "verified_plates_plate_unique";
+/** Unique-Index: ein Nutzer beansprucht dasselbe Kennzeichen nur einmal gleichzeitig (0011). */
+const OPEN_CLAIM_UNIQUE_INDEX = "verified_plates_one_open_per_user";
 /** Name des UNIQUE-Constraints auf verified_plates.verification_code. */
 const VERIFICATION_CODE_UNIQUE_CONSTRAINT = "verified_plates_verification_code_key";
 /** SQLSTATE 23514 – check_violation, ausgelöst vom Kennzeichen-Rate-Limit-Trigger. */
@@ -19,11 +19,21 @@ export class PlateRateLimitError extends Error {
   }
 }
 
-/** Das Kennzeichen ist bereits von jemandem beansprucht. */
+/** Der Nutzer hat dieses Kennzeichen bereits beansprucht. */
 export class PlateAlreadyClaimedError extends Error {
   constructor() {
-    super("Dieses Kennzeichen ist bereits registriert.");
+    super("Sie haben dieses Kennzeichen bereits beansprucht.");
     this.name = "PlateAlreadyClaimedError";
+  }
+}
+
+/** Höchstzahl offener Claims je Nutzer – bremst massenhaftes Beanspruchen. */
+export const MAX_OPEN_CLAIMS = 3;
+
+export class TooManyOpenClaimsError extends Error {
+  constructor() {
+    super(`Höchstens ${MAX_OPEN_CLAIMS} Kennzeichen können gleichzeitig auf Prüfung warten.`);
+    this.name = "TooManyOpenClaimsError";
   }
 }
 
@@ -119,13 +129,15 @@ export function listMessagesForUser(userId: string): Promise<Message[]> {
 
 /**
  * Legt einen Kennzeichen-Claim an. Immer unverifiziert und `pending` — die
- * Freigabe erfolgt ausschließlich durch einen Admin.
+ * Freigabe erfolgt ausschließlich durch einen Admin. Fremde Claims auf dasselbe
+ * Kennzeichen hindern nicht (0011); entschieden wird bei der Freigabe.
  *
  * `makeVerificationCode` wird pro Versuch aufgerufen: kollidiert der erzeugte
  * Code mit einem bestehenden (astronomisch selten), wird bis zu fünfmal neu
  * gewürfelt.
  *
- * @throws {PlateAlreadyClaimedError} wenn das Kennzeichen schon vergeben ist.
+ * @throws {PlateAlreadyClaimedError} wenn der Nutzer es schon beansprucht hat.
+ * @throws {TooManyOpenClaimsError} bei mehr als {@link MAX_OPEN_CLAIMS} offenen Claims.
  */
 export async function claimPlate(
   userId: string,
@@ -136,6 +148,13 @@ export async function claimPlate(
   for (let attempt = 1; ; attempt++) {
     try {
       return await withUser(userId, async (client) => {
+        // shortcut: zwei gleichzeitige Claims können das Limit um eins überschreiten; harmlos.
+        const open = await client.query(
+          "SELECT 1 FROM verified_plates WHERE user_id = $1 AND verification_status = 'pending'",
+          [userId],
+        );
+        if ((open.rowCount ?? 0) >= MAX_OPEN_CLAIMS) throw new TooManyOpenClaimsError();
+
         const { rows } = await client.query<VerifiedPlate>(
           `INSERT INTO verified_plates
              (user_id, plate_number, is_verified, verification_status, verification_code)
@@ -152,9 +171,9 @@ export async function claimPlate(
         if (constraint === VERIFICATION_CODE_UNIQUE_CONSTRAINT && attempt < MAX_ATTEMPTS) {
           continue;
         }
-        // Kennzeichen schon vergeben. `undefined` (kein Constraint-Name im
+        // Eigener Claim schon vorhanden. `undefined` (kein Constraint-Name im
         // Fehler) fällt bewusst hierher – so wie vor 0006.
-        if (constraint === PLATE_UNIQUE_CONSTRAINT || constraint === undefined) {
+        if (constraint === OPEN_CLAIM_UNIQUE_INDEX || constraint === undefined) {
           throw new PlateAlreadyClaimedError();
         }
       }
@@ -313,42 +332,87 @@ export function canReadProof(userId: string, objectPath: string): Promise<boolea
  * `verified_plates_select_admin` und der `app.is_admin()`-Filter hier. Für
  * einen Nicht-Admin liefert die Abfrage in jedem Fall eine leere Liste.
  */
-export function listPendingVerifications(userId: string): Promise<VerifiedPlate[]> {
+export function listPendingVerifications(userId: string): Promise<PendingVerification[]> {
   return withUser(userId, async (client) => {
-    const { rows } = await client.query<VerifiedPlate>(
-      `SELECT * FROM verified_plates
+    const { rows } = await client.query<PendingVerification>(
+      `SELECT vp.*,
+              EXISTS (
+                SELECT 1 FROM verified_plates holder
+                 WHERE holder.plate_number = vp.plate_number
+                   AND holder.verification_status = 'approved'
+              ) AS has_approved_holder
+         FROM verified_plates vp
         WHERE app.is_admin()
-          AND verification_status = 'pending'
-          AND proof_image_url IS NOT NULL
-        ORDER BY created_at ASC`,
+          AND vp.verification_status = 'pending'
+          AND vp.proof_image_url IS NOT NULL
+        ORDER BY vp.created_at ASC`,
     );
     return rows;
   });
 }
 
+export interface SetPlateVerificationResult {
+  /** `false`, wenn der Aufrufer kein Admin ist oder das Kennzeichen nicht existiert. */
+  changed: boolean;
+  plateNumber: string | null;
+  /** Adressen der Halter, die durch die Freigabe abgelöst wurden – sie bekommen eine Mail. */
+  supersededEmails: string[];
+}
+
 /**
  * Gibt ein Kennzeichen frei oder lehnt es ab.
  *
- * Der `app.is_admin()`-Filter im UPDATE ist bewusst redundant zur RLS-Policy
- * `verified_plates_update_admin` und zur Admin-Prüfung in der Server Action.
+ * Eine Freigabe löst in derselben Transaktion die Konkurrenz auf: ein bisher
+ * freigegebener Halter desselben Kennzeichens wird `superseded` (zuerst, sonst
+ * greift `verified_plates_one_approved`), andere offene Claims `rejected`.
  *
- * @returns `false`, wenn nichts geändert wurde – etwa weil der Aufrufer kein
- *          Admin ist oder das Kennzeichen nicht existiert.
+ * Der `app.is_admin()`-Filter in jedem Statement ist bewusst redundant zur
+ * RLS-Policy `verified_plates_update_admin` und zur Prüfung in der Server Action.
  */
 export function setPlateVerification(
   userId: string,
   plateId: string,
   approved: boolean,
-): Promise<boolean> {
+): Promise<SetPlateVerificationResult> {
   return withUser(userId, async (client) => {
-    const result = await client.query(
-      `UPDATE verified_plates
-          SET is_verified = $1,
-              verification_status = $2
-        WHERE id = $3
-          AND app.is_admin()`,
-      [approved, approved ? "approved" : "rejected", plateId],
+    const target = await client.query<{ plate_number: string }>(
+      "SELECT plate_number FROM verified_plates WHERE id = $1 AND app.is_admin()",
+      [plateId],
     );
-    return (result.rowCount ?? 0) > 0;
+    if (target.rows.length === 0)
+      return { changed: false, plateNumber: null, supersededEmails: [] };
+    const plateNumber = target.rows[0].plate_number;
+
+    if (!approved) {
+      await client.query(
+        `UPDATE verified_plates SET is_verified = false, verification_status = 'rejected'
+          WHERE id = $1 AND app.is_admin()`,
+        [plateId],
+      );
+      return { changed: true, plateNumber, supersededEmails: [] };
+    }
+
+    const superseded = await client.query<{ email: string }>(
+      `WITH abgeloest AS (
+         UPDATE verified_plates SET is_verified = false, verification_status = 'superseded'
+          WHERE plate_number = $1 AND id <> $2 AND verification_status = 'approved'
+            AND app.is_admin()
+         RETURNING user_id
+       )
+       SELECT u.email FROM abgeloest JOIN users u ON u.id = abgeloest.user_id`,
+      [plateNumber, plateId],
+    );
+    await client.query(
+      `UPDATE verified_plates SET verification_status = 'rejected'
+        WHERE plate_number = $1 AND id <> $2 AND verification_status = 'pending'
+          AND app.is_admin()`,
+      [plateNumber, plateId],
+    );
+    await client.query(
+      `UPDATE verified_plates SET is_verified = true, verification_status = 'approved'
+        WHERE id = $1 AND app.is_admin()`,
+      [plateId],
+    );
+    return { changed: true, plateNumber, supersededEmails: superseded.rows.map((r) => r.email) };
   });
 }
