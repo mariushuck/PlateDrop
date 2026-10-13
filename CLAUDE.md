@@ -32,6 +32,8 @@ pnpm test:db:down     # Tear the test containers down
 pnpm smoke            # End-to-end HTTP test against a running `docker compose up`
 pnpm db:migrate       # Apply db/migrations/*.sql
 pnpm db:set-admin     # scripts/set-admin.mjs <email> [--revoke], needs DATABASE_ADMIN_URL
+node scripts/create-org.mjs --name … --slug … --site … --admin <email>   # new organization (owner credentials)
+node scripts/delete-org.mjs --slug … [--export -|<file>] [--yes]          # contract end: export + delete
 pnpm db:prune         # scripts/maintenance.mjs: prune sessions, stale claims, throttle rows, old messages, sent notifications, orphaned proofs
 ```
 
@@ -42,6 +44,8 @@ Run the whole stack: `docker compose up -d` (app on :3000, Mailpit on :8025).
 ## What PlateDrop Is
 
 **Shadow-Drop**: Anyone can anonymously send a message to any German license plate without an account — chosen from a fixed catalog, never free text (`src/lib/messages/catalog.json`). Only a registered, plate-verified owner can read messages sent to their plate, and gets an e-mail when one arrives. This asymmetric privacy model (public write, authenticated read) is the core design constraint — never break it.
+
+**Organizations for private sites** (migration `0014`, see `docs/go-to-market.md`): operators (company car parks, property managers, private sites) have sites with a QR token (`/s/[token]`); members join per site and are approved by org admins. Two deliberate deviations from "anonymous write": signed-in members writing via a site are recorded as `sender_id` (name shown only if the org sets `show_sender`), and may send free text if the org allows it. Org admins manage members, plates, sites and settings but **never read members' messages** — only aggregate weekly counts. Public and org scopes never mix: a public message never reaches an org plate with the same number and vice versa.
 
 ## Architecture
 
@@ -96,6 +100,7 @@ Defined as numbered SQL files in `db/migrations/`, applied by `scripts/migrate.m
 - `0009` read window: `app.message_read_since()` and the rewritten `messages_select_if_verified_owner` policy
 - `0010` drops `accounts.issuer` and its unique index (better-auth 1.7.3+ no longer writes it)
 - `0011` claim competition: partial unique indexes instead of `UNIQUE (plate_number)`, statuses `expired`/`superseded`, `is_verified` coupled to the status, column-scoped `UPDATE` grant
+- `0014` organizations: `organizations`, `org_sites`, `org_admins`, `site_members`, `org_plate_allowlist`; `org_id` on plates and messages, `site_id`/`sender_id` on messages; scope-aware `app.can_read_message(plate, created_at, org_id, site_id)`; tenant policies; offboarding and allowlist triggers; `app.org_weekly_stats()`; `users.name` no longer holds the e-mail
 - `0013` message types and notifications: `messages.message_type` (catalog `CHECK`), no anonymous free text, column-scoped `INSERT`, `read_at`, `notification_settings`, `notification_outbox` + `AFTER INSERT` trigger, `app.outbox_lag_seconds()`
 - `0012` receiver controls: `app.can_read_message()` (the single read condition), `messages.hidden_at`, `message_reports`, admins read/delete only reported messages, `verified_plates.paused_until` via `app.set_plate_pause()`
 
@@ -122,6 +127,8 @@ Exactly three route handlers exist, and all are deliberate exceptions:
 **Receiver controls** (migration `0012`): the recipient can hide a message (`UPDATE (hidden_at)` is the only column grant on `messages`) or report it (`message_reports`, reason from `src/lib/messages/reportReasons.ts`). Admins see and may delete **only reported** messages — every other message stays invisible to them. `paused_until` is set exclusively through the `SECURITY DEFINER` function `app.set_plate_pause()`: an UPDATE policy on approved plates would let the owner point `proof_image_url` at someone else's photo. The read condition lives in one SQL function, `app.can_read_message(plate, created_at)`, used by the SELECT and UPDATE policies and the report policy — change it there, not in a policy. `MESSAGE_RETENTION_DAYS` is mandatory; `prune-messages.mjs` fails without it.
 
 **Message types and notifications** (migration `0013`): `src/lib/messages/catalog.json` is the single source for message codes, texts, icons and urgency — the app reads it, `scripts/notifier.mjs` reads it, and the `CHECK` in `0013` lists the same codes (a unit test compares them; `MessageTypeIcon` maps the icon names). Anonymous inserts carry `message_type` only; the policy rejects `message_text`, and the column grant keeps `created_at`/`hidden_at`/`read_at` out of reach. Mail is **never** sent from a Server Action — response time would reveal whether a plate is registered. An `AFTER INSERT` trigger writes `notification_outbox` rows only for approved, unpaused holders with e-mail on (bundled per type within 15 minutes); the `notifier` service sends them with `FOR UPDATE SKIP LOCKED`, quiet hours (Europe/Berlin, urgent types ignore them) and backoff. `/api/health` reports `outboxLagSeconds` but stays `ok`. Web Push is not built yet.
+
+**Tenant separation** (migration `0014`): the read condition is `app.can_read_message(plate, created_at, org_id, site_id)` — same plate, read window, `vp.org_id IS NOT DISTINCT FROM m.org_id`, and for site messages an **active** membership at that site. `queries.ts` mirrors it in `RECIPIENT_MATCH`; the outbox trigger uses the same rule. Change all three together, and add a case to the "Mandantentrennung" group in `rls.test.ts`. Org-admin authorization goes through `app.is_org_admin()` / `app.site_org()` (`SECURITY DEFINER`); every org query filters on it explicitly as the second layer. `platedrop_app` cannot `SELECT messages.sender_id` — use `app.message_sender_name()`; never select `*` from `messages`. Site tokens come from `src/lib/tags/token.ts` (128-bit base64url). After sign-in, `?next=` only accepts `/s/<token>` (`safeNextPath`). The site notice is a printable page with a server-side QR SVG (`qrcode`), not a route handler. Organizations are created and deleted only by script (owner credentials) — there is no self-service.
 
 **Read window**: an owner reads messages from 30 days before their claim (`verified_plates.created_at`) onwards, never older ones — plates get reassigned. The boundary lives in one SQL function, `app.message_read_since()` (migration `0009`), used by the `messages` SELECT policy and by `listMessagesForUser` / `exportUserData`.
 

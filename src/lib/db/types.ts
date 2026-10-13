@@ -19,6 +19,10 @@ export interface VerifiedPlate {
   proof_image_url: string | null;
   /** Benachrichtigungen pausiert bis (0012). */
   paused_until: Date | null;
+  /** Organisation (0014); `null` = öffentliches Kennzeichen. */
+  org_id: string | null;
+  /** Name der Organisation, nur aus `listPlatesForUser`. */
+  org_name?: string | null;
 }
 
 /** Offene Verifizierung für die Admin-Ansicht. */
@@ -36,6 +40,12 @@ export interface Message {
   message_text: string | null;
   created_at: Date;
   read_at: Date | null;
+  /** Kennzeichen-Zeile, an die die Nachricht ging (nur aus `listMessagesForUser`). */
+  plate_id?: string;
+  /** Standort bei Nachrichten über einen Standort-QR (0014). */
+  site_name?: string | null;
+  /** Absendername, nur wenn die Organisation ihn zeigt. */
+  sender_name?: string | null;
 }
 
 /** Offene Meldung für die Admin-Ansicht (0012). */
@@ -55,4 +65,67 @@ export interface NotificationSettings {
   email_enabled: boolean;
   quiet_start: number | null;
   quiet_end: number | null;
+}
+
+// --- Organisationen (0014) --------------------------------------------------
+
+/** Ergebnis von `app.site_by_token()` für das öffentliche Standort-Formular. */
+export interface SiteInfo {
+  siteId: string;
+  siteName: string;
+  orgId: string;
+  orgName: string;
+  orgSlug: string;
+  allowFreeText: boolean;
+  showSender: boolean;
+  active: boolean;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  show_sender: boolean;
+  allow_free_text: boolean;
+}
+
+export interface OrgSite {
+  id: string;
+  name: string;
+  token: string;
+  disabled: boolean;
+}
+
+export interface Membership {
+  site_id: string;
+  site_name: string;
+  org_id: string;
+  /** `null`, solange die Mitgliedschaft nicht bestätigt ist. */
+  org_name: string | null;
+  status: "pending" | "active";
+}
+
+export interface OrgMember {
+  site_id: string;
+  site_name: string;
+  user_id: string;
+  email: string;
+  name: string;
+  status: "pending" | "active";
+  created_at: Date;
+}
+
+export interface OrgPlate {
+  id: string;
+  plate_number: string;
+  verification_status: VerificationStatus;
+  created_at: Date;
+  email: string;
+  name: string;
+}
+
+export interface OrgWeeklyStat {
+  week: Date;
+  site_name: string;
+  incidents: number;
 }

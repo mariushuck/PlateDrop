@@ -161,6 +161,37 @@ export default function Datenschutz() {
             </p>
           </section>
 
+          {/* 5a. Gelände und Organisationen */}
+          <section>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+              5a. Gelände und Organisationen
+            </h2>
+            <p className="mb-2">
+              Betreiber privater Gelände (z. B. Arbeitgeber, Hausverwaltungen) können PlateDrop für
+              ihre Parkflächen nutzen. Für die Daten in diesem Rahmen ist die jeweilige Organisation
+              Verantwortliche; PlateDrop verarbeitet sie in ihrem Auftrag (Art. 28 DSGVO).
+            </p>
+            <p className="mb-2">
+              <strong>Gespeicherte Daten:</strong> deine Mitgliedschaft an einem Standort samt
+              Status, die Kennzeichen, die du dort einträgst, und Nachrichten, die über den Code
+              eines Standorts gesendet werden. Schreibst du angemeldet über einen Standort, wird
+              dein Konto als Absender gespeichert; sichtbar ist für die Empfänger:in nur dein
+              freiwilliger Anzeigename und nur, wenn die Organisation das eingestellt hat. Besucher
+              ohne Konto bleiben anonym.
+            </p>
+            <p className="mb-2">
+              <strong>Was die Verwaltung sieht:</strong> E-Mail-Adresse und Anzeigename der
+              Mitglieder und Antragsteller:innen, ihre Kennzeichen in der Organisation und die Zahl
+              der Nachrichten je Woche und Standort. Den Inhalt von Nachrichten sieht sie nicht.
+            </p>
+            <p>
+              <strong>Ende:</strong> Trittst du aus oder entfernt dich die Verwaltung, endet der
+              Zugriff sofort und deine Kennzeichen in der Organisation verfallen. Endet der Vertrag
+              mit der Organisation, werden ihre Daten exportiert und gelöscht; dein Konto und deine
+              übrigen Kennzeichen bleiben bestehen.
+            </p>
+          </section>
+
           {/* 6. E-Mail-Versand */}
           <section>
             <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">

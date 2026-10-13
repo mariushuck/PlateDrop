@@ -84,7 +84,8 @@ async function signUp(email) {
   return fetch(`${APP_URL}/api/auth/sign-up/email`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ name: email, email, password: PASSWORD }),
+    // Wie die App (src/app/auth/actions.ts): ohne Namen, er ist der Anzeigename.
+    body: JSON.stringify({ name: "", email, password: PASSWORD }),
   });
 }
 
@@ -153,6 +154,7 @@ async function callAction(worker, exportedName, pagePath, cookie, args) {
 async function main() {
   // Reste eines abgebrochenen Laufs, sonst kollidieren die festen Codes unten.
   await pool.query("DELETE FROM users WHERE email LIKE 'smoke-%@example.test'");
+  await pool.query("DELETE FROM organizations WHERE slug LIKE 'smoke-%'");
 
   step("0) Erreichbarkeit");
   const home = await fetch(APP_URL);
@@ -492,7 +494,132 @@ async function main() {
   const health = await (await fetch(`${APP_URL}/api/health`)).json();
   check("Healthcheck meldet den Outbox-Rückstand", typeof health.outboxLagSeconds === "number");
 
+  step("11) Organisation: Beitritt, Freigabe, Nachricht über den Standort-QR");
+  const slug = `smoke-${STAMP}`;
+  const { stdout: created } = await execFileAsync("docker", [
+    "compose",
+    "run",
+    "--rm",
+    "-T",
+    "migrate",
+    "node",
+    "scripts/create-org.mjs",
+    "--name",
+    "Smoke GmbH",
+    "--slug",
+    slug,
+    "--site",
+    "Smoke-Tiefgarage",
+    "--admin",
+    STRANGER_EMAIL,
+  ]);
+  const siteToken = created.match(/\/s\/([A-Za-z0-9_-]{22})/)?.[1];
+  check("Organisation per Skript angelegt", Boolean(siteToken), created);
+  const org = await pool.query(
+    "SELECT o.id AS org_id, s.id AS site_id FROM organizations o JOIN org_sites s ON s.org_id = o.id WHERE o.slug = $1",
+    [slug],
+  );
+  const { org_id: orgId, site_id: siteId } = org.rows[0] ?? {};
+
+  const sitePage = await fetch(`${APP_URL}/s/${siteToken}`, { headers: { cookie: cookies } });
+  check("Standort-Seite liefert 200", sitePage.status === 200, `Status ${sitePage.status}`);
+  const joined = await callAction("app/s/[token]/page", "joinSite", `/s/${siteToken}`, cookies, [
+    siteToken,
+  ]);
+  check("Beitritt beantragt", joined.body.includes('"success":true'), joined.body.slice(0, 200));
+
+  const adminPath = `/o/${slug}/admin`;
+  const adminView = await (
+    await fetch(`${APP_URL}${adminPath}`, { headers: { cookie: strangerCookies } })
+  ).text();
+  check("Org-Admin sieht den Antrag", adminView.includes(OWNER_EMAIL));
+  const ownerAdminView = await fetch(`${APP_URL}${adminPath}`, {
+    headers: { cookie: cookies },
+    redirect: "manual",
+  });
+  check(
+    "Verwaltung für Nicht-Admin: 404",
+    ownerAdminView.status === 404,
+    `Status ${ownerAdminView.status}`,
+  );
+  const approvedMember = await callAction(
+    "app/o/[slug]/admin/page",
+    "approveMemberAction",
+    adminPath,
+    strangerCookies,
+    [slug, siteId, ownerId],
+  );
+  check(
+    "Mitgliedschaft bestätigt",
+    approvedMember.body.includes('"success":true'),
+    approvedMember.body.slice(0, 200),
+  );
+
+  const orgPlateNumber = `KA-OG-${1000 + (STAMP % 9000)}`;
+  await fetch(`${APP_URL}/dashboard`, { headers: { cookie: cookies } });
+  const orgClaim = await callAction("app/dashboard/page", "claimOrgPlate", "/dashboard", cookies, [
+    null,
+    { plateNumber: orgPlateNumber, orgId },
+  ]);
+  check(
+    "Org-Kennzeichen beansprucht",
+    orgClaim.body.includes('"success":true'),
+    orgClaim.body.slice(0, 200),
+  );
+  const orgPlate = await pool.query(
+    "SELECT id FROM verified_plates WHERE org_id = $1 AND plate_number = $2",
+    [orgId, orgPlateNumber],
+  );
+  const decided = await callAction(
+    "app/o/[slug]/admin/page",
+    "decidePlateAction",
+    adminPath,
+    strangerCookies,
+    [slug, orgPlate.rows[0]?.id, true],
+  );
+  check(
+    "Org-Admin gibt das Kennzeichen frei",
+    decided.body.includes('"success":true'),
+    decided.body.slice(0, 200),
+  );
+
+  await fetch(`${MAILPIT_API}/messages`, { method: "DELETE" });
+  const siteDrop = await callAction(
+    "app/s/[token]/page",
+    "dropSiteMessage",
+    `/s/${siteToken}`,
+    "",
+    [null, { token: siteToken, plateNumber: orgPlateNumber, messageType: "blockiert" }],
+  );
+  check(
+    "Besucher-Nachricht angenommen",
+    siteDrop.body.includes('"success":true'),
+    siteDrop.body.slice(0, 200),
+  );
+  const siteMail = await mailFor(OWNER_EMAIL);
+  check(
+    "Benachrichtigung für das Org-Kennzeichen",
+    siteMail?.Subject === `PlateDrop: Nachricht für ${orgPlateNumber}`,
+    siteMail?.Subject,
+  );
+  const ownerDashboard = await (
+    await fetch(`${APP_URL}/dashboard`, { headers: { cookie: cookies } })
+  ).text();
+  check("Dashboard zeigt den Standort zur Nachricht", ownerDashboard.includes("Smoke-Tiefgarage"));
+
+  const aushang = await fetch(`${APP_URL}${adminPath}/sites/${siteId}/aushang`, {
+    headers: { cookie: strangerCookies },
+  });
+  const aushangHtml = await aushang.text();
+  check(
+    "Aushang mit QR-Code",
+    aushang.status === 200 && aushangHtml.includes("<svg"),
+    `Status ${aushang.status}`,
+  );
+  check("Aushang nennt die Standort-URL", aushangHtml.includes(`/s/${siteToken}`));
+
   // --- Aufräumen ------------------------------------------------------------
+  await pool.query("DELETE FROM organizations WHERE slug = $1", [slug]);
   await pool.query("DELETE FROM users WHERE email = ANY($1)", [[OWNER_EMAIL, STRANGER_EMAIL]]);
   await execFileAsync("docker", [
     "compose",

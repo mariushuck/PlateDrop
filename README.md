@@ -20,6 +20,10 @@ PlateDrop trennt Schreiben und Lesen bewusst voneinander:
 3. Lesen ist nur nach Anmeldung und Kennzeichen-Verifizierung möglich. Der verifizierte Halter
    bekommt eine E-Mail, sobald eine Nachricht eintrifft; er kann sie ausblenden oder melden.
 4. Ein Admin prüft die Verifizierungen und gibt sie frei oder lehnt sie ab.
+5. Für Privatgelände – Firmenparkplätze, Wohnanlagen, private Parkflächen – gibt es Organisationen:
+   Standorte mit QR-Aushang, Mitglieder je Standort, Freigabe durch die Verwaltung statt per Foto.
+   Verwaltungen sehen nur Vorfallzahlen, nie Nachrichten. Markteintritt:
+   [docs/go-to-market.md](docs/go-to-market.md).
 
 Diese Asymmetrie ist die zentrale Entwurfsvorgabe. Wie sie durchgesetzt wird, steht in der
 [technischen Dokumentation](docs/architecture.md#5-sicherheitsmodell).
@@ -110,7 +114,17 @@ pnpm typecheck     # TypeScript ohne Emit
 pnpm build         # Produktionsbuild
 pnpm db:migrate    # Migrationen einspielen
 pnpm db:set-admin  # Admin-Rechte vergeben: pnpm db:set-admin <mail> [--revoke]
-pnpm db:prune      # Datenpflege: Sitzungen, Rate-Limit-Zeilen, alte Nachrichten, verwaiste Fotos
+pnpm db:prune      # Datenpflege: Sitzungen, verfallene Claims, Rate-Limit-Zeilen, alte Nachrichten,
+                   # versendete Benachrichtigungen, verwaiste Fotos
+```
+
+Organisationen legt der Betreiber per Skript an und löscht sie zum Vertragsende wieder
+([Admin-Anleitung, Teil C](docs/admin.md#teil-c--organisationen)):
+
+```bash
+docker compose run --rm migrate node scripts/create-org.mjs \
+  --name "Muster GmbH" --slug muster --site "Werk 1" --admin verwaltung@example.com
+docker compose run --rm -T migrate node scripts/delete-org.mjs --slug muster --export - --yes > muster.json
 ```
 
 Die drei `db:`-Befehle erwarten `DATABASE_ADMIN_URL` (und für `db:migrate` `APP_DB_PASSWORD`) in

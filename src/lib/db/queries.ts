@@ -1,10 +1,17 @@
 import "server-only";
 import { withAnon, withUser } from "./context";
 import type {
+  Membership,
   Message,
   NotificationSettings,
   OpenReport,
+  Organization,
+  OrgMember,
+  OrgPlate,
+  OrgSite,
+  OrgWeeklyStat,
   PendingVerification,
+  SiteInfo,
   VerifiedPlate,
 } from "./types";
 
@@ -42,6 +49,22 @@ export class TooManyOpenClaimsError extends Error {
     this.name = "TooManyOpenClaimsError";
   }
 }
+
+/**
+ * Zweite Ebene zur Lesebedingung `app.can_read_message()` (0014): `vp` ist ein
+ * freigegebenes Kennzeichen des Nutzers, `m` die Nachricht. Gleiches Kennzeichen,
+ * Lesefenster, gleicher Bereich (öffentlich oder dieselbe Organisation) und bei
+ * Standort-Nachrichten aktive Mitgliedschaft am Standort. Jede Query, die
+ * Nachrichten für einen Empfänger anfasst, kombiniert das mit `vp.user_id = $n`.
+ */
+const RECIPIENT_MATCH = `vp.plate_number = m.plate_number
+            AND vp.is_verified = true
+            AND m.created_at >= app.message_read_since(vp.created_at)
+            AND vp.org_id IS NOT DISTINCT FROM m.org_id
+            AND (m.site_id IS NULL OR EXISTS (
+                  SELECT 1 FROM site_members sm
+                   WHERE sm.site_id = m.site_id AND sm.user_id = vp.user_id
+                     AND sm.status = 'active'))`;
 
 function hasSqlState(error: unknown, code: string): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === code;
@@ -106,7 +129,11 @@ export async function checkMessageRate(ipHash: string | null): Promise<boolean> 
 export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<VerifiedPlate>(
-      "SELECT * FROM verified_plates WHERE user_id = $1 ORDER BY created_at DESC",
+      `SELECT vp.*, o.name AS org_name
+         FROM verified_plates vp
+         LEFT JOIN organizations o ON o.id = vp.org_id
+        WHERE vp.user_id = $1
+        ORDER BY vp.created_at DESC`,
       [userId],
     );
     return rows;
@@ -114,19 +141,21 @@ export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
 }
 
 /**
- * Nachrichten an die verifizierten Kennzeichen des Nutzers, neueste zuerst –
- * ab 30 Tage vor dem Anspruch (`app.message_read_since`, Migration 0009).
- * Die Policy setzt dieselbe Grenze durch; der Filter hier ist die zweite Ebene.
+ * Nachrichten an die verifizierten Kennzeichen des Nutzers, neueste zuerst.
+ * `plate_id` ordnet jede Nachricht genau einer Kennzeichen-Zeile zu: dieselbe
+ * Nummer kann öffentlich und in einer Organisation registriert sein. Der
+ * Absendername kommt nur, wenn die Organisation ihn zeigt (0014).
  */
 export function listMessagesForUser(userId: string): Promise<Message[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<Message>(
-      `SELECT m.id, m.plate_number, m.message_type, m.message_text, m.created_at, m.read_at
+      `SELECT m.id, m.plate_number, m.message_type, m.message_text, m.created_at, m.read_at,
+              vp.id AS plate_id, os.name AS site_name,
+              app.message_sender_name(m.id) AS sender_name
          FROM messages m
-         JOIN verified_plates vp ON vp.plate_number = m.plate_number
+         JOIN verified_plates vp ON ${RECIPIENT_MATCH}
+         LEFT JOIN org_sites os ON os.id = m.site_id
         WHERE vp.user_id = $1
-          AND vp.is_verified = true
-          AND m.created_at >= app.message_read_since(vp.created_at)
           AND m.hidden_at IS NULL
         ORDER BY m.created_at DESC`,
       [userId],
@@ -151,6 +180,8 @@ export async function claimPlate(
   userId: string,
   plateNumber: string,
   makeVerificationCode: () => string,
+  /** Organisation (0014): kein Foto, keine Code-Freigabe – der Org-Admin entscheidet. */
+  orgId: string | null = null,
 ): Promise<VerifiedPlate> {
   const MAX_ATTEMPTS = 5;
   for (let attempt = 1; ; attempt++) {
@@ -163,14 +194,19 @@ export async function claimPlate(
         );
         if ((open.rowCount ?? 0) >= MAX_OPEN_CLAIMS) throw new TooManyOpenClaimsError();
 
-        const { rows } = await client.query<VerifiedPlate>(
+        const { rows } = await client.query<{ id: string }>(
           `INSERT INTO verified_plates
-             (user_id, plate_number, is_verified, verification_status, verification_code)
-           VALUES ($1, $2, false, 'pending', $3)
-           RETURNING *`,
-          [userId, plateNumber, makeVerificationCode()],
+             (user_id, plate_number, is_verified, verification_status, verification_code, org_id)
+           VALUES ($1, $2, false, 'pending', $3, $4)
+           RETURNING id`,
+          [userId, plateNumber, orgId ? null : makeVerificationCode(), orgId],
         );
-        return rows[0];
+        // Neu lesen: ein Trigger gibt Kennzeichen von der Fuhrparkliste sofort frei.
+        const fresh = await client.query<VerifiedPlate>(
+          "SELECT * FROM verified_plates WHERE id = $1 AND user_id = $2",
+          [rows[0].id, userId],
+        );
+        return fresh.rows[0];
       });
     } catch (error) {
       if (hasSqlState(error, UNIQUE_VIOLATION)) {
@@ -202,11 +238,7 @@ export function hideMessage(userId: string, messageId: string): Promise<boolean>
     const { rowCount } = await client.query(
       `UPDATE messages m SET hidden_at = now()
         WHERE m.id = $1
-          AND EXISTS (
-            SELECT 1 FROM verified_plates vp
-             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
-               AND m.created_at >= app.message_read_since(vp.created_at)
-          )`,
+          AND EXISTS (SELECT 1 FROM verified_plates vp WHERE vp.user_id = $2 AND ${RECIPIENT_MATCH})`,
       [messageId, userId],
     );
     return (rowCount ?? 0) > 0;
@@ -224,11 +256,7 @@ export function reportMessage(userId: string, messageId: string, reason: string)
     const hidden = await client.query(
       `UPDATE messages m SET hidden_at = coalesce(m.hidden_at, now())
         WHERE m.id = $1
-          AND EXISTS (
-            SELECT 1 FROM verified_plates vp
-             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
-               AND m.created_at >= app.message_read_since(vp.created_at)
-          )`,
+          AND EXISTS (SELECT 1 FROM verified_plates vp WHERE vp.user_id = $2 AND ${RECIPIENT_MATCH})`,
       [messageId, userId],
     );
     if ((hidden.rowCount ?? 0) === 0) return false;
@@ -251,11 +279,7 @@ export function markMessagesRead(userId: string, messageIds: string[]): Promise<
     await client.query(
       `UPDATE messages m SET read_at = now()
         WHERE m.id = ANY($1::uuid[]) AND m.read_at IS NULL
-          AND EXISTS (
-            SELECT 1 FROM verified_plates vp
-             WHERE vp.user_id = $2 AND vp.plate_number = m.plate_number AND vp.is_verified
-               AND m.created_at >= app.message_read_since(vp.created_at)
-          )`,
+          AND EXISTS (SELECT 1 FROM verified_plates vp WHERE vp.user_id = $2 AND ${RECIPIENT_MATCH})`,
       [messageIds, userId],
     );
   });
@@ -328,6 +352,13 @@ export interface UserDataExport {
     verification_status: string;
     is_verified: boolean;
     created_at: Date;
+    organization: string | null;
+  }>;
+  memberships: Array<{
+    site: string;
+    organization: string | null;
+    status: string;
+    created_at: Date;
   }>;
   messages: Array<{
     plate_number: string;
@@ -346,23 +377,32 @@ export interface UserDataExport {
 export function exportUserData(userId: string): Promise<UserDataExport> {
   return withUser(userId, async (client) => {
     const plates = await client.query<UserDataExport["plates"][number]>(
-      `SELECT plate_number, verification_status, is_verified, created_at
-         FROM verified_plates
-        WHERE user_id = $1
-        ORDER BY created_at`,
+      `SELECT vp.plate_number, vp.verification_status, vp.is_verified, vp.created_at,
+              o.name AS organization
+         FROM verified_plates vp
+         LEFT JOIN organizations o ON o.id = vp.org_id
+        WHERE vp.user_id = $1
+        ORDER BY vp.created_at`,
       [userId],
     );
     const messages = await client.query<UserDataExport["messages"][number]>(
       `SELECT m.plate_number, m.message_type, m.message_text, m.created_at
          FROM messages m
-         JOIN verified_plates vp ON vp.plate_number = m.plate_number
+         JOIN verified_plates vp ON ${RECIPIENT_MATCH}
         WHERE vp.user_id = $1
-          AND vp.is_verified = true
-          AND m.created_at >= app.message_read_since(vp.created_at)
         ORDER BY m.created_at`,
       [userId],
     );
-    return { plates: plates.rows, messages: messages.rows };
+    const memberships = await client.query<UserDataExport["memberships"][number]>(
+      `SELECT s.name AS site, o.name AS organization, sm.status, sm.created_at
+         FROM site_members sm
+         JOIN org_sites s ON s.id = sm.site_id
+         LEFT JOIN organizations o ON o.id = s.org_id
+        WHERE sm.user_id = $1
+        ORDER BY sm.created_at`,
+      [userId],
+    );
+    return { plates: plates.rows, messages: messages.rows, memberships: memberships.rows };
   });
 }
 
@@ -484,10 +524,12 @@ export function listPendingVerifications(userId: string): Promise<PendingVerific
               EXISTS (
                 SELECT 1 FROM verified_plates holder
                  WHERE holder.plate_number = vp.plate_number
+                   AND holder.org_id IS NULL
                    AND holder.verification_status = 'approved'
               ) AS has_approved_holder
          FROM verified_plates vp
         WHERE app.is_admin()
+          AND vp.org_id IS NULL
           AND vp.verification_status = 'pending'
           AND vp.proof_image_url IS NOT NULL
         ORDER BY vp.created_at ASC`,
@@ -547,14 +589,19 @@ export interface SetPlateVerificationResult {
 }
 
 /**
+ * Wer darf ein Kennzeichen freigeben? Plattform-Admins jedes, Org-Admins nur
+ * die ihrer Organisation (0014). Steht in jedem Statement – redundant zu den
+ * Policies `verified_plates_update_admin` / `_update_org_admin`.
+ */
+const MAY_DECIDE = "(app.is_admin() OR (org_id IS NOT NULL AND app.is_org_admin(org_id)))";
+
+/**
  * Gibt ein Kennzeichen frei oder lehnt es ab.
  *
- * Eine Freigabe löst in derselben Transaktion die Konkurrenz auf: ein bisher
- * freigegebener Halter desselben Kennzeichens wird `superseded` (zuerst, sonst
- * greift `verified_plates_one_approved`), andere offene Claims `rejected`.
- *
- * Der `app.is_admin()`-Filter in jedem Statement ist bewusst redundant zur
- * RLS-Policy `verified_plates_update_admin` und zur Prüfung in der Server Action.
+ * Eine Freigabe löst in derselben Transaktion die Konkurrenz auf – im selben
+ * Bereich (öffentlich bzw. dieselbe Organisation): ein bisher freigegebener
+ * Halter wird `superseded` (zuerst, sonst greift `verified_plates_one_approved`),
+ * andere offene Claims `rejected`.
  */
 export function setPlateVerification(
   userId: string,
@@ -562,18 +609,18 @@ export function setPlateVerification(
   approved: boolean,
 ): Promise<SetPlateVerificationResult> {
   return withUser(userId, async (client) => {
-    const target = await client.query<{ plate_number: string }>(
-      "SELECT plate_number FROM verified_plates WHERE id = $1 AND app.is_admin()",
+    const target = await client.query<{ plate_number: string; org_id: string | null }>(
+      `SELECT plate_number, org_id FROM verified_plates WHERE id = $1 AND ${MAY_DECIDE}`,
       [plateId],
     );
     if (target.rows.length === 0)
       return { changed: false, plateNumber: null, supersededEmails: [] };
-    const plateNumber = target.rows[0].plate_number;
+    const { plate_number: plateNumber, org_id: orgId } = target.rows[0];
 
     if (!approved) {
       await client.query(
         `UPDATE verified_plates SET is_verified = false, verification_status = 'rejected'
-          WHERE id = $1 AND app.is_admin()`,
+          WHERE id = $1 AND ${MAY_DECIDE}`,
         [plateId],
       );
       return { changed: true, plateNumber, supersededEmails: [] };
@@ -582,24 +629,332 @@ export function setPlateVerification(
     const superseded = await client.query<{ email: string }>(
       `WITH abgeloest AS (
          UPDATE verified_plates SET is_verified = false, verification_status = 'superseded'
-          WHERE plate_number = $1 AND id <> $2 AND verification_status = 'approved'
-            AND app.is_admin()
+          WHERE plate_number = $1 AND org_id IS NOT DISTINCT FROM $3 AND id <> $2
+            AND verification_status = 'approved' AND ${MAY_DECIDE}
          RETURNING user_id
        )
        SELECT u.email FROM abgeloest JOIN users u ON u.id = abgeloest.user_id`,
-      [plateNumber, plateId],
+      [plateNumber, plateId, orgId],
     );
     await client.query(
       `UPDATE verified_plates SET verification_status = 'rejected'
-        WHERE plate_number = $1 AND id <> $2 AND verification_status = 'pending'
-          AND app.is_admin()`,
-      [plateNumber, plateId],
+        WHERE plate_number = $1 AND org_id IS NOT DISTINCT FROM $3 AND id <> $2
+          AND verification_status = 'pending' AND ${MAY_DECIDE}`,
+      [plateNumber, plateId, orgId],
     );
     await client.query(
       `UPDATE verified_plates SET is_verified = true, verification_status = 'approved'
-        WHERE id = $1 AND app.is_admin()`,
+        WHERE id = $1 AND ${MAY_DECIDE}`,
       [plateId],
     );
     return { changed: true, plateNumber, supersededEmails: superseded.rows.map((r) => r.email) };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Organisationen (0014)
+// ---------------------------------------------------------------------------
+// Autorisierung wie überall doppelt: die Policies aus 0014 und hier der
+// explizite `app.is_org_admin()`- bzw. `user_id`-Filter.
+
+/** Standort zu einem QR-Token; `null` für unbekannte Token. Öffentlich aufrufbar. */
+export function siteByToken(token: string): Promise<SiteInfo | null> {
+  return withAnon(async (client) => {
+    const { rows } = await client.query<SiteInfo>(
+      `SELECT site_id AS "siteId", site_name AS "siteName", org_id AS "orgId",
+              org_name AS "orgName", org_slug AS "orgSlug", allow_free_text AS "allowFreeText",
+              show_sender AS "showSender", active
+         FROM app.site_by_token($1)`,
+      [token],
+    );
+    return rows[0] ?? null;
+  });
+}
+
+/**
+ * Nachricht über den Standort-QR. Anonym (`senderId` null) nur mit Typ; ein
+ * angemeldeter Absender wird eingetragen und darf – wenn die Organisation es
+ * erlaubt und er am Standort aktiv ist – Freitext schicken (Policy, 0014).
+ *
+ * @throws {PlateRateLimitError} wenn der Stunden-Deckel des Kennzeichens greift.
+ */
+export async function insertSiteMessage(
+  senderId: string | null,
+  message: {
+    plate: string;
+    type: string | null;
+    text: string | null;
+    orgId: string;
+    siteId: string;
+  },
+): Promise<void> {
+  try {
+    await withUser(senderId, (client) =>
+      client.query(
+        `INSERT INTO messages (plate_number, message_type, message_text, org_id, site_id, sender_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [message.plate, message.type, message.text, message.orgId, message.siteId, senderId],
+      ),
+    );
+  } catch (error) {
+    if (hasSqlState(error, CHECK_VIOLATION)) throw new PlateRateLimitError();
+    throw error;
+  }
+}
+
+/** Status der eigenen Mitgliedschaft an einem Standort oder `null`. */
+export function membershipStatus(userId: string, siteId: string): Promise<string | null> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ status: string }>(
+      "SELECT status FROM site_members WHERE site_id = $1 AND user_id = $2",
+      [siteId, userId],
+    );
+    return rows[0]?.status ?? null;
+  });
+}
+
+/** Beitritt beantragen; ein bestehender Antrag oder eine Mitgliedschaft bleibt unverändert. */
+export function requestSiteMembership(userId: string, siteId: string): Promise<void> {
+  return withUser(userId, async (client) => {
+    await client.query(
+      `INSERT INTO site_members (site_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (site_id, user_id) DO NOTHING`,
+      [siteId, userId],
+    );
+  });
+}
+
+/** Eigene Mitgliedschaft beenden. Kennzeichen der Organisation verfallen per Trigger. */
+export function leaveSite(userId: string, siteId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      "DELETE FROM site_members WHERE site_id = $1 AND user_id = $2",
+      [siteId, userId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/**
+ * Eigene Mitgliedschaften. Den Namen der Organisation sieht erst ein aktives
+ * Mitglied (Policy `organizations_select_member`); bei offenen Anträgen ist er `null`.
+ */
+export function listMyMemberships(userId: string): Promise<Membership[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<Membership>(
+      `SELECT sm.site_id, s.name AS site_name, s.org_id, o.name AS org_name, sm.status
+         FROM site_members sm
+         JOIN org_sites s ON s.id = sm.site_id
+         LEFT JOIN organizations o ON o.id = s.org_id
+        WHERE sm.user_id = $1
+        ORDER BY s.name`,
+      [userId],
+    );
+    return rows;
+  });
+}
+
+/** Organisationen, die der Nutzer verwaltet. */
+export function listMyAdminOrgs(userId: string): Promise<Array<{ name: string; slug: string }>> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ name: string; slug: string }>(
+      `SELECT o.name, o.slug FROM organizations o
+         JOIN org_admins a ON a.org_id = o.id
+        WHERE a.user_id = $1
+        ORDER BY o.name`,
+      [userId],
+    );
+    return rows;
+  });
+}
+
+/** Organisation per Slug – nur für ihre Admins, sonst `null`. */
+export function orgForAdmin(userId: string, slug: string): Promise<Organization | null> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<Organization>(
+      `SELECT id, name, slug, show_sender, allow_free_text FROM organizations
+        WHERE slug = $1 AND app.is_org_admin(id)`,
+      [slug],
+    );
+    return rows[0] ?? null;
+  });
+}
+
+export function listOrgSites(userId: string, orgId: string): Promise<OrgSite[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<OrgSite>(
+      `SELECT id, name, token, disabled_at IS NOT NULL AS disabled FROM org_sites
+        WHERE org_id = $1 AND app.is_org_admin(org_id)
+        ORDER BY created_at`,
+      [orgId],
+    );
+    return rows;
+  });
+}
+
+/** Legt einen Standort an. @returns die ID. */
+export function createSite(
+  userId: string,
+  orgId: string,
+  name: string,
+  token: string,
+): Promise<string> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO org_sites (org_id, name, token) SELECT $1, $2, $3 WHERE app.is_org_admin($1)
+       RETURNING id`,
+      [orgId, name, token],
+    );
+    if (!rows[0]) throw new Error("Keine Berechtigung für diese Organisation.");
+    return rows[0].id;
+  });
+}
+
+export function setSiteDisabled(
+  userId: string,
+  siteId: string,
+  disabled: boolean,
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE org_sites SET disabled_at = CASE WHEN $2 THEN now() END
+        WHERE id = $1 AND app.is_org_admin(org_id)`,
+      [siteId, disabled],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Neues Token, z. B. wenn ein Aushang missbraucht wird; alte QR-Codes werden ungültig. */
+export function renewSiteToken(userId: string, siteId: string, token: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      "UPDATE org_sites SET token = $2 WHERE id = $1 AND app.is_org_admin(org_id)",
+      [siteId, token],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Mitgliedschaften aller Standorte, mit E-Mail und Anzeigename – nur für Org-Admins. */
+export function listOrgMembers(userId: string, orgId: string): Promise<OrgMember[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<OrgMember>(
+      `SELECT sm.site_id, s.name AS site_name, sm.user_id, u.email, u.name, sm.status,
+              sm.created_at
+         FROM site_members sm
+         JOIN org_sites s ON s.id = sm.site_id
+         JOIN users u ON u.id = sm.user_id
+        WHERE s.org_id = $1 AND app.is_org_admin(s.org_id)
+        ORDER BY sm.status DESC, s.name, u.email`,
+      [orgId],
+    );
+    return rows;
+  });
+}
+
+export function setMemberActive(
+  userId: string,
+  siteId: string,
+  memberId: string,
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE site_members SET status = 'active'
+        WHERE site_id = $1 AND user_id = $2 AND app.is_org_admin(app.site_org(site_id))`,
+      [siteId, memberId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Mitglied entfernen oder Antrag ablehnen (Offboarding; Kennzeichen verfallen per Trigger). */
+export function removeMember(userId: string, siteId: string, memberId: string): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `DELETE FROM site_members
+        WHERE site_id = $1 AND user_id = $2 AND app.is_org_admin(app.site_org(site_id))`,
+      [siteId, memberId],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Kennzeichen der Organisation mit Halter-E-Mail, offene zuerst. */
+export function listOrgPlates(userId: string, orgId: string): Promise<OrgPlate[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<OrgPlate>(
+      `SELECT vp.id, vp.plate_number, vp.verification_status, vp.created_at, u.email, u.name
+         FROM verified_plates vp
+         JOIN users u ON u.id = vp.user_id
+        WHERE vp.org_id = $1 AND app.is_org_admin(vp.org_id)
+          AND vp.verification_status IN ('pending', 'approved')
+        ORDER BY vp.verification_status DESC, vp.plate_number`,
+      [orgId],
+    );
+    return rows;
+  });
+}
+
+export function listAllowlist(userId: string, orgId: string): Promise<string[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ plate_number: string }>(
+      `SELECT plate_number FROM org_plate_allowlist
+        WHERE org_id = $1 AND app.is_org_admin(org_id) ORDER BY plate_number`,
+      [orgId],
+    );
+    return rows.map((r) => r.plate_number);
+  });
+}
+
+/** Kennzeichen muss bereits kanonisch sein (`parsePlate`). */
+export function addAllowlistPlate(userId: string, orgId: string, plate: string): Promise<void> {
+  return withUser(userId, async (client) => {
+    await client.query(
+      `INSERT INTO org_plate_allowlist (org_id, plate_number)
+       SELECT $1, $2 WHERE app.is_org_admin($1)
+       ON CONFLICT DO NOTHING`,
+      [orgId, plate],
+    );
+  });
+}
+
+export function removeAllowlistPlate(userId: string, orgId: string, plate: string): Promise<void> {
+  return withUser(userId, async (client) => {
+    await client.query(
+      `DELETE FROM org_plate_allowlist
+        WHERE org_id = $1 AND plate_number = $2 AND app.is_org_admin(org_id)`,
+      [orgId, plate],
+    );
+  });
+}
+
+export function updateOrgSettings(
+  userId: string,
+  orgId: string,
+  settings: { showSender: boolean; allowFreeText: boolean },
+): Promise<boolean> {
+  return withUser(userId, async (client) => {
+    const { rowCount } = await client.query(
+      `UPDATE organizations SET show_sender = $2, allow_free_text = $3
+        WHERE id = $1 AND app.is_org_admin(id)`,
+      [orgId, settings.showSender, settings.allowFreeText],
+    );
+    return (rowCount ?? 0) > 0;
+  });
+}
+
+/** Vorfälle je Woche und Standort, letzte 12 Wochen – nie je Person. */
+export function orgWeeklyStats(userId: string, orgId: string): Promise<OrgWeeklyStat[]> {
+  return withUser(userId, async (client) => {
+    const { rows } = await client.query<{ week: Date; site_name: string; incidents: string }>(
+      "SELECT week, site_name, incidents FROM app.org_weekly_stats($1)",
+      [orgId],
+    );
+    return rows.map((r) => ({
+      week: r.week,
+      site_name: r.site_name,
+      incidents: Number(r.incidents),
+    }));
   });
 }

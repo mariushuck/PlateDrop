@@ -203,7 +203,7 @@ zurückgibt, nie den Inhalt.
 | --- | --- |
 | `src/app/t/[token]/page.tsx` | öffentliches Formular für einen Tag; ungültige oder widerrufene Tokens bekommen eine neutrale Fehlerseite |
 | `src/app/t/[token]/actions.ts` | `dropTagMessage`, gleiche Rate-Limits wie `dropMessage` |
-| `src/app/s/[statusToken]/page.tsx` | Statusseite für den Absender |
+| `src/app/status/[statusToken]/page.tsx` | Statusseite für den Absender (`/s/` belegt seit `0014` das Standort-Formular) |
 | `src/app/dashboard/tags/` | Tags anlegen, umbenennen, widerrufen, PDF herunterladen |
 | `src/app/api/tags/[id]/pdf/route.ts` | Sticker-PDF, nur für den Eigentümer |
 | `src/lib/tags/token.ts` | Token-Erzeugung mit `crypto.randomBytes` |
@@ -515,6 +515,14 @@ einzige Nachricht mehr.
 | `src/app/o/[slug]/admin/` | Mitglieder, Kennzeichen, Standorte, Einstellungen, Statistik |
 | `src/app/o/[slug]/s/[siteToken]/` | öffentliches Formular am Standort für Besucher |
 | `src/app/invite/[token]/` | Einladung annehmen |
+
+**Stand der Umsetzung (2026-10-13, Migration `0014`).** Gebaut, mit drei bewussten Abweichungen von
+der Skizze oben: Mitgliedschaft hängt am Standort (`site_members`) statt an einer Tabelle
+`org_members`, weil eine Hausverwaltung viele Objekte betreut; Org-Admins stehen in `org_admins`;
+das Standort-Formular liegt unter `/s/[token]` (kurz für den Aushang), die spätere Statusseite für
+private Sticker deshalb unter `/status/[token]`. Einladungen per Mail gibt es nicht – Mitglieder
+treten über den Aushang bei und werden bestätigt. Der Aushang ist eine druckbare Seite statt eines
+PDF. Organisationen legt der Betreiber per Skript an (`create-org.mjs`).
 
 **Abrechnung.** Im Pilot keine. Danach zunächst Rechnung per Hand; ein Zahlungsanbieter erst, wenn
 mehr als eine Handvoll Kunden zahlen.

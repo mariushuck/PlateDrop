@@ -60,7 +60,10 @@ Hebel (viele Objekte je Vertrag). Beide werden in Phase 0 parallel befragt.
 
 ## 4. Was daraus für das Produkt folgt
 
-Alle Punkte sind generisch und stehen als Pakete in [TODO.md](../TODO.md) Phase E:
+Alle Punkte sind generisch und seit 2026-10-13 umgebaut (Migration `0014`, siehe
+[architecture.md](architecture.md#organisationen-0014)); der Aushang ist eine druckbare Seite unter
+`/o/<slug>/admin`, Organisationen legt der Betreiber per `scripts/create-org.mjs` an
+([admin.md, Teil C](admin.md#teil-c--organisationen)):
 
 - **Standort-Scope.** Eine Hausverwaltung hat viele Objekte, eine Firma mehrere Werke. Mitglieder
   und Kennzeichen hängen am Standort; der Standort-QR erreicht nur dessen Mitglieder.
@@ -68,7 +71,7 @@ Alle Punkte sind generisch und stehen als Pakete in [TODO.md](../TODO.md) Phase 
   Verwaltung keine Mieterlisten; Bewohner treten freiwillig bei. Das löst zugleich die Frage, auf
   welcher Grundlage Mieterdaten verarbeitet werden. Import aus Fuhrpark- oder Parkausweislisten
   bleibt für Firmen.
-- **Aushang-PDF je Standort.** Das wichtigste Vertriebs- und Onboarding-Material ist ein Schild an
+- **Aushang je Standort** (druckbare Seite, im Browser als PDF speicherbar). Das wichtigste Vertriebs- und Onboarding-Material ist ein Schild an
   der Einfahrt und ein Aushang im Treppenhaus.
 - **Offboarding und Vertragsende.** Auszug, Austritt und Kündigung müssen Zugriffe sofort beenden
   und Daten löschen können; das fragt jeder Datenschutzbeauftragte.

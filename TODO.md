@@ -96,9 +96,6 @@ Voraussetzung für jeden öffentlichen Start.
 - [ ] **Dashboard lädt alle Nachrichten ohne Obergrenze.** `listMessagesForUser` hat kein `LIMIT`;
   ohne `MESSAGE_RETENTION_DAYS` wächst die Seite unbegrenzt (Spam am Limit ≈ 14.000/Monat). `LIMIT 200`
   plus Hinweis auf den Datenexport; `exportUserData` bleibt vollständig.
-- [ ] **Alte E-Mail-Adresse bleibt in `users.name`.** `signUp` setzt `name: email`; nach einer
-  E-Mail-Änderung steht die alte Adresse dort für immer und fehlt im Datenexport. `name: ""` bei der
-  Registrierung plus Migration, die bestehende Werte leert; admin.md-Datenliste anpassen.
 - [ ] **HEIC-Beweisfotos sind in Chrome/Firefox nicht sichtbar.** Der Admin sieht ein kaputtes Bild
   und kann nur ablehnen. HEIC aus `ALLOWED_TYPES` und `sniffImageType` streichen, damit der Nutzer
   sofort eine klare Meldung bekommt (vorher prüfen, ob iPhones beim Upload ohnehin JPEG liefern).
@@ -161,55 +158,30 @@ Offen ist nur Web Push, bewusst später:
   `/dashboard/settings`; Datenschutzerklärung (Push-Dienste der Browserhersteller, Speicherdauer
   der Abos). Auf iPhones nur als Home-Bildschirm-App – Onboarding muss das erklären.
 
-### Phase E — Mandanten-MVP für Privatgelände ([strategy.md §3](docs/strategy.md#3-hebel-3--b2b-nische-statt-massenmarkt), [go-to-market.md](docs/go-to-market.md))
+### Phase E — Mandanten für Privatgelände: erledigt (2026-10-13)
 
-Wird technisch vorbereitet, ohne die Gespräche aus go-to-market.md Phase 0 abzuwarten
-(Entscheidung 2026-10-13). Alles generisch für jedes Gelände; Segmente unterscheiden sich nur in
-Einstellungen, nicht im Code.
+Migration `0014`, `/s/[token]`, `/o/[slug]/admin` mit Aushang-Druckseite, Beitritt per QR mit
+Freigabe, Standort-Scope, Fuhrparkliste, Offboarding, Statistik, Einstellungen, `/betreiber`,
+`scripts/create-org.mjs` und `delete-org.mjs`; Testgruppe „Mandantentrennung“ in `rls.test.ts`.
+Details in [architecture.md](docs/architecture.md#organisationen-0014) und
+[admin.md, Teil C](docs/admin.md#teil-c--organisationen). Offen:
 
-- [ ] **Token- und QR-Technik** (aus Hebel 1, hier zuerst gebraucht): `src/lib/tags/token.ts`
-  (`crypto.randomBytes(16)`, base64url), QR serverseitig als SVG, Fehlerkorrektur M/Q.
-- [ ] **Migration Organisationen**: `organizations`, `org_members`, `org_sites`; `org_id` auf
-  `verified_plates` und `messages`, `messages.sender_id`; Eindeutigkeit des freigegebenen Halters je
-  Organisation (`NULLS NOT DISTINCT`).
-- [ ] **RLS**: `app.is_org_member()` / `app.is_org_admin()` (`SECURITY DEFINER`); Lese-Policy
-  verlangt `m.org_id IS NOT DISTINCT FROM vp.org_id`; Org-Admins geben Kennzeichen frei, lesen aber
-  keine fremden Nachrichten.
-- [ ] **Eigene RLS-Testgruppe Mandantentrennung**: öffentliche Nachricht erreicht nie das
-  Firmenkonto mit demselben Kennzeichen und umgekehrt; Org-Admin liest nichts Fremdes.
-- [ ] **Routen**: `/o/[slug]` (Mitglieder), `/o/[slug]/admin` (Mitglieder, Kennzeichen,
-  Standorte, Einstellungen), `/o/[slug]/s/[siteToken]` (Besucher-Formular am Standort),
-  `/invite/[token]` (Einladung per Mail).
-- [ ] **Org-Einstellungen**: Absendername sichtbar oder nicht, Freitext für angemeldete Absender,
-  eigene Katalog-Einträge.
-- [ ] **Kennzeichen-Import** aus Fuhrpark- oder Parkausweisliste, Freigabe durch Org-Admin statt
-  Foto.
-- [ ] **Aggregierte Statistik** (Vorfälle pro Woche), nie pro Person.
-- [ ] **Standort-Scope**: Mitglieder und Kennzeichen an Standorte (`org_sites`) binden; eine
-  Nachricht über den Standort-QR erreicht nur Mitglieder dieses Standorts (Hausverwaltung mit
-  vielen Objekten, Firma mit mehreren Werken). Eigene RLS-Tests.
-- [ ] **Beitritt per Standort-Link/QR** mit Freigabe durch den Org-Admin, zusätzlich zur
-  Mail-Einladung. In Wohnanlagen treten Bewohner selbst bei, statt dass die Verwaltung Mieterdaten
-  importiert.
-- [ ] **Aushang-PDF je Standort** (QR, Kurz-URL, kurzer Text) als GET-Route; in `CLAUDE.md` als
-  weitere Route-Ausnahme dokumentieren.
-- [ ] **`scripts/create-org.mjs`**: Organisation, ersten Standort und ersten Org-Admin anlegen, mit
-  Owner-Zugang wie `set-admin.mjs`. Kein Self-Service-Onboarding im Pilot.
-- [ ] **Offboarding**: Org-Admin entfernt ein Mitglied (Auszug, Austritt), dessen Freigaben in der
-  Organisation enden sofort; RLS-Test.
-- [ ] **Vertragsende**: Export und Löschung aller Daten einer Organisation (Art. 28 Abs. 3 lit. g
-  DSGVO), als Skript für den Betreiber.
-- [ ] **Betreiber-Seite** `/betreiber`: statisch, Nutzen und Ablauf, Kontakt per `mailto`;
-  Datenschutzerklärung um den B2B-Fall (Auftragsverarbeitung) ergänzen.
 - [ ] **Vor dem ersten zahlenden Kunden**: Fehler-Aggregation aus P2 und Uptime-Monitoring auf
-  `/api/health`.
+  `/api/health` (inklusive `outboxLagSeconds`); Penetrationstest der Mandantentrennung vor dem
+  zweiten Kunden (strategy.md §3.7).
+- [ ] **Kontaktadresse auf `/betreiber`** eintragen (`CONTACT_EMAIL`, `TODO(go-live)`), zusammen mit
+  der Datenschutz-Kontaktadresse aus P0.
+- [ ] **Optional, wenn Piloten es verlangen:** Einladung per Mail zusätzlich zum Beitritt über den
+  Aushang; eigene Katalog-Einträge je Organisation; Import der Fuhrparkliste als CSV statt
+  einzeln.
 
 ### Später — private QR-Sticker ([strategy.md §1](docs/strategy.md#1-hebel-1--opt-in-per-qr-sticker))
 
 - [ ] `contact_tags`, `messages.tag_id`/`status_token`, `messages_exactly_one_target`; zweite
   SELECT-Policy für Tag-Nachrichten.
 - [ ] Öffentliches Formular `/t/[token]` mit `dropTagMessage` (gleiche Rate-Limits),
-  Statusseite `/s/[statusToken]` über `SECURITY DEFINER`-Funktion ohne Inhalt.
+  Statusseite `/status/[statusToken]` über `SECURITY DEFINER`-Funktion ohne Inhalt (`/s/` gehört
+  seit `0014` dem Standort-Formular).
 - [ ] `/dashboard/tags` (anlegen, umbenennen, widerrufen) und Sticker-PDF als GET-Route; als
   vierte Route-Ausnahme in `CLAUDE.md` dokumentieren.
 - [ ] Integrationstests (fremder Nutzer, widerrufener Tag, Statusfunktion) und Smoke-Test

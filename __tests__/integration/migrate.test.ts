@@ -45,6 +45,7 @@ describe("scripts/migrate.mjs", () => {
       "0011_claim_competition.sql",
       "0012_receiver_controls.sql",
       "0013_message_types_and_notifications.sql",
+      "0014_organizations.sql",
     ]);
   });
 

@@ -5,6 +5,12 @@ Lesen darf sie nur, wer das Kennzeichen nachweislich besitzt. Diese Asymmetrie �
 schreiben, authentifiziert lesen** — ist die zentrale Entwurfsvorgabe; nahezu jede Entscheidung im
 System dient ihr.
 
+Seit Migration `0014` gibt es dazu Organisationen für Privatgelände (Firmenparkplätze, Wohnanlagen,
+private Parkflächen): Standorte mit eigenem QR-Code, Mitglieder je Standort, Org-Admins. Dort dürfen
+angemeldete Mitglieder als Absender erkennbar sein und – wenn die Organisation es erlaubt – Freitext
+schreiben; Org-Admins verwalten, lesen aber keine Nachrichten. Die Grundregel bleibt: lesen darf nur
+der freigegebene Halter, und öffentliche und Organisations-Bereiche sind strikt getrennt.
+
 Das Dokument beschreibt, wie das System aufgebaut ist und warum. Für den Betrieb siehe die
 [Admin-Anleitung](admin.md).
 
@@ -109,7 +115,10 @@ bewusst **keine** API-Routen.
 | --- | --- |
 | [`/api/auth/[...all]`](../src/app/api/auth/[...all]/route.ts) | better-auth braucht sie. Die Links in Bestätigungs- und Reset-Mails müssen auf eine URL zeigen, nicht auf eine Server Action. |
 | [`/api/proofs/[...path]`](../src/app/api/proofs/[...path]/route.ts) | **Nur GET, verändert nichts.** Ein `<img>`-Tag braucht eine URL. Prüft bei jedem Abruf Sitzung und Berechtigung neu. |
-| [`/api/health`](../src/app/api/health/route.ts) | **Nur GET, verändert nichts.** Container-Healthcheck und Uptime-Monitor brauchen eine URL. Führt `SELECT 1` aus, antwortet 200 oder 503. |
+| [`/api/health`](../src/app/api/health/route.ts) | **Nur GET, verändert nichts.** Container-Healthcheck und Uptime-Monitor brauchen eine URL. Führt `SELECT 1` aus, antwortet 200 oder 503, dazu `outboxLagSeconds`. |
+
+Der Aushang für Standorte ist bewusst **kein** weiterer Route Handler: eine druckbare Seite mit
+serverseitig erzeugtem QR-SVG, gedruckt oder als PDF gespeichert über den Browser.
 
 Die Regel „keine API-Routen" gilt für Mutationen. Keine der Ausnahmen schreibt etwas — abgesehen
 von better-auth selbst, das über seine Endpunkte Token bestätigt.
@@ -122,9 +131,13 @@ von better-auth selbst, das über seine Endpunkte Token bestätigt.
 | `/login` | Anmeldung und Registrierung | öffentlich |
 | `/forgot-password` | Passwort-Reset anfordern | öffentlich |
 | `/reset-password` | Neues Passwort setzen, Token aus der E-Mail | öffentlich |
-| `/dashboard` | Kennzeichen verwalten, Nachrichten lesen | angemeldet |
-| `/dashboard/settings` | E-Mail und Passwort ändern, Daten exportieren, Konto löschen | angemeldet |
-| `/admin` | Offene Verifizierungen prüfen | angemeldet + Admin |
+| `/s/[token]` | Nachricht an ein Fahrzeug auf einem Gelände (Ziel des Standort-QR), Beitritt beantragen | öffentlich; Beitritt angemeldet |
+| `/dashboard` | Kennzeichen verwalten (öffentlich und je Organisation), Gelände, Nachrichten lesen | angemeldet |
+| `/dashboard/settings` | Benachrichtigungen, Anzeigename, E-Mail und Passwort ändern, Daten exportieren, Konto löschen | angemeldet |
+| `/admin` | Offene Verifizierungen (öffentliche Kennzeichen) und Meldungen | angemeldet + Admin |
+| `/o/[slug]/admin` | Verwaltung einer Organisation: Beitritte, Kennzeichen, Standorte, Fuhrparkliste, Einstellungen, Statistik | angemeldet + Org-Admin, sonst 404 |
+| `/o/[slug]/admin/sites/[siteId]/aushang` | Druckbarer Aushang mit QR-Code | angemeldet + Org-Admin |
+| `/betreiber` | Seite für Betreiber privater Gelände, Pilot anfragen | öffentlich |
 | `/impressum`, `/datenschutz` | Rechtliches | öffentlich |
 | `/api/auth/[...all]` | better-auth-Endpunkte | öffentlich |
 | `/api/proofs/[...path]` | Beweisfoto ausliefern | Halter oder Admin, pro Abruf geprüft |
@@ -299,6 +312,28 @@ Versuche, nächster Versuch, `sent_at`. RLS an, keine Policy, kein Grant für di
 Trigger und der Notifier (als Owner) kommen heran. `prune-outbox.mjs` löscht erledigte Einträge
 nach 30 Tagen.
 
+### Organisationen (`0014`)
+
+PlateDrop für Privatgelände: ein Betreiber hat Standorte, Mitglieder gehören zu Standorten.
+
+| Tabelle | Inhalt |
+| --- | --- |
+| `organizations` | Name, `slug` (URL der Verwaltung), `show_sender`, `allow_free_text`. Angelegt und gelöscht nur per Skript. |
+| `org_sites` | Standort mit `token` (128 Bit base64url, `src/lib/tags/token.ts`) für den QR-Code, `disabled_at`. `UNIQUE (id, org_id)` ist Ziel des zusammengesetzten Fremdschlüssels aus `messages`. |
+| `org_admins` | wer eine Organisation verwaltet; vergeben per `scripts/create-org.mjs`. |
+| `site_members` | Mitgliedschaft je Standort, `pending` bis zur Bestätigung durch einen Org-Admin. |
+| `org_plate_allowlist` | Fuhrpark- oder Parkausweisliste: ein Claim auf ein gelistetes Kennzeichen gilt sofort (Trigger `app.approve_allowlisted_claim`). |
+
+`verified_plates.org_id` ordnet ein Kennzeichen einer Organisation zu (`NULL` = öffentlich). Die
+Unique-Indizes aus `0011` gelten jetzt je Bereich (`NULLS NOT DISTINCT`): dieselbe Nummer darf
+öffentlich und in einer Organisation je einen freigegebenen Halter haben. Org-Kennzeichen brauchen
+weder Foto noch Bestätigungscode.
+
+`messages` trägt `org_id`, `site_id` (beide gesetzt oder beide `NULL`, Fremdschlüssel
+`(site_id, org_id) → org_sites (id, org_id)`) und `sender_id` (angemeldeter Absender über einen
+Standort). Die App-Rolle darf `sender_id` nicht lesen (spaltenscharfes `SELECT`); den Namen gibt
+`app.message_sender_name()` nur heraus, wenn die Organisation Absender zeigt.
+
 **`message_reports`** (`0012`) — Meldungen von Empfängern an den Betreiber (Melde- und
 Abhilfeverfahren nach DSA). Eine Meldung je Nachricht und Melder; Grund aus einer festen Liste
 (`src/lib/messages/reportReasons.ts`). Fällt mit der Nachricht per Kaskade weg.
@@ -374,6 +409,28 @@ Policy unerreichbar; vorher hätte ein Halter sein offenes Kennzeichen per UPDAT
 `app.set_plate_pause(plate, until)` nur an der eigenen Zeile. Eine UPDATE-Policy für freigegebene
 Kennzeichen wäre gefährlich: Sie gilt für die ganze Zeile, und der Halter könnte damit auch
 `proof_image_url` auf ein fremdes Beweisfoto setzen und es über `canReadProof` abrufen.
+
+### Mandantentrennung (`0014`)
+
+Die Lesebedingung bleibt an einer Stelle: `app.can_read_message(plate, created_at, org_id, site_id)`
+verlangt zusätzlich zum Bisherigen `vp.org_id IS NOT DISTINCT FROM m.org_id` – eine öffentliche
+Nachricht erreicht nie das Org-Kennzeichen mit derselben Nummer und umgekehrt – und bei einer
+Standort-Nachricht eine **aktive** Mitgliedschaft des Halters an genau diesem Standort. Dieselbe
+Regel nutzen der Outbox-Trigger und in `queries.ts` das Fragment `RECIPIENT_MATCH`.
+
+| Regel | Umsetzung |
+| --- | --- |
+| Org-Admins verwalten, lesen aber keine Nachrichten | keine SELECT-Policy auf `messages` für sie; Statistik nur über `app.org_weekly_stats()` (Zahlen je Woche und Standort) |
+| Org-Admins nur der eigenen Organisation | Helfer `app.is_org_admin(org)`, `app.site_org(site)` (`SECURITY DEFINER`); Policies auf allen Org-Tabellen und `verified_plates_select_org_admin` / `_update_org_admin` |
+| Beitritt nur beantragen | `site_members_request_own`: nur eigener Eintrag, nur `pending`, nur aktive Standorte; bestätigen darf nur der Org-Admin |
+| Org-Kennzeichen nur für Mitglieder | `verified_plates_insert_own` verlangt bei `org_id` `app.is_org_member()` |
+| Absender nur sich selbst | `messages_insert_public`: `sender_id IS NULL OR sender_id = app.current_user_id()`, Standort aktiv |
+| Freitext nur für Mitglieder, wenn erlaubt | `message_text` nur mit `sender_id`, Standort und `app.may_send_free_text(site)` |
+| Offboarding wirkt sofort | Lesen hängt an der aktiven Mitgliedschaft; Trigger `app.expire_plates_without_membership` setzt Org-Kennzeichen auf `expired`, sobald keine aktive Mitgliedschaft in der Organisation bleibt |
+| Öffentliches Formular ohne Tabellenzugriff | `app.site_by_token(token)` löst genau ein Token auf |
+
+Das Stundenlimit je Kennzeichen zählt jetzt je Bereich, damit Spam an ein öffentliches Kennzeichen
+nicht den Firmenparkplatz mit derselben Nummer blockiert.
 
 ### Warum die Auth-Tabellen ohne RLS laufen
 
@@ -677,6 +734,22 @@ gespeichert. Melden (`reportMessage`) blendet aus und legt in derselben Transakt
 „Behalten“ (`resolveReport`). Beide Wege prüfen die Admin-Rolle in der Server Action, im SQL
 (`app.is_admin()`) und über die Policies.
 
+### Gelände: Beitritt, Freigabe, Nachricht
+
+1. Der Betreiber legt Organisation, ersten Standort und Org-Admin per `scripts/create-org.mjs` an;
+   der Org-Admin druckt unter `/o/<slug>/admin` den Aushang.
+2. Wer den Code scannt, landet auf `/s/<token>`. Angemeldete Nutzer beantragen dort den Beitritt
+   (`joinSite`, Status `pending`); ohne Anmeldung führt der Link über `/login?next=/s/<token>`
+   zurück (`safeNextPath` lässt nur Standort-Pfade zu).
+3. Der Org-Admin bestätigt; das Mitglied beansprucht im Dashboard sein Kennzeichen für die
+   Organisation (`claimOrgPlate`). Steht es auf der Fuhrparkliste, gilt es sofort, sonst gibt der
+   Org-Admin frei (`setPlateVerification`, Konkurrenz nur im selben Bereich).
+4. Eine Nachricht über `/s/<token>` (`dropSiteMessage`, gleiche Rate-Limits wie `/`) erreicht nur
+   aktive Mitglieder dieses Standorts; der Outbox-Trigger benachrichtigt nach derselben Regel.
+5. Entfernt der Org-Admin ein Mitglied oder tritt es aus, endet der Lesezugriff sofort, und seine
+   Kennzeichen in der Organisation verfallen.
+6. Zum Vertragsende exportiert und löscht `scripts/delete-org.mjs` alle Daten der Organisation.
+
 ### Datenexport und Kontolöschung
 
 Beides steht jeder angemeldeten Person unter `/dashboard/settings` zur Verfügung (Art. 15, 17 und 20
@@ -731,6 +804,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0011_claim_competition.sql` | Nur der freigegebene Claim ist eindeutig, Status `expired`/`superseded`, `is_verified` an den Status gekoppelt, spaltenscharfes `UPDATE` auf `verified_plates` |
 | `0012_receiver_controls.sql` | `app.can_read_message()`, Ausblenden (`hidden_at`), `message_reports`, Admin liest/löscht nur Gemeldetes, `paused_until` mit `app.set_plate_pause()` |
 | `0013_message_types_and_notifications.sql` | `message_type` mit Katalog-CHECK, kein anonymer Freitext, spaltenscharfes INSERT, `read_at`, `notification_settings`, `notification_outbox` mit Trigger, `app.outbox_lag_seconds()` |
+| `0014_organizations.sql` | Organisationen, Standorte, Org-Admins, Mitgliedschaften, Fuhrparkliste; `org_id`/`site_id`/`sender_id`, Lesebedingung mit Bereich, Mandanten-Policies, Offboarding- und Fuhrparklisten-Trigger, Statistik, `users.name` geleert |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in
@@ -754,8 +828,8 @@ Drei Ebenen mit unterschiedlichem Zuschnitt, dazu die CI.
 | Ebene | Befehl | Deckt ab |
 | --- | --- | --- |
 | Unit | `pnpm test` | Kennzeichenlogik samt Erkennung mehrdeutiger Eingaben, Bestätigungscode, Claim-Formular, Ablage und Pfadprüfung der Beweisfotos samt Byte-Signatur, IP-Ermittlung und -Hashing, `requireEnv`, HTML-Escaping der Mailvorlagen. Braucht kein Docker. |
-| Integration | `pnpm test:db:up && pnpm test:integration` | Policies, Data-Access-Modul (inkl. Code-Kollision, Lesefenster und Datenexport), Transaktionskontext, Migrations-Runner samt Umwandlung der Altkennzeichen durch 0008, Admin-Skript, alle Prune-Skripte, Mailversand, die öffentliche Server Action, die better-auth-Härtung (Sitzungswiderruf beim Reset, gesperrtes `/delete-user`). Läuft gegen echtes Postgres und Mailpit. |
-| End-to-End | `pnpm smoke` | Der vollständige Ablauf über HTTP gegen den laufenden Stack: Registrierung, Bestätigungsmail, Login, geschützte Seiten, Auslieferung der Beweisfotos, Passwort-Reset, Ablehnung und erneutes Einreichen. |
+| Integration | `pnpm test:db:up && pnpm test:integration` | Policies inklusive der Gruppe „Mandantentrennung“, Data-Access-Modul (Claim-Konkurrenz, Lesefenster, Ausblenden/Melden, Organisationen, Datenexport), Outbox-Trigger und Notifier gegen Mailpit, Transaktionskontext, Migrations-Runner samt Umwandlung der Altkennzeichen durch 0008, Admin- und Org-Skripte, alle Prune-Skripte, Mailversand, die öffentliche Server Action, die better-auth-Härtung. Läuft gegen echtes Postgres und Mailpit. |
+| End-to-End | `pnpm smoke` | Der vollständige Ablauf über HTTP gegen den laufenden Stack, Server Actions inklusive (Action-ID aus dem Manifest des Containers): Registrierung, Login, Beweisfoto-Upload über 1 MB, Kennzeichen entfernen, Passwort-Reset, Ablehnung, Melden und Löschen durch den Admin, Benachrichtigung per Mail, Organisation von Anlage über Beitritt und Freigabe bis zur Standort-Nachricht und zum Aushang. |
 | CI | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Bei jedem Push auf `main`/`dev` und jedem PR: `pnpm check`, `typecheck`, Unit-Tests, `build`, die Integrationssuite gegen Service-Container, `pnpm audit --audit-level high` und ein gitleaks-Secret-Scan. Die Actions sind auf Commit-SHAs gepinnt, mit Versionskommentar. Dazu kommen CodeQL im Standard-Setup von GitHub (TypeScript und Workflows) und Dependabot, das wöchentlich Updates vorschlägt. Auf `main` geht nur ein PR mit grünen Pflicht-Checks, gemergt wird per Merge-Commit. |
 
 Die wichtigste Datei ist [`__tests__/integration/rls.test.ts`](../__tests__/integration/rls.test.ts).
@@ -771,6 +845,10 @@ und mussten ersetzt werden, weil sie das behauptete Verhalten gar nicht messen k
 Für Lesefenster und Formatprüfung genauso: Fehlt die Fensterbedingung nur in der Policy, wird der
 RLS-Test rot, während die Query-Tests über die zweite Ebene grün bleiben. Fehlt sie auch in
 `queries.ts`, werden alle drei rot. Ohne den Format-CHECK auf `messages` schlägt der Formattest fehl.
+
+Die Gruppe „Mandantentrennung“ wurde genauso geprüft: Bereichsvergleich, Standort-Mitgliedschaft,
+Absender-Prüfung, Sichtbarkeit der Organisationen, Freitext-Regel und Freitext-Einstellung einzeln
+entfernt – jede Änderung macht mindestens einen Test rot.
 
 Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 
@@ -799,14 +877,16 @@ Wer eine Policy ändert, führt diese Suite aus. Und schreibt den Test zuerst.
 ```
 .github/                CI-Workflow und Dependabot
 db/migrations/          Schema, Policies, Rate-Limits und Grants als nummerierte SQL-Dateien
-scripts/                Migrations-Runner, Admin-Skript, Prune-Skripte, maintenance.mjs,
-                        backup.sh, Rauchtest, Auth-Schema-Generator
+scripts/                Migrations-Runner, Admin- und Org-Skripte, Prune-Skripte, maintenance.mjs,
+                        notifier.mjs (+ lib/notify.mjs), backup.sh, Rauchtest, Auth-Schema-Generator
 src/app/                Routen; jede actions.ts enthaelt die Server Actions ihres Bereichs
 src/app/api/            Die drei bewussten Route Handler (auth, proofs, health)
 src/components/         features/ fuer fachliche Formulare, ui/ fuer Rahmenelemente
 src/lib/auth/           better-auth-Konfiguration, Session-Helfer, Passwortregel
 src/lib/db/             Pool, Transaktionskontext, saemtliches SQL, Zeilentypen
 src/lib/email/          Mailversand und Vorlagen
+src/lib/messages/       Nachrichtenkatalog (catalog.json) und Meldegründe
+src/lib/tags/           Standort-Token
 src/lib/storage/        Ablage, Lesen und Loeschen der Beweisfotos
 src/lib/utils/          Kennzeichenlogik, Bestaetigungscode, IP-Ermittlung und -Hashing
 src/lib/env.ts          Pflicht-Umgebungsvariablen mit Fail-Fast
@@ -818,5 +898,7 @@ Die Dateien, die man zuerst lesen sollte:
 
 - [`src/lib/db/context.ts`](../src/lib/db/context.ts) — hier entsteht der Nutzerkontext für RLS
 - [`src/lib/db/queries.ts`](../src/lib/db/queries.ts) — sämtliches SQL der Anwendung
-- [`db/migrations/0004_policies.sql`](../db/migrations/0004_policies.sql) — das Sicherheitsmodell
+- [`db/migrations/0004_policies.sql`](../db/migrations/0004_policies.sql) — das Sicherheitsmodell,
+  erweitert durch [`0012`](../db/migrations/0012_receiver_controls.sql) und
+  [`0014`](../db/migrations/0014_organizations.sql) (Mandantentrennung)
 - [`src/lib/auth/server.ts`](../src/lib/auth/server.ts) — wie Auth konfiguriert ist

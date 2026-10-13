@@ -2,8 +2,12 @@ import {
   APP_URL,
   daysAgo,
   migrateFresh,
+  seedMember,
   seedMessage,
+  seedOrg,
+  seedOrgAdmin,
   seedPlate,
+  seedSite,
   seedUser,
   withAdmin,
 } from "./helpers/db";
@@ -686,5 +690,203 @@ describe("Empfänger-Kontrolle", () => {
     await expect(setPlatePause(stranger, plateId, until)).resolves.toBe(false);
     await expect(setPlatePause(owner, plateId, until)).resolves.toBe(true);
     await expect(setPlatePause(owner, plateId, null)).resolves.toBe(true);
+  });
+});
+
+describe("Organisationen: Standort und Nachrichten", () => {
+  beforeEach(migrateFresh);
+
+  it("löst ein Token auf und kennt deaktivierte Standorte", async () => {
+    const { siteByToken } = await loadQueries();
+    const { siteId, token } = await seedOrg("firma");
+
+    await expect(siteByToken(token)).resolves.toMatchObject({
+      siteId,
+      orgName: "firma",
+      active: true,
+    });
+    await expect(siteByToken("x".repeat(22))).resolves.toBeNull();
+    await withAdmin((client) => client.query("UPDATE org_sites SET disabled_at = now()"));
+    await expect(siteByToken(token)).resolves.toMatchObject({ active: false });
+  });
+
+  it("schreibt Standort-Nachrichten anonym und als Mitglied mit Freitext", async () => {
+    const { insertSiteMessage } = await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma", { allowFreeText: true });
+    const member = await seedUser("user-member", "member@example.com");
+    await seedMember(siteId, member);
+
+    await insertSiteMessage(null, {
+      plate: "KA-AB-1",
+      type: "blockiert",
+      text: null,
+      orgId,
+      siteId,
+    });
+    await insertSiteMessage(member, {
+      plate: "KA-AB-1",
+      type: null,
+      text: "Bitte umparken",
+      orgId,
+      siteId,
+    });
+
+    const stored = await withAdmin((client) =>
+      client.query(
+        "SELECT message_type, message_text, sender_id FROM messages ORDER BY created_at",
+      ),
+    );
+    expect(stored.rows).toEqual([
+      { message_type: "blockiert", message_text: null, sender_id: null },
+      { message_type: null, message_text: "Bitte umparken", sender_id: "user-member" },
+    ]);
+  });
+
+  it("listet Nachrichten je Kennzeichen-Zeile mit Standort und erlaubtem Absendernamen", async () => {
+    const { listMessagesForUser } = await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma", { showSender: true });
+    const owner = await seedUser("user-owner", "owner@example.com");
+    const sender = await seedUser("user-sender", "sender@example.com");
+    await withAdmin((client) =>
+      client.query("UPDATE users SET name = 'Erika' WHERE id = $1", [sender]),
+    );
+    await seedMember(siteId, owner);
+    const publicPlate = await seedPlate(owner, "KA-AB-1", { verified: true, status: "approved" });
+    const orgPlate = await seedPlate(owner, "KA-AB-1", {
+      verified: true,
+      status: "approved",
+      orgId,
+    });
+    await seedMessage("KA-AB-1", "öffentlich", daysAgo(1));
+    await withAdmin((client) =>
+      client.query(
+        `INSERT INTO messages (plate_number, message_text, org_id, site_id, sender_id)
+         VALUES ('KA-AB-1', 'am Standort', $1, $2, $3)`,
+        [orgId, siteId, sender],
+      ),
+    );
+
+    const messages = await listMessagesForUser(owner);
+
+    expect(messages.map((m) => [m.message_text, m.plate_id, m.site_name, m.sender_name])).toEqual([
+      ["am Standort", orgPlate, "firma-standort", "Erika"],
+      ["öffentlich", publicPlate, null, null],
+    ]);
+  });
+});
+
+describe("Organisationen: Mitgliedschaft und Kennzeichen", () => {
+  beforeEach(migrateFresh);
+
+  it("beantragt, bestätigt und beendet eine Mitgliedschaft", async () => {
+    const { requestSiteMembership, listOrgMembers, setMemberActive, listMyMemberships, leaveSite } =
+      await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const user = await seedUser("user-new", "new@example.com");
+    await seedOrgAdmin(orgId, admin);
+
+    await requestSiteMembership(user, siteId);
+    expect((await listOrgMembers(admin, orgId)).map((m) => [m.email, m.status])).toEqual([
+      ["new@example.com", "pending"],
+    ]);
+    await expect(listOrgMembers(user, orgId)).resolves.toEqual([]);
+
+    await expect(setMemberActive(user, siteId, user)).resolves.toBe(false);
+    await expect(setMemberActive(admin, siteId, user)).resolves.toBe(true);
+    expect((await listMyMemberships(user)).map((m) => [m.org_name, m.status])).toEqual([
+      ["firma", "active"],
+    ]);
+
+    await leaveSite(user, siteId);
+    await expect(listMyMemberships(user)).resolves.toEqual([]);
+  });
+
+  it("lässt Org-Admins nur Kennzeichen ihrer Organisation freigeben, Konkurrenz je Bereich", async () => {
+    const { claimPlate, setPlateVerification, listOrgPlates, listPendingVerifications } =
+      await loadQueries();
+    const { orgId, siteId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const platformAdmin = await seedUser("user-admin", "admin@example.com", true);
+    const member = await seedUser("user-member", "member@example.com");
+    const publicOwner = await seedUser("user-public", "public@example.com");
+    await seedOrgAdmin(orgId, admin);
+    await seedMember(siteId, member);
+    // Öffentlicher Halter derselben Nummer darf durch die Org-Freigabe nicht abgelöst werden.
+    await seedPlate(publicOwner, "KA-AB-1", { verified: true, status: "approved" });
+    const publicPending = await seedPlate(member, "M-X-1", { proofPath: "user-member/a.jpg" });
+
+    const orgPlate = await claimPlate(member, "KA-AB-1", () => "PD-0001", orgId);
+    expect(orgPlate).toMatchObject({ org_id: orgId, verification_code: null });
+
+    await expect(setPlateVerification(admin, publicPending, true)).resolves.toMatchObject({
+      changed: false,
+    });
+    await expect(setPlateVerification(admin, orgPlate.id, true)).resolves.toEqual({
+      changed: true,
+      plateNumber: "KA-AB-1",
+      supersededEmails: [],
+    });
+    expect(
+      (await listOrgPlates(admin, orgId)).map((p) => [
+        p.plate_number,
+        p.email,
+        p.verification_status,
+      ]),
+    ).toEqual([["KA-AB-1", "member@example.com", "approved"]]);
+
+    const statuses = await withAdmin((client) =>
+      client.query("SELECT user_id, verification_status FROM verified_plates ORDER BY user_id"),
+    );
+    expect(statuses.rows).toContainEqual({
+      user_id: "user-public",
+      verification_status: "approved",
+    });
+
+    // Die Plattform-Freigabe sieht nur öffentliche Ansprüche.
+    expect((await listPendingVerifications(platformAdmin)).map((p) => p.plate_number)).toEqual([
+      "M-X-1",
+    ]);
+  });
+
+  it("pflegt Standorte, Fuhrparkliste, Einstellungen und Statistik als Org-Admin", async () => {
+    const q = await loadQueries();
+    const { orgId } = await seedOrg("firma");
+    const admin = await seedUser("user-orgadmin", "orgadmin@example.com");
+    const stranger = await seedUser("user-stranger", "stranger@example.com");
+    await seedOrgAdmin(orgId, admin);
+
+    await expect(q.orgForAdmin(stranger, "firma")).resolves.toBeNull();
+    await expect(q.orgForAdmin(admin, "firma")).resolves.toMatchObject({
+      id: orgId,
+      slug: "firma",
+    });
+
+    const created = await q.createSite(admin, orgId, "Tiefgarage", "t".repeat(22));
+    await expect(q.createSite(stranger, orgId, "fremd", "f".repeat(22))).rejects.toThrow();
+    await expect(q.setSiteDisabled(admin, created, true)).resolves.toBe(true);
+    await expect(q.renewSiteToken(admin, created, "n".repeat(22))).resolves.toBe(true);
+    expect((await q.listOrgSites(admin, orgId)).map((s) => [s.name, s.token, s.disabled])).toEqual([
+      ["firma-standort", expect.any(String), false],
+      ["Tiefgarage", "n".repeat(22), true],
+    ]);
+
+    await q.addAllowlistPlate(admin, orgId, "KA-F-1");
+    await expect(q.listAllowlist(admin, orgId)).resolves.toEqual(["KA-F-1"]);
+    await q.removeAllowlistPlate(admin, orgId, "KA-F-1");
+    await expect(q.listAllowlist(admin, orgId)).resolves.toEqual([]);
+
+    await expect(
+      q.updateOrgSettings(stranger, orgId, { showSender: true, allowFreeText: true }),
+    ).resolves.toBe(false);
+    await expect(
+      q.updateOrgSettings(admin, orgId, { showSender: true, allowFreeText: false }),
+    ).resolves.toBe(true);
+
+    const siteId = await seedSite(orgId, "werk-2");
+    await seedMessage("KA-AB-1", "x", undefined, { orgId, siteId });
+    expect((await q.orgWeeklyStats(admin, orgId)).map((r) => [r.site_name, r.incidents])).toEqual([
+      ["werk-2", 1],
+    ]);
   });
 });

@@ -5,9 +5,15 @@ import MessageActions from "@/components/features/MessageActions";
 import PlatePauseControl from "@/components/features/PlatePauseControl";
 import ProofUploadForm from "@/components/features/ProofUploadForm";
 import RemovePlateButton from "@/components/features/RemovePlateButton";
+import SitesSection from "@/components/features/SitesSection";
 import { MessageTypeIcon } from "@/components/ui/MessageTypeIcon";
 import { requireUser } from "@/lib/auth/session";
-import { listMessagesForUser, listPlatesForUser } from "@/lib/db/queries";
+import {
+  listMessagesForUser,
+  listMyAdminOrgs,
+  listMyMemberships,
+  listPlatesForUser,
+} from "@/lib/db/queries";
 import type { Message } from "@/lib/db/types";
 import { messageType } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
@@ -22,16 +28,21 @@ import { claimPlate } from "./actions";
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [allPlates, messages] = await Promise.all([
+  const [allPlates, messages, memberships, adminOrgs] = await Promise.all([
     listPlatesForUser(user.id),
     listMessagesForUser(user.id),
+    listMyMemberships(user.id),
+    listMyAdminOrgs(user.id),
   ]);
 
+  // Je Kennzeichen-Zeile: dieselbe Nummer kann öffentlich und in einer
+  // Organisation registriert sein, mit getrennten Nachrichten.
   const messagesByPlate: Record<string, Message[]> = {};
   for (const msg of messages) {
-    const bucket = messagesByPlate[msg.plate_number] ?? [];
+    const key = msg.plate_id ?? msg.plate_number;
+    const bucket = messagesByPlate[key] ?? [];
     bucket.push(msg);
-    messagesByPlate[msg.plate_number] = bucket;
+    messagesByPlate[key] = bucket;
   }
 
   const verifiedPlates = allPlates.filter((p) => p.is_verified);
@@ -64,6 +75,8 @@ export default async function DashboardPage() {
         <ClaimPlateForm action={claimPlate} />
       </section>
 
+      <SitesSection memberships={memberships} adminOrgs={adminOrgs} />
+
       {/* Section B: Pending Plates with Photo Challenge */}
       {openPlates.length > 0 && (
         <section className="mb-8 rounded-lg border-2 border-amber-300 bg-amber-50 p-6 shadow-sm dark:border-amber-700 dark:bg-amber-900/20">
@@ -81,6 +94,12 @@ export default async function DashboardPage() {
                 <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
                   {plate.plate_number}
                 </div>
+                {plate.org_name && (
+                  <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+                    {plate.org_name}: wartet auf Freigabe durch die Verwaltung. Ein Foto ist nicht
+                    nötig.
+                  </p>
+                )}
 
                 {plate.verification_status === "rejected" && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
@@ -98,24 +117,26 @@ export default async function DashboardPage() {
                 )}
 
                 {/* Instructions */}
-                <div className="mb-6 rounded-lg bg-amber-100 p-4 dark:bg-amber-900/30">
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                    Bestätigungscode:
-                  </p>
-                  <p className="mt-2 font-mono text-2xl font-bold text-amber-900 dark:text-amber-100">
-                    {plate.verification_code}
-                  </p>
-                  <p className="mt-4 text-sm text-amber-800 dark:text-amber-200">
-                    Bitte schreibe diesen Code groß auf einen Zettel, lege ihn gut sichtbar hinter
-                    die Windschutzscheibe und mache ein Foto, auf dem dein Kennzeichen lesbar ist.
-                  </p>
-                </div>
+                {!plate.org_id && (
+                  <div className="mb-6 rounded-lg bg-amber-100 p-4 dark:bg-amber-900/30">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                      Bestätigungscode:
+                    </p>
+                    <p className="mt-2 font-mono text-2xl font-bold text-amber-900 dark:text-amber-100">
+                      {plate.verification_code}
+                    </p>
+                    <p className="mt-4 text-sm text-amber-800 dark:text-amber-200">
+                      Bitte schreibe diesen Code groß auf einen Zettel, lege ihn gut sichtbar hinter
+                      die Windschutzscheibe und mache ein Foto, auf dem dein Kennzeichen lesbar ist.
+                    </p>
+                  </div>
+                )}
 
                 {/* Photo Upload — bei einer Ablehnung liegt der alte Pfad noch in der
                     Zeile, trotzdem muss hier wieder das Upload-Feld stehen. Altzeilen
                     ohne Trennstriche (vor Migration 0008) ordnet der Admin zu; ein
                     neues Foto würde dort an der Formatprüfung scheitern. */}
-                {!isCanonicalPlate(plate.plate_number) ? (
+                {plate.org_id ? null : !isCanonicalPlate(plate.plate_number) ? (
                   <div className="flex items-start gap-2 rounded-lg bg-slate-100 p-4 dark:bg-slate-700">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
                     <p className="text-sm text-slate-700 dark:text-slate-200">
@@ -150,9 +171,11 @@ export default async function DashboardPage() {
                   {plate.plate_number}
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {plate.verification_status === "superseded"
-                    ? "Eine andere Person wurde für dieses Kennzeichen bestätigt. Fährst du das Fahrzeug weiterhin, beanspruche es oben erneut."
-                    : "Ohne Foto nach 7 Tagen verfallen. Du kannst es oben erneut beanspruchen."}
+                  {plate.org_name
+                    ? `${plate.org_name}: beendet, weil du an keinem Standort mehr Mitglied bist oder eine andere Person bestätigt wurde.`
+                    : plate.verification_status === "superseded"
+                      ? "Eine andere Person wurde für dieses Kennzeichen bestätigt. Fährst du das Fahrzeug weiterhin, beanspruche es oben erneut."
+                      : "Ohne Foto nach 7 Tagen verfallen. Du kannst es oben erneut beanspruchen."}
                 </p>
                 <RemovePlateButton plateId={plate.id} />
               </div>
@@ -198,17 +221,22 @@ export default async function DashboardPage() {
         ) : (
           <div className="flex flex-col gap-6">
             {verifiedPlates.map((plate) => {
-              const plateMessages = messagesByPlate[plate.plate_number] || [];
+              const plateMessages = messagesByPlate[plate.id] || [];
 
               return (
                 <div
-                  key={plate.plate_number}
+                  key={plate.id}
                   className="border-t border-slate-200 pt-6 first:border-t-0 first:pt-0 dark:border-slate-700"
                 >
                   {/* Plate Header */}
                   <div className="inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-3 py-2 font-mono font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
                     {plate.plate_number}
                   </div>
+                  {plate.org_name && (
+                    <span className="ml-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+                      {plate.org_name}
+                    </span>
+                  )}
                   <PlatePauseControl
                     plateId={plate.id}
                     pausedUntil={
@@ -254,6 +282,8 @@ export default async function DashboardPage() {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
+                              {msg.site_name && ` · ${msg.site_name}`}
+                              {msg.sender_name && ` · von ${msg.sender_name}`}
                             </p>
                             <MessageActions messageId={msg.id} />
                           </div>

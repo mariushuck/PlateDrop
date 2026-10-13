@@ -113,9 +113,15 @@ export async function exportMyData(): Promise<{ filename: string; json: string }
 
   const payload = {
     exportiert_am: new Date().toISOString(),
-    konto: { id: user.id, email: user.email, email_bestaetigt: user.emailVerified },
+    konto: {
+      id: user.id,
+      email: user.email,
+      anzeigename: user.name,
+      email_bestaetigt: user.emailVerified,
+    },
     kennzeichen: data.plates,
     nachrichten_an_meine_kennzeichen: data.messages,
+    mitgliedschaften: data.memberships,
   };
 
   return {
@@ -156,5 +162,32 @@ export async function saveNotificationSettingsAction(
   } catch (err) {
     logger.error("Fehler beim Speichern der Benachrichtigungs-Einstellungen:", err);
     return { error: "Einstellungen konnten nicht gespeichert werden.", success: false };
+  }
+}
+
+/** Höchstlänge des Anzeigenamens. */
+const MAX_DISPLAY_NAME = 50;
+
+/**
+ * Anzeigename – sichtbar nur in Organisationen, die Absender zeigen (0014).
+ * Leer bedeutet „Mitglied“.
+ */
+export async function changeDisplayName(
+  _prev: { error: string | null; success: boolean },
+  formData: FormData,
+): Promise<{ error: string | null; success: boolean }> {
+  await requireUser();
+  const raw = formData.get("name");
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name.length > MAX_DISPLAY_NAME) {
+    return { error: `Höchstens ${MAX_DISPLAY_NAME} Zeichen.`, success: false };
+  }
+
+  try {
+    await auth.api.updateUser({ body: { name }, headers: await headers() });
+    return { error: null, success: true };
+  } catch (err) {
+    logger.error("Fehler beim Ändern des Anzeigenamens:", err);
+    return { error: "Anzeigename konnte nicht gespeichert werden.", success: false };
   }
 }

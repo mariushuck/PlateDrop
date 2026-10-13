@@ -2,7 +2,8 @@
 
 Diese Anleitung richtet sich an dich als Betreiber von PlateDrop. **Teil A** beschreibt die
 wiederkehrenden Admin-Aufgaben und gilt lokal wie auf dem Server. **Teil B** behandelt alles, was
-nur den Serverbetrieb betrifft: Deployment, Secrets, Sicherung, Updates und Störungssuche.
+nur den Serverbetrieb betrifft: Deployment, Secrets, Sicherung, Updates und Störungssuche. **Teil C**
+beschreibt Organisationen für Privatgelände: anlegen, betreuen, zum Vertragsende löschen.
 
 Alle Befehle in diesem Dokument sind gegen den laufenden Stack ausgeführt und geprüft worden —
 mit Ausnahme der am 2026-10-04 ergänzten Befehle zu gepackten Sicherungen (B5), JSON-Logs und
@@ -546,12 +547,15 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 
 | Ort | Inhalt |
 | --- | --- |
-| `users` | E-Mail-Adresse, Bestätigungsstatus, Anlagedatum |
+| `users` | E-Mail-Adresse, Anzeigename (freiwillig, für Organisationen), Bestätigungsstatus, Anlagedatum |
 | `sessions` | **IP-Adresse im Klartext** und User-Agent je aktiver Sitzung, dazu das Ablaufdatum |
 | `verified_plates` | Kennzeichen, Status, Pfad zum Beweisfoto |
 | `messages` | Nachrichtentext und Kennzeichen — **ohne Bezug zum Absender**; `hidden_at`, wenn ausgeblendet |
 | `message_reports` | Meldungen: meldendes Konto, Grund, Zeitpunkt, erledigt-Zeitpunkt |
 | `notification_settings` | E-Mail an/aus, Ruhezeiten je Konto |
+| `organizations`, `org_sites` | Betreiber und Standorte (keine Personendaten) |
+| `org_admins`, `site_members` | wer welche Organisation verwaltet bzw. an welchem Standort Mitglied ist |
+| `org_plate_allowlist` | Kennzeichen der Fuhrpark-/Parkausweisliste einer Organisation |
 | `notification_outbox` | Benachrichtigungen: Konto, Kennzeichen, Typ, Versandzeitpunkt; erledigte nach 30 Tagen gelöscht |
 | `message_throttle` | gesalzener SHA-256-Hash der Absender-IP, täglich rotierend; keine Klartext-IP |
 | Volume `proofs` | Fotos, auf denen Kennzeichen und Umfeld zu sehen sind |
@@ -699,3 +703,73 @@ Schritte nicht.
 # täglich 04:00 – Sicherung inkl. Aufräumen alter Backups
 0 4 * * * cd /pfad/zu/platedrop && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile backup run --rm backup
 ```
+
+---
+
+# Teil C — Organisationen
+
+Organisationen sind Betreiber privater Gelände (Firmenparkplatz, Hausverwaltung, Hotel …). Sie
+haben Standorte mit eigenem QR-Code, Mitglieder je Standort und Org-Admins, die unter
+`/o/<slug>/admin` alles Weitere selbst erledigen. Anlegen und Löschen machst nur du, per Skript –
+es gibt bewusst keine Selbstregistrierung. Hintergrund: [go-to-market.md](go-to-market.md),
+technisch [architecture.md, Mandantentrennung](architecture.md#mandantentrennung-0014).
+
+## C1 Organisation anlegen
+
+Der künftige Org-Admin registriert sich zuerst ganz normal und bestätigt seine Adresse. Dann:
+
+```bash
+dcp run --rm migrate node scripts/create-org.mjs \
+  --name "Muster Hausverwaltung" --slug muster \
+  --site "Tiefgarage Nord" --admin verwaltung@example.com
+```
+
+Das Skript nennt die Adresse der Verwaltung (`/o/muster/admin`) und die Standort-URL (`/s/<token>`).
+Der `slug` erscheint in der Adresse der Verwaltung: Kleinbuchstaben, Ziffern, Bindestriche. Weitere
+Standorte, Aushänge, Fuhrparkliste und Einstellungen pflegt der Org-Admin selbst.
+
+Ein **weiterer Org-Admin** (etwa eine Vertretung) bekommt die Rolle per SQL:
+
+```bash
+dcp exec -T db psql -U platedrop_owner -d platedrop -c \
+  "INSERT INTO org_admins (org_id, user_id)
+   SELECT o.id, u.id FROM organizations o, users u
+    WHERE o.slug = 'muster' AND lower(u.email) = 'vertretung@example.com';"
+```
+
+Entziehen entsprechend mit `DELETE FROM org_admins …`.
+
+## C2 Was der Org-Admin tut
+
+- **Beitritte bestätigen.** Mitglieder scannen den Aushang, melden sich an und beantragen den
+  Beitritt. Erst nach der Bestätigung können sie Kennzeichen für die Organisation eintragen.
+- **Kennzeichen freigeben** – ohne Foto. Steht ein Kennzeichen auf der Fuhrpark-/Parkausweisliste,
+  gilt es sofort.
+- **Mitglieder entfernen.** Der Lesezugriff endet sofort, die Kennzeichen des Mitglieds in dieser
+  Organisation verfallen (`expired`).
+- **Standorte** anlegen, deaktivieren oder den Code erneuern (alte Aushänge werden ungültig).
+- **Einstellungen:** Absendername zeigen, Freitext für Mitglieder erlauben.
+- **Statistik:** Vorfälle je Woche und Standort. Nachrichten selbst sieht ein Org-Admin nie.
+
+Meldungen zu Nachrichten aus Organisationen landen wie alle anderen unter `/admin` bei dir (A3a).
+
+## C3 Vertragsende: exportieren und löschen
+
+Nach Art. 28 Abs. 3 lit. g DSGVO gibst du dem Kunden seine Daten zurück und löschst sie. Erst
+ansehen, was betroffen ist:
+
+```bash
+dcp run --rm migrate node scripts/delete-org.mjs --slug muster
+```
+
+Dann exportieren und löschen in einem Schritt; das JSON landet auf dem Host:
+
+```bash
+dcp run --rm -T migrate node scripts/delete-org.mjs --slug muster --export - --yes > muster-export.json
+```
+
+Gelöscht werden Organisation, Standorte, Mitgliedschaften, Org-Admin-Rollen, Fuhrparkliste,
+Kennzeichen der Organisation und alle Nachrichten über ihre Standorte. Die Nutzerkonten und ihre
+öffentlichen Kennzeichen bleiben – sie gehören den Personen, nicht dem Kunden. Den Export übergibst
+du dem Kunden verschlüsselt und löschst deine Kopie danach. Sicherungen enthalten die Daten noch bis
+zum Ablauf von `BACKUP_RETENTION_DAYS`; das gehört in den AV-Vertrag.

@@ -6,6 +6,7 @@ import {
   claimPlate as claimPlateQuery,
   deletePlate,
   hideMessage,
+  leaveSite,
   markMessagesRead,
   PlateAlreadyClaimedError,
   plateBelongsToUser,
@@ -208,5 +209,60 @@ export async function uploadProof(
     }
     logger.error("Fehler beim Hochladen des Bildes:", err);
     return { success: false, error: "Fehler beim Hochladen des Bildes." };
+  }
+}
+
+/**
+ * Kennzeichen in einer Organisation beanspruchen (0014). Kein Foto: die
+ * Verwaltung gibt frei, oder die Fuhrparkliste tut es sofort. Ob der Nutzer
+ * dort Mitglied ist, prüft die Policy `verified_plates_insert_own`.
+ */
+export async function claimOrgPlate(
+  _prevState: { success: boolean; error?: string } | null,
+  formData: FormData,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  const plateNumber = formData.get("plateNumber");
+  const orgId = formData.get("orgId");
+
+  if (typeof orgId !== "string" || !/^[0-9a-f-]{36}$/.test(orgId)) {
+    return { success: false, error: "Organisation nicht gefunden." };
+  }
+  if (typeof plateNumber !== "string" || !plateNumber.trim()) {
+    return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
+  }
+  const parsed = parsePlate(plateNumber);
+  if (!parsed.ok) return { success: false, error: plateErrorMessage(parsed.reason) };
+
+  try {
+    await claimPlateQuery(user.id, parsed.plate, generateVerificationCode, orgId);
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    if (err instanceof PlateAlreadyClaimedError || err instanceof TooManyOpenClaimsError) {
+      return { success: false, error: err.message };
+    }
+    logger.error("Fehler beim Registrieren des Org-Kennzeichens:", err);
+    return {
+      success: false,
+      error: "Kennzeichen konnte nicht registriert werden. Ist deine Mitgliedschaft bestätigt?",
+    };
+  }
+}
+
+/** Mitgliedschaft an einem Standort beenden; Kennzeichen der Organisation verfallen. */
+export async function leaveSiteAction(
+  siteId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireUser();
+  try {
+    if (!(await leaveSite(user.id, siteId))) {
+      return { success: false, error: "Mitgliedschaft nicht gefunden." };
+    }
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    logger.error("Fehler beim Austritt:", err);
+    return { success: false, error: "Austritt fehlgeschlagen." };
   }
 }
