@@ -8,6 +8,12 @@ Stand: 2026-10-06 · Grundlage: `main` mit Migrationen bis `0009_message_read_wi
 > kostenloses Nebenprodukt. Die Gespräche aus [3.9](#39-test-vor-dem-bauen) bleiben das Go/No-Go
 > vor dem Mandanten-MVP. Die technischen Arbeitspakete stehen in [TODO.md](../TODO.md) unter P3;
 > dieses Dokument ist die Begründung und der Rahmen, keine Spezifikation.
+>
+> **Nachtrag 2026-10-13.** Das Produkt wird **universell für Privatgelände** gebaut: Firmenparkplätze,
+> Wohnanlagen über Hausverwaltungen und private Parkflächen nutzen denselben Mandanten-Kern, kein
+> Sonderbau je Segment. Der Firmenparkplatz ist damit nicht mehr als Einstieg gesetzt; welches
+> Segment den ersten Pilot stellt, entscheiden die Gespräche. Markteintritt, Segmente und die
+> nicht-technischen Schritte stehen in [go-to-market.md](go-to-market.md).
 
 Dieses Dokument beschreibt drei Erweiterungen, die PlateDrop von einer technisch sauberen, aber kaum
 nutzbaren App zu einem Produkt mit echtem Nutzen und einem Weg zu Einnahmen machen sollen. Jeder
@@ -50,7 +56,7 @@ nebeneinander bestehen; gibt der Admin einen frei, werden die übrigen automatis
 bisherige Halter abgelöst.
 
 ```sql
--- 0010_claim_competition.sql (Skizze)
+-- 0011_claim_competition.sql (Skizze)
 ALTER TABLE verified_plates DROP CONSTRAINT verified_plates_plate_unique;
 
 -- Höchstens ein freigegebener Halter je Kennzeichen.
@@ -163,7 +169,7 @@ genau der beseitigt das Gefühl, ins Leere zu schreiben.
 **Datenmodell.**
 
 ```sql
--- 0012_contact_tags.sql (Skizze)
+-- 0013_contact_tags.sql (Skizze)
 CREATE TABLE contact_tags (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     text        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -312,7 +318,7 @@ weil sie sonst ihren Zweck verlieren.
 **Datenmodell.**
 
 ```sql
--- 0011_message_types_and_notifications.sql (Skizze)
+-- 0012_message_types_and_notifications.sql (Skizze)
 ALTER TABLE messages ADD COLUMN message_type text;
 ALTER TABLE messages ALTER COLUMN message_text DROP NOT NULL;
 ALTER TABLE messages ADD CONSTRAINT messages_type_check
@@ -448,7 +454,7 @@ PlateDrop wird mandantenfähig. Eine Organisation hat Mitglieder, Standorte und 
 **Datenmodell.**
 
 ```sql
--- 0013_organizations.sql (Skizze)
+-- 0014_organizations.sql (Skizze)
 CREATE TABLE organizations (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text        NOT NULL,
@@ -604,5 +610,9 @@ genügen Standort-QR und Kennzeichen; private Sticker sind dort zweitrangig.
 **A → B → D → E**, Phase C rückt nach hinten. Aus Hebel 1 wird zunächst nur die Token- und
 QR-Technik gebaut, und zwar im Rahmen von E für die Standort-Schilder. Die privaten Sticker
 (Kontakt-Tags, Statusseite) folgen erst, wenn der Privatmarkt wieder eine Rolle spielt.
-[TODO.md](../TODO.md) führt unter P3 nur die technischen Arbeitspakete; die Tests 2.8, 1.8 und 3.9,
-die Verträge und die Rechtsfragen aus 3.5 werden hier verfolgt.
+[TODO.md](../TODO.md) führt unter P3 nur die technischen Arbeitspakete; die Tests 2.8 und 1.8 werden
+hier verfolgt, Test 3.9 (erweitert auf alle Segmente), die Verträge und die Rechtsfragen aus 3.5 in
+[go-to-market.md](go-to-market.md).
+
+Die Migrationsnummern der Skizzen sind seit 2026-10-13 um eins verschoben: `0010` belegt die
+better-auth-Anpassung (`0010_auth_account_issuer.sql`).
