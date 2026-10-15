@@ -1,9 +1,13 @@
 "use client";
 
+import { Check, ChevronRight, Circle, CircleCheck, Loader2, TriangleAlert } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MESSAGE_TYPES } from "@/lib/messages/catalog";
-import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
+import { MessageTypeIcon } from "@/components/ui/MessageTypeIcon";
+import { MESSAGE_CATEGORIES } from "@/lib/messages/catalog";
+import { EXAMPLE_PLATE } from "@/lib/utils/plateUtils";
+import { usePlateInput } from "@/lib/utils/usePlateInput";
+import PlateChoice from "./PlateChoice";
 
 type ActionState = { success: boolean; error?: string } | null;
 
@@ -25,67 +29,69 @@ export default function MessageForm({
   allowFreeText?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(action, null);
-  const [plateInput, setPlateInput] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const plate = usePlateInput();
+  const { setValue: setPlate } = plate;
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [messageText, setMessageText] = useState("");
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
-
-  const parsedPlate = parsePlate(plateInput);
-  const plateError =
-    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
 
   useEffect(() => {
     if (state?.success) {
       toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
-        setPlateInput("");
-        setMessageType("");
+        setPlate("");
+        setSelected(new Set());
         setMessageText("");
         formRef.current?.reset();
       });
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state]);
+  }, [state, setPlate]);
 
-  const isFormValid = plateInput.trim() && !plateError && (messageType || messageText.trim());
+  const isFormValid = plate.valid && (selected.size > 0 || messageText.trim());
+
+  function toggle(code: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(code)) next.add(code);
+      return next;
+    });
+  }
 
   return (
-    <form ref={formRef} action={formAction} className="flex flex-1 flex-col gap-6">
-      {/* License Plate Input */}
-      <div className="flex flex-col gap-2">
-        <label
-          htmlFor="plateNumber"
-          className="text-sm font-semibold text-slate-900 dark:text-white"
-        >
+    <form ref={formRef} action={formAction} className="flex flex-1 flex-col gap-7">
+      <div>
+        <label htmlFor="plateNumber" className="section-header">
           Kennzeichen
         </label>
-
-        <div className="relative">
+        <div className="plate-field">
           <input
             id="plateNumber"
             name="plateNumber"
             type="text"
-            placeholder="z.B. KA-AB-1234"
-            value={plateInput}
-            onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+            placeholder={EXAMPLE_PLATE}
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            value={plate.value}
+            onChange={plate.onChange}
             disabled={isPending}
-            className="w-full rounded-lg border-2 border-slate-300 bg-white px-4 py-3 font-mono text-lg font-bold uppercase tracking-widest text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
           />
-
-          {plateInput && !plateError && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400">
-              ✓
-            </div>
+          {plate.valid && (
+            // The plate stays white in dark mode, so the check keeps the light-mode green.
+            <Check className="mr-3 shrink-0 self-center text-[#248a3d]" size={26} strokeWidth={3} />
           )}
         </div>
-
-        {plateError && <p className="text-sm text-red-600 dark:text-red-400">{plateError}</p>}
-
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Deutsche Kennzeichen im Format KA-AB-1234
-        </p>
+        {plate.error ? (
+          <p className="section-footer text-danger">{plate.error}</p>
+        ) : (
+          <p className="section-footer">
+            {plate.district ?? "Ortskürzel, Buchstaben, Zahl – die Bindestriche setzen wir."}
+          </p>
+        )}
+        <PlateChoice candidates={plate.candidates} onPick={setPlate} />
       </div>
 
       {hiddenFields &&
@@ -93,42 +99,68 @@ export default function MessageForm({
           <input key={name} type="hidden" name={name} value={value} />
         ))}
 
-      {/* Message Type Selection */}
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-semibold text-slate-900 dark:text-white">
-          Was ist los?
-        </legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {MESSAGE_TYPES.map((type) => (
-            <label
-              key={type.code}
-              className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
-                messageType === type.code
-                  ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                  : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
-              }`}
-            >
-              <input
-                type="radio"
-                name="messageType"
-                value={type.code}
-                checked={messageType === type.code}
-                onChange={() => setMessageType(type.code)}
-                disabled={isPending}
-                className="sr-only"
-              />
-              {type.label}
-            </label>
-          ))}
+      <fieldset>
+        <legend className="section-header">Was ist los? Mehrere Gründe möglich.</legend>
+        <div className="space-y-3">
+          {MESSAGE_CATEGORIES.map((category, index) => {
+            const count = category.types.filter((type) => selected.has(type.code)).length;
+            return (
+              // Geschlossene Gruppen schicken ihre Häkchen trotzdem mit.
+              <details key={category.name} open={index === 0} className="inset-group group/cat">
+                <summary className="list-row cursor-pointer list-none active:opacity-60 [&::-webkit-details-marker]:hidden">
+                  <span className="flex-1 text-[17px] font-semibold">{category.name}</span>
+                  {count > 0 && <span className="text-[15px] text-tint">{count} ausgewählt</span>}
+                  <ChevronRight
+                    className="shrink-0 text-secondary transition-transform group-open/cat:rotate-90"
+                    size={20}
+                    aria-hidden="true"
+                  />
+                </summary>
+                {category.types.map((type) => {
+                  const checked = selected.has(type.code);
+                  return (
+                    <label
+                      key={type.code}
+                      className="list-row cursor-pointer has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-tint"
+                    >
+                      <input
+                        type="checkbox"
+                        name="messageTypes"
+                        value={type.code}
+                        checked={checked}
+                        onChange={() => toggle(type.code)}
+                        disabled={isPending}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-white ${
+                          type.urgent ? "bg-warning" : "bg-tint"
+                        }`}
+                      >
+                        <MessageTypeIcon icon={type.icon} className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="flex-1 text-[17px]">{type.label}</span>
+                      {checked ? (
+                        <CircleCheck
+                          className="shrink-0 fill-tint text-surface"
+                          size={24}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Circle className="shrink-0 text-separator" size={24} aria-hidden="true" />
+                      )}
+                    </label>
+                  );
+                })}
+              </details>
+            );
+          })}
         </div>
       </fieldset>
 
       {allowFreeText && (
-        <div className="flex flex-col gap-2">
-          <label
-            htmlFor="messageText"
-            className="text-sm font-semibold text-slate-900 dark:text-white"
-          >
+        <div>
+          <label htmlFor="messageText" className="section-header">
             Oder eigene Nachricht
           </label>
           <textarea
@@ -140,41 +172,48 @@ export default function MessageForm({
             onChange={(e) => setMessageText(e.target.value)}
             disabled={isPending}
             placeholder="Nur für angemeldete Mitglieder dieses Geländes"
-            className="w-full rounded-lg border-2 border-slate-300 bg-white p-3 text-slate-900 placeholder-slate-400 disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+            className="field"
           />
         </div>
       )}
 
-      <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-100">
-        Tier oder Kind im heißen oder kalten Auto, Unfall oder Gefahr? Bitte sofort{" "}
-        <a href="tel:110" className="font-semibold underline">
-          110
-        </a>{" "}
-        oder{" "}
-        <a href="tel:112" className="font-semibold underline">
-          112
-        </a>{" "}
-        anrufen. PlateDrop ist kein Notrufkanal.
+      <p className="flex gap-3 rounded-xl bg-surface p-4 text-[15px] leading-snug">
+        <TriangleAlert className="mt-0.5 shrink-0 text-warning" size={20} aria-hidden="true" />
+        <span>
+          Tier oder Kind im heißen oder kalten Auto, Unfall oder Gefahr? Bitte sofort{" "}
+          <a href="tel:110" className="font-semibold text-tint">
+            110
+          </a>{" "}
+          oder{" "}
+          <a href="tel:112" className="font-semibold text-tint">
+            112
+          </a>{" "}
+          anrufen. PlateDrop ist kein Notrufkanal.
+        </span>
       </p>
 
-      {/* Error Display */}
       {state?.error && (
-        <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-          <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
-        </div>
+        <p role="alert" className="rounded-xl bg-surface p-4 text-[15px] text-danger">
+          {state.error}
+        </p>
       )}
 
-      {/* Submit Button */}
+      {selected.size > 0 && (
+        <p className="-mb-4 px-4 text-[13px] text-secondary" aria-live="polite">
+          {selected.size === 1 ? "1 Grund" : `${selected.size} Gründe`} ausgewählt
+        </p>
+      )}
+
       <button
         type="submit"
         disabled={isPending || !isFormValid}
-        className="rounded-lg bg-slate-900 px-6 py-4 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
+        className="btn btn-primary min-h-[3.25rem] w-full"
       >
         {isPending ? (
-          <span className="flex items-center justify-center gap-2">
-            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <>
+            <Loader2 className="animate-spin" size={20} aria-hidden="true" />
             Wird gesendet...
-          </span>
+          </>
         ) : (
           "Nachricht senden"
         )}

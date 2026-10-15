@@ -45,16 +45,23 @@ export function backoffMs(attempts) {
 export const MAX_ATTEMPTS = 10;
 
 /**
- * Mail an den Halter. Bewusst nur Typ und Kennzeichen: Benachrichtigungen
- * erscheinen auf Sperrbildschirmen.
+ * Mail an den Halter. Bewusst nur Gründe und Kennzeichen: Benachrichtigungen
+ * erscheinen auf Sperrbildschirmen. `typeTexts` sind die Katalogsätze der
+ * Nachricht; leer bei Freitext.
  */
-export function notificationMail({ plate, typeText, dashboardUrl }) {
-  const text = typeText ?? "Du hast eine neue Nachricht.";
+export function notificationMail({ plate, typeTexts, dashboardUrl }) {
+  const lines = typeTexts.length > 0 ? typeTexts : ["Du hast eine neue Nachricht."];
+  const heading =
+    lines.length === 1
+      ? `<h1 style="font-size:1.25rem;margin:0 0 1rem">${escapeHtml(lines[0])}</h1>`
+      : `<ul style="font-size:1.0625rem;font-weight:600;margin:0 0 1rem;padding-left:1.25rem">${lines
+          .map((line) => `<li style="margin:0 0 0.375rem">${escapeHtml(line)}</li>`)
+          .join("")}</ul>`;
   return {
     subject: `PlateDrop: Nachricht für ${plate}`,
-    text: `${text}\n\nKennzeichen: ${plate}\n\nZur Nachricht: ${dashboardUrl}\n\nBenachrichtigungen und Ruhezeiten stellst du in den Kontoeinstellungen ein.`,
+    text: `${lines.join("\n")}\n\nKennzeichen: ${plate}\n\nZur Nachricht: ${dashboardUrl}\n\nBenachrichtigungen und Ruhezeiten stellst du in den Kontoeinstellungen ein.`,
     html: `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:32rem;margin:0 auto;padding:1.5rem;color:#0f172a">
-  <h1 style="font-size:1.25rem;margin:0 0 1rem">${escapeHtml(text)}</h1>
+  ${heading}
   <p style="margin:0 0 1.5rem">Kennzeichen: <strong>${escapeHtml(plate)}</strong></p>
   <p style="margin:0 0 1.5rem"><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:0.75rem 1.25rem;border-radius:0.5rem;text-decoration:none">Zur Nachricht</a></p>
   <p style="margin:0;font-size:0.8125rem;color:#64748b">Benachrichtigungen und Ruhezeiten stellst du in den Kontoeinstellungen ein.</p>

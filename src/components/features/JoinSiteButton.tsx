@@ -21,12 +21,12 @@ export default function JoinSiteButton({ token }: { token: string }) {
             else router.refresh();
           })
         }
-        className="w-full rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white disabled:bg-slate-400 dark:bg-white dark:text-slate-900"
+        className="btn btn-primary w-full"
       >
         {isPending ? "Wird beantragt..." : "Diesem Gelände beitreten"}
       </button>
       {error && (
-        <p className="text-red-800 dark:text-red-200" role="alert">
+        <p className="text-danger" role="alert">
           {error}
         </p>
       )}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useActionState, useState } from "react";
 import { signIn, signUp } from "@/app/auth/actions";
+import NavBar from "@/components/ui/NavBar";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/passwordPolicy";
 
 type AuthMode = "signin" | "signup";
@@ -23,68 +24,46 @@ export default function LoginPage({
   const currentAction = mode === "signup" ? signUpAction : signInAction;
 
   return (
-    <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
-          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Kennzeichen verifizieren und Nachrichten lesen
-          </p>
+    <div className="flex flex-1 flex-col">
+      <NavBar>
+        <Link href="/" className="text-[17px] font-semibold active:opacity-60">
+          PlateDrop
+        </Link>
+      </NavBar>
+
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col px-4 pt-6 pb-8">
+        <h1 className="large-title">{mode === "signup" ? "Registrieren" : "Anmelden"}</h1>
+        <p className="mt-1 mb-6 text-[17px] text-secondary">
+          {mode === "signup"
+            ? "Nach der Registrierung kannst du dein Kennzeichen verifizieren."
+            : "Kennzeichen verwalten und Nachrichten lesen."}
+        </p>
+
+        <div className="segmented mb-6">
+          <button type="button" aria-pressed={mode === "signin"} onClick={() => setMode("signin")}>
+            Anmelden
+          </button>
+          <button type="button" aria-pressed={mode === "signup"} onClick={() => setMode("signup")}>
+            Registrieren
+          </button>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          {/* Mode Tabs */}
-          <div className="mb-6 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className={`flex-1 rounded-lg px-4 py-2 font-semibold transition-colors ${
-                mode === "signin"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                  : "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
-              }`}
-            >
-              Anmelden
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`flex-1 rounded-lg px-4 py-2 font-semibold transition-colors ${
-                mode === "signup"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                  : "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
-              }`}
-            >
-              Registrieren
-            </button>
+        {/* Registrierung erfolgreich: Die Adresse muss erst bestätigt werden,
+            bevor eine Anmeldung möglich ist. Ohne diesen Hinweis stünde der
+            Nutzer vor einem Login, das noch nicht funktionieren kann. */}
+        {mode === "signup" && signUpState?.success ? (
+          <div className="inset-group p-4 text-[15px]" role="status">
+            <p className="font-semibold text-success">
+              Fast geschafft: Wir haben dir eine Bestätigungs-E-Mail geschickt.
+            </p>
+            <p className="mt-2">Klicke den Link darin an, danach kannst du dich anmelden.</p>
           </div>
-
-          {/* Registrierung erfolgreich: Die Adresse muss erst bestätigt werden,
-              bevor eine Anmeldung möglich ist. Ohne diesen Hinweis stünde der
-              Nutzer vor einem Login, das noch nicht funktionieren kann. */}
-          {mode === "signup" && signUpState?.success ? (
-            <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-              <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                Fast geschafft: Wir haben dir eine Bestätigungs-E-Mail geschickt.
-              </p>
-              <p className="mt-2 text-sm text-green-800 dark:text-green-200">
-                Klicke den Link darin an, danach kannst du dich anmelden.
-              </p>
-            </div>
-          ) : (
-            /* Form */
-            <form action={currentAction} className="flex flex-col gap-4">
-              {typeof next === "string" && <input type="hidden" name="next" value={next} />}
-              {/* Email Input */}
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="email"
-                  className="text-sm font-semibold text-slate-900 dark:text-white"
-                >
+        ) : (
+          <form action={currentAction} className="flex flex-col gap-4">
+            {typeof next === "string" && <input type="hidden" name="next" value={next} />}
+            <div className="inset-group flex flex-col gap-4 p-4">
+              <div>
+                <label htmlFor="email" className="field-label">
                   E-Mail
                 </label>
                 <input
@@ -92,18 +71,14 @@ export default function LoginPage({
                   name="email"
                   type="email"
                   required
+                  autoComplete="email"
                   placeholder="name@example.com"
                   disabled={isPending}
-                  className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                  className="field"
                 />
               </div>
-
-              {/* Password Input */}
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-semibold text-slate-900 dark:text-white"
-                >
+              <div>
+                <label htmlFor="password" className="field-label">
                   Passwort
                 </label>
                 <input
@@ -111,61 +86,41 @@ export default function LoginPage({
                   name="password"
                   type="password"
                   required
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   placeholder={
                     mode === "signup"
                       ? `Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`
                       : "Dein Passwort"
                   }
                   disabled={isPending}
-                  className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                  className="field"
                 />
               </div>
+            </div>
 
-              {/* Error Display */}
-              {currentState?.error && (
-                <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                    {currentState.error}
-                  </p>
-                </div>
-              )}
+            {currentState?.error && (
+              <p role="alert" className="px-1 text-[15px] text-danger">
+                {currentState.error}
+              </p>
+            )}
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isPending}
-                className="rounded-lg bg-slate-900 px-6 py-2 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
-              >
-                {isPending
-                  ? mode === "signup"
-                    ? "Wird registriert..."
-                    : "Wird angemeldet..."
-                  : mode === "signup"
-                    ? "Registrieren"
-                    : "Anmelden"}
-              </button>
-            </form>
-          )}
+            <button type="submit" disabled={isPending} className="btn btn-primary w-full">
+              {isPending
+                ? mode === "signup"
+                  ? "Wird registriert..."
+                  : "Wird angemeldet..."
+                : mode === "signup"
+                  ? "Registrieren"
+                  : "Anmelden"}
+            </button>
+          </form>
+        )}
 
-          {/* Forgot Password */}
-          {mode === "signin" && (
-            <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
-              <Link
-                href="/forgot-password"
-                className="underline hover:text-slate-900 dark:hover:text-white"
-              >
-                Passwort vergessen?
-              </Link>
-            </p>
-          )}
-
-          {/* Help Text */}
-          <p className="mt-4 text-center text-xs text-slate-600 dark:text-slate-400">
-            {mode === "signup"
-              ? "Nach der Registrierung können Sie Ihr Kennzeichen verifizieren."
-              : "Melden Sie sich an, um Ihre Kennzeichen zu verwalten."}
-          </p>
-        </div>
+        {mode === "signin" && (
+          <Link href="/forgot-password" className="btn-plain mt-5 self-center text-[15px]">
+            Passwort vergessen?
+          </Link>
+        )}
       </main>
     </div>
   );

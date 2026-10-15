@@ -1,4 +1,7 @@
+import districts from "@/lib/utils/districts.json";
 import {
+  districtName,
+  EXAMPLE_PLATE,
   isCanonicalPlate,
   normalizePlate,
   parsePlate,
@@ -26,15 +29,31 @@ describe("parsePlate", () => {
     expect(normalizePlate("KA-B 1234")).toBe("KA-B-1234");
   });
 
-  it("lehnt mehrdeutige Eingaben ohne Trennung zwischen Ortskürzel und Buchstaben ab", () => {
-    expect(parsePlate("KAB1234")).toEqual({ ok: false, reason: "ambiguous" });
-    expect(parsePlate("KAAB1234")).toEqual({ ok: false, reason: "ambiguous" });
-    expect(parsePlate("KAAB 1234")).toEqual({ ok: false, reason: "ambiguous" });
+  it("bietet bei echter Mehrdeutigkeit beide Ortskürzel zur Wahl an", () => {
+    // K (Köln) und KA (Karlsruhe) gibt es beide.
+    expect(parsePlate("KAB1234")).toEqual({
+      ok: false,
+      reason: "ambiguous",
+      candidates: [
+        { plate: "K-AB-1234", district: "Köln" },
+        { plate: "KA-B-1234", district: "Karlsruhe" },
+      ],
+    });
   });
 
-  it("übernimmt Kompaktformen, die sich nur auf eine Weise aufteilen lassen", () => {
+  it("trennt Kompaktformen anhand der amtlichen Ortskürzel", () => {
+    // KAA ist kein Ortskürzel, also bleibt nur KA-AB.
+    expect(parsePlate("KAAB1234")).toEqual({ ok: true, plate: "KA-AB-1234" });
+    expect(parsePlate("KAAB 1234")).toEqual({ ok: true, plate: "KA-AB-1234" });
     expect(parsePlate("BM123")).toEqual({ ok: true, plate: "B-M-123" });
-    expect(parsePlate("abcde12")).toEqual({ ok: true, plate: "ABC-DE-12" });
+    expect(parsePlate("smüab1")).toEqual({ ok: true, plate: "SMÜ-AB-1" });
+  });
+
+  it("lehnt unbekannte Ortskürzel ab", () => {
+    expect(parsePlate("XX-AB-123")).toEqual({ ok: false, reason: "unknown-district" });
+    expect(parsePlate("ABC-DE-12")).toEqual({ ok: false, reason: "unknown-district" });
+    // Ohne Trennung gibt es dann keine gültige Aufteilung.
+    expect(parsePlate("abcde12")).toEqual({ ok: false, reason: "invalid" });
   });
 
   it("akzeptiert Ortskürzel mit Umlaut", () => {
@@ -87,7 +106,7 @@ describe("normalizePlate", () => {
   it("liefert einen Leerstring für ungültige und mehrdeutige Eingaben", () => {
     expect(normalizePlate("")).toBe("");
     expect(normalizePlate("not-a-plate")).toBe("");
-    expect(normalizePlate("KAAB1234")).toBe("");
+    expect(normalizePlate("KAB1234")).toBe("");
   });
 });
 
@@ -98,7 +117,7 @@ describe("validateGermanPlate", () => {
   });
 
   it("lehnt mehrdeutige und ungültige Eingaben ab", () => {
-    expect(validateGermanPlate("KAAB1234")).toBe(false);
+    expect(validateGermanPlate("KAB1234")).toBe(false);
     expect(validateGermanPlate("DROP TABLE messages;")).toBe(false);
   });
 });
@@ -112,5 +131,21 @@ describe("isCanonicalPlate", () => {
   it("erkennt Altdaten im Kompaktformat", () => {
     expect(isCanonicalPlate("KAAB1234")).toBe(false);
     expect(isCanonicalPlate("ka-ab-1234")).toBe(false);
+  });
+});
+
+describe("Ortskürzel", () => {
+  it("enthält die amtlichen Kürzel, auch mit Umlaut und auslaufende", () => {
+    for (const code of ["KA", "K", "B", "M", "TÖL", "MÜ", "SMÜ", "AL"]) {
+      expect(districts).toHaveProperty(code);
+    }
+    expect(districtName("KA")).toBe("Karlsruhe");
+    expect(districtName("XX")).toBeUndefined();
+  });
+
+  it("zeigt als Beispiel ein Kennzeichen, das es nicht geben kann", () => {
+    const [district] = EXAMPLE_PLATE.split("-");
+    expect(districts).not.toHaveProperty(district);
+    expect(parsePlate(EXAMPLE_PLATE)).toEqual({ ok: false, reason: "unknown-district" });
   });
 });

@@ -52,9 +52,9 @@ describe("RLS: messages", () => {
 
   it("erlaubt anonymes Schreiben", async () => {
     await asUser(null, (client) =>
-      client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+      client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
         "KA-AB-1234",
-        "licht_an",
+        ["licht_an"],
       ]),
     );
 
@@ -128,8 +128,8 @@ describe("RLS: messages", () => {
     await expect(
       asUser(null, (client) =>
         client.query(
-          "INSERT INTO messages (plate_number, message_type, message_text) VALUES ($1, $2, $3)",
-          ["KA-AB-1234", "licht_an", "beliebiger Text"],
+          "INSERT INTO messages (plate_number, message_types, message_text) VALUES ($1, $2, $3)",
+          ["KA-AB-1234", ["licht_an"], "beliebiger Text"],
         ),
       ),
     ).rejects.toThrow(/row-level security/i);
@@ -138,12 +138,29 @@ describe("RLS: messages", () => {
   it("lässt anonym nur Katalog-Typen schreiben", async () => {
     await expect(
       asUser(null, (client) =>
-        client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+        client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
           "KA-AB-1234",
-          "erfunden",
+          ["erfunden"],
         ]),
       ),
-    ).rejects.toThrow(/messages_type_check/);
+    ).rejects.toThrow(/messages_types_check/);
+    // Ein erfundener Code in der Liste reicht, und eine leere Liste ist keine Nachricht.
+    await expect(
+      asUser(null, (client) =>
+        client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
+          "KA-AB-1234",
+          ["licht_an", "erfunden"],
+        ]),
+      ),
+    ).rejects.toThrow(/messages_types_check/);
+    await expect(
+      asUser(null, (client) =>
+        client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
+          "KA-AB-1234",
+          [],
+        ]),
+      ),
+    ).rejects.toThrow(/messages_types_check/);
   });
 
   // Zeitstempel und Status setzt die Datenbank. Ein rückdatierter created_at
@@ -152,8 +169,8 @@ describe("RLS: messages", () => {
     await expect(
       asUser(null, (client) =>
         client.query(
-          "INSERT INTO messages (plate_number, message_type, created_at) VALUES ($1, $2, $3)",
-          ["KA-AB-1234", "licht_an", "2020-01-01"],
+          "INSERT INTO messages (plate_number, message_types, created_at) VALUES ($1, $2, $3)",
+          ["KA-AB-1234", ["licht_an"], "2020-01-01"],
         ),
       ),
     ).rejects.toThrow(/permission denied/i);
@@ -163,9 +180,9 @@ describe("RLS: messages", () => {
     // Im Kompaktformat wären K-AB-1234 und KA-B-1234 derselbe Wert.
     await expect(
       asUser(null, (client) =>
-        client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+        client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
           "KAB1234",
-          "licht_an",
+          ["licht_an"],
         ]),
       ),
     ).rejects.toThrow(/messages_plate_format_check/);
@@ -737,17 +754,17 @@ describe("RLS: Mandantentrennung", () => {
     const insert = (userId: string | null, values: unknown[]) =>
       asUser(userId, (client) =>
         client.query(
-          `INSERT INTO messages (plate_number, message_type, message_text, org_id, site_id, sender_id)
+          `INSERT INTO messages (plate_number, message_types, message_text, org_id, site_id, sender_id)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           values,
         ),
       );
 
     await expect(
-      insert(outsider, ["KA-AB-1", "licht_an", null, orgId, siteId, member]),
+      insert(outsider, ["KA-AB-1", ["licht_an"], null, orgId, siteId, member]),
     ).rejects.toThrow(/row-level security/i);
     await expect(
-      insert(null, ["KA-AB-1", "licht_an", null, orgId, other.siteId, null]),
+      insert(null, ["KA-AB-1", ["licht_an"], null, orgId, other.siteId, null]),
     ).rejects.toThrow(/messages_site_in_org/);
     await expect(insert(null, ["KA-AB-1", null, "anonym", orgId, siteId, null])).rejects.toThrow(
       /row-level security/i,
@@ -757,7 +774,7 @@ describe("RLS: Mandantentrennung", () => {
     ).rejects.toThrow(/row-level security/i);
 
     await insert(member, ["KA-AB-1", null, "Bitte umparken", orgId, siteId, member]);
-    await insert(null, ["KA-AB-1", "licht_an", null, orgId, siteId, null]);
+    await insert(null, ["KA-AB-1", ["licht_an"], null, orgId, siteId, null]);
   });
 
   it("verbietet Freitext, wenn die Organisation ihn nicht erlaubt", async () => {
@@ -793,8 +810,8 @@ describe("RLS: Mandantentrennung", () => {
       });
       await withAdmin((client) =>
         client.query(
-          `INSERT INTO messages (plate_number, message_type, org_id, site_id, sender_id)
-           VALUES ($1, 'blockiert', $2, $3, $4)`,
+          `INSERT INTO messages (plate_number, message_types, org_id, site_id, sender_id)
+           VALUES ($1, ARRAY['blockiert'], $2, $3, $4)`,
           [`KA-${org === visible ? "V" : "H"}-1`, org.orgId, org.siteId, sender],
         ),
       );

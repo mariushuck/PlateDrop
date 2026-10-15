@@ -66,7 +66,7 @@ async function processBatch() {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `SELECT o.id, o.plate_number, o.message_type, o.attempts, u.email,
+      `SELECT o.id, o.plate_number, o.message_types, o.attempts, u.email,
               s.email_enabled, s.quiet_start, s.quiet_end
          FROM notification_outbox o
          JOIN users u ON u.id = o.user_id
@@ -79,7 +79,9 @@ async function processBatch() {
     );
 
     for (const row of rows) {
-      const entry = row.message_type ? BY_CODE.get(row.message_type) : undefined;
+      const entries = (row.message_types ?? []).map((code) => BY_CODE.get(code)).filter(Boolean);
+      // Ein dringlicher Grund macht die ganze Nachricht dringlich.
+      const urgent = entries.some((entry) => entry.urgent);
       const now = new Date();
 
       // Nach dem Einreihen abgeschaltet: nicht senden, aber als erledigt markieren.
@@ -91,7 +93,7 @@ async function processBatch() {
         continue;
       }
 
-      if (!entry?.urgent && inQuietHours(now, row.quiet_start, row.quiet_end)) {
+      if (!urgent && inQuietHours(now, row.quiet_start, row.quiet_end)) {
         await client.query("UPDATE notification_outbox SET next_attempt_at = $2 WHERE id = $1", [
           row.id,
           quietHoursEnd(now, row.quiet_end),
@@ -102,7 +104,7 @@ async function processBatch() {
       try {
         const mail = notificationMail({
           plate: row.plate_number,
-          typeText: entry?.text,
+          typeTexts: entries.map((entry) => entry.text),
           dashboardUrl,
         });
         await transport.sendMail({ from, to: row.email, ...mail });

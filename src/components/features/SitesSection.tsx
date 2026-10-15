@@ -1,4 +1,4 @@
-import { Building2, Settings } from "lucide-react";
+import { Building2, ChevronRight, Settings } from "lucide-react";
 import Link from "next/link";
 import { claimOrgPlate } from "@/app/dashboard/actions";
 import ClaimPlateForm from "@/components/features/ClaimPlateForm";
@@ -25,50 +25,49 @@ export default function SitesSection({
   }
 
   return (
-    <section className="mb-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-        <Building2 className="h-5 w-5" />
-        Gelände
-      </h2>
-
-      {adminOrgs.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
+    <section className="space-y-6">
+      <div>
+        <h2 className="section-header">Gelände</h2>
+        <ul className="inset-group">
           {adminOrgs.map((org) => (
-            <Link
-              key={org.slug}
-              href={`/o/${org.slug}/admin`}
-              className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 dark:bg-slate-700 dark:text-slate-100"
-            >
-              <Settings className="h-4 w-4" />
-              {org.name} verwalten
-            </Link>
+            <li key={org.slug} className="list-row relative active:opacity-60">
+              <Settings className="h-5 w-5 shrink-0 text-tint" aria-hidden="true" />
+              {/* The link covers the whole row. */}
+              <Link
+                href={`/o/${org.slug}/admin`}
+                className="flex-1 text-[17px] after:absolute after:inset-0"
+              >
+                {org.name} verwalten
+              </Link>
+              <ChevronRight className="h-5 w-5 text-secondary" aria-hidden="true" />
+            </li>
           ))}
-        </div>
-      )}
-
-      {memberships.length > 0 && (
-        <ul className="mb-6 space-y-3">
           {memberships.map((m) => (
-            <li key={m.site_id} className="text-sm text-slate-700 dark:text-slate-200">
-              <span className="font-semibold">{m.site_name}</span>
-              {m.org_name && <span> · {m.org_name}</span>}
-              {m.status === "pending" && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                  wartet auf Bestätigung
-                </span>
-              )}
+            <li key={m.site_id} className="list-row flex-wrap">
+              <Building2 className="h-5 w-5 shrink-0 text-secondary" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[17px]">{m.site_name}</p>
+                <p className="text-[13px] text-secondary">
+                  {m.org_name}
+                  {m.status === "pending" && (
+                    <span className="text-warning">
+                      {m.org_name && " · "}wartet auf Bestätigung
+                    </span>
+                  )}
+                </p>
+              </div>
               <LeaveSiteButton siteId={m.site_id} pending={m.status === "pending"} />
             </li>
           ))}
         </ul>
-      )}
+      </div>
 
       {[...activeOrgs].map(([orgId, orgName]) => (
-        <div key={orgId} className="border-t border-slate-200 pt-4 dark:border-slate-700">
-          <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">
-            Kennzeichen für {orgName}
-          </p>
-          <ClaimPlateForm action={claimOrgPlate} hiddenFields={{ orgId }} />
+        <div key={orgId}>
+          <h2 className="section-header">Kennzeichen für {orgName}</h2>
+          <div className="inset-group p-4">
+            <ClaimPlateForm action={claimOrgPlate} hiddenFields={{ orgId }} />
+          </div>
         </div>
       ))}
     </section>

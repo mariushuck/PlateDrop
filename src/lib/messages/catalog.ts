@@ -9,6 +9,8 @@ import entries from "./catalog.json";
  */
 export interface MessageTypeEntry {
   code: string;
+  /** Überschrift der Gruppe im Formular; Einträge einer Kategorie stehen im Katalog zusammen. */
+  category: string;
   /** Kurzform für die Auswahl im Formular. */
   label: string;
   /** Satz, den der Halter liest. */
@@ -21,6 +23,15 @@ export interface MessageTypeEntry {
 
 export const MESSAGE_TYPES: readonly MessageTypeEntry[] = entries;
 
+/** Kategorien in Katalogreihenfolge, je mit ihren Einträgen. */
+export const MESSAGE_CATEGORIES: ReadonlyArray<{ name: string; types: MessageTypeEntry[] }> =
+  MESSAGE_TYPES.reduce<Array<{ name: string; types: MessageTypeEntry[] }>>((groups, entry) => {
+    const last = groups.at(-1);
+    if (last?.name === entry.category) last.types.push(entry);
+    else groups.push({ name: entry.category, types: [entry] });
+    return groups;
+  }, []);
+
 const BY_CODE = new Map(MESSAGE_TYPES.map((entry) => [entry.code, entry]));
 
 export function isMessageType(code: unknown): code is string {
@@ -29,4 +40,19 @@ export function isMessageType(code: unknown): code is string {
 
 export function messageType(code: string): MessageTypeEntry | undefined {
   return BY_CODE.get(code);
+}
+
+/**
+ * Auswahl aus dem Formular (`formData.getAll("messageTypes")`): ohne Dubletten,
+ * in Auswahlreihenfolge. `null`, sobald ein Wert nicht aus dem Katalog stammt.
+ */
+export function parseMessageTypes(values: unknown[]): string[] | null {
+  if (!values.every(isMessageType)) return null;
+  return [...new Set(values)];
+}
+
+/** Katalog-Einträge zu gespeicherten Codes, dringliche zuerst; Unbekanntes fällt weg. */
+export function messageEntries(codes: readonly string[] | null): MessageTypeEntry[] {
+  const entries = (codes ?? []).flatMap((code) => BY_CODE.get(code) ?? []);
+  return [...entries.filter((e) => e.urgent), ...entries.filter((e) => !e.urgent)];
 }

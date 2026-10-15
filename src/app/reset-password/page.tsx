@@ -1,4 +1,6 @@
+import Link from "next/link";
 import ResetPasswordForm from "@/components/features/ResetPasswordForm";
+import NavBar from "@/components/ui/NavBar";
 
 /**
  * Unter Supabase stellte der Link aus der E-Mail eine Session her, und die
@@ -14,32 +16,28 @@ export default async function ResetPasswordPage({
   const { token, error } = await searchParams;
 
   return (
-    <div className="flex min-h-screen flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
-      <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
-          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Neues Passwort setzen
-          </p>
-        </div>
-      </header>
+    <div className="flex flex-1 flex-col">
+      <NavBar>
+        <Link href="/" className="text-[17px] font-semibold active:opacity-60">
+          PlateDrop
+        </Link>
+      </NavBar>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <h2 className="mb-6 text-xl font-bold text-slate-900 dark:text-white">
-            Neues Passwort setzen
-          </h2>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col px-4 pt-6 pb-8">
+        <h1 className="large-title mb-6">Neues Passwort</h1>
 
-          {!token || error ? (
-            <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.
-              </p>
-            </div>
-          ) : (
-            <ResetPasswordForm token={token} />
-          )}
-        </div>
+        {!token || error ? (
+          <div className="inset-group p-4 text-[15px]" role="alert">
+            <p className="text-danger">
+              Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.
+            </p>
+            <Link href="/forgot-password" className="btn-plain mt-3 inline-block">
+              Neuen Link anfordern
+            </Link>
+          </div>
+        ) : (
+          <ResetPasswordForm token={token} />
+        )}
       </main>
     </div>
   );

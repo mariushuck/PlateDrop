@@ -39,10 +39,10 @@ export default function PlatePauseControl({
   }
 
   return (
-    <div className="mt-2 space-y-2 text-sm">
+    <div className="space-y-2 text-[15px]">
       {pausedUntil ? (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+          <span className="flex items-center gap-1.5 text-secondary">
             <BellOff className="h-4 w-4" />
             Benachrichtigungen pausiert bis{" "}
             {new Date(pausedUntil).toLocaleString("de-DE", {
@@ -56,29 +56,27 @@ export default function PlatePauseControl({
             type="button"
             disabled={isPending}
             onClick={() => run(null)}
-            className="font-medium text-slate-900 underline disabled:opacity-50 dark:text-white"
+            className="text-tint active:opacity-60 disabled:opacity-40"
           >
             Fortsetzen
           </button>
         </div>
       ) : choosing ? (
-        <div className="flex flex-wrap gap-2">
-          {OPTIONS.map((option) => (
-            <button
-              key={option.hours}
-              type="button"
-              disabled={isPending}
-              onClick={() => run(option.hours)}
-              className="rounded-lg border border-slate-300 px-3 py-2 font-medium text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
-            >
-              {option.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setChoosing(false)}
-            className="px-3 py-2 font-medium text-slate-500 dark:text-slate-400"
-          >
+        <div className="space-y-2">
+          <div className="segmented">
+            {OPTIONS.map((option) => (
+              <button
+                key={option.hours}
+                type="button"
+                disabled={isPending}
+                onClick={() => run(option.hours)}
+                className="disabled:opacity-40"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setChoosing(false)} className="text-tint">
             Abbrechen
           </button>
         </div>
@@ -86,14 +84,14 @@ export default function PlatePauseControl({
         <button
           type="button"
           onClick={() => setChoosing(true)}
-          className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400"
+          className="flex items-center gap-1.5 text-tint active:opacity-60"
         >
           <BellRing className="h-4 w-4" />
           Benachrichtigungen pausieren
         </button>
       )}
       {error && (
-        <p className="text-red-800 dark:text-red-200" role="alert">
+        <p className="text-danger" role="alert">
           {error}
         </p>
       )}

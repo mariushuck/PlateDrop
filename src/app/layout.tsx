@@ -1,18 +1,8 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Toaster } from "sonner";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AppToaster from "@/components/ui/AppToaster";
 import Footer from "@/components/ui/Footer";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { THEME_COLORS, THEME_INIT_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "PlateDrop | Der anonyme Briefkasten für dein Auto",
@@ -26,17 +16,31 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // The init script sets data-theme before hydration.
+    <html lang="de" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: fester Text aus src/lib/theme.ts, keine Eingabe */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         {children}
         <Footer />
-        <Toaster richColors position="top-center" />
+        <AppToaster />
       </body>
     </html>
   );

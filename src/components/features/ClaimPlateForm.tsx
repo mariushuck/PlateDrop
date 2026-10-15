@@ -1,8 +1,10 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import { useActionState, useEffect, useId, useState } from "react";
-import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
+import { EXAMPLE_PLATE } from "@/lib/utils/plateUtils";
+import { usePlateInput } from "@/lib/utils/usePlateInput";
+import PlateChoice from "./PlateChoice";
 
 interface ClaimPlateFormProps {
   action: (
@@ -17,15 +19,9 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
   const [state, formAction, isPending] = useActionState(action, null);
   // Mehrere Formulare je Seite (öffentlich + je Organisation) brauchen eigene IDs.
   const inputId = useId();
-  const [plateInput, setPlateInput] = useState("");
+  const plate = usePlateInput();
+  const { setValue: setPlate } = plate;
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // Compute plate error synchronously
-  const parsedPlate = parsePlate(plateInput);
-  const plateError =
-    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
-
-  const isFormValid = plateInput.trim() && !plateError;
 
   // Handle success state without synchronous updates in the effect body
   useEffect(() => {
@@ -33,7 +29,7 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
 
     const showTimer = window.setTimeout(() => {
       setShowSuccess(true);
-      setPlateInput("");
+      setPlate("");
 
       window.setTimeout(() => {
         setShowSuccess(false);
@@ -41,17 +37,15 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
     }, 0);
 
     return () => window.clearTimeout(showTimer);
-  }, [state]);
+  }, [state, setPlate]);
 
   return (
     <div className="space-y-4">
       {showSuccess && (
-        <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
-          <p className="text-sm font-medium text-green-800 dark:text-green-200">
-            Kennzeichen erfolgreich registriert! ✓
-          </p>
-        </div>
+        <p className="flex items-center gap-2 text-[15px] font-medium text-success" role="status">
+          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+          Kennzeichen erfolgreich registriert! ✓
+        </p>
       )}
 
       <form action={formAction} className="flex flex-col gap-4">
@@ -59,52 +53,56 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
           Object.entries(hiddenFields).map(([name, value]) => (
             <input key={name} type="hidden" name={name} value={value} />
           ))}
-        {/* Plate Input */}
-        <div className="flex flex-col gap-2">
-          <label htmlFor={inputId} className="text-sm font-semibold text-slate-900 dark:text-white">
+        <div>
+          <label htmlFor={inputId} className="mb-1.5 block text-[15px] text-secondary">
             Kennzeichen
           </label>
-
-          <div className="relative">
+          <div className="plate-field">
             <input
               id={inputId}
               name="plateNumber"
               type="text"
-              placeholder="z.B. KA-AB-1234"
-              value={plateInput}
-              onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+              placeholder={EXAMPLE_PLATE}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              value={plate.value}
+              onChange={plate.onChange}
               disabled={isPending}
-              className="w-full rounded-lg border-2 border-slate-300 bg-white px-4 py-3 font-mono text-lg font-bold uppercase tracking-widest text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
             />
-
-            {plateInput && !plateError && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400">
-                ✓
-              </div>
+            {plate.valid && (
+              // The plate stays white in dark mode, so the check keeps the light-mode green.
+              <Check
+                className="mr-3 shrink-0 self-center text-[#248a3d]"
+                size={24}
+                strokeWidth={3}
+              />
             )}
           </div>
-
-          {plateError && <p className="text-sm text-red-600 dark:text-red-400">{plateError}</p>}
+          {plate.error ? (
+            <p className="mt-1.5 text-[13px] text-danger">{plate.error}</p>
+          ) : (
+            plate.district && <p className="mt-1.5 text-[13px] text-secondary">{plate.district}</p>
+          )}
+          <PlateChoice candidates={plate.candidates} onPick={setPlate} />
         </div>
 
-        {/* Error Display */}
         {state?.error && (
-          <div className="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200">{state.error}</p>
-          </div>
+          <p role="alert" className="text-[15px] text-danger">
+            {state.error}
+          </p>
         )}
 
-        {/* Submit Button */}
         <button
           type="submit"
-          disabled={isPending || !isFormValid}
-          className="rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
+          disabled={isPending || !plate.valid}
+          className="btn btn-primary w-full"
         >
           {isPending ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <>
+              <Loader2 className="animate-spin" size={20} aria-hidden="true" />
               Wird registriert...
-            </span>
+            </>
           ) : (
             "Kennzeichen registrieren"
           )}

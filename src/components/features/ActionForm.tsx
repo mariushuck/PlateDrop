@@ -25,16 +25,12 @@ export default function ActionForm({
         {children}
       </fieldset>
       {state?.error && (
-        <p className="text-sm text-red-800 dark:text-red-200" role="alert">
+        <p className="text-[15px] text-danger" role="alert">
           {state.error}
         </p>
       )}
-      {state?.success && <p className="text-sm text-green-800 dark:text-green-200">Gespeichert.</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-400 dark:bg-white dark:text-slate-900"
-      >
+      {state?.success && <p className="text-[15px] text-success">Gespeichert.</p>}
+      <button type="submit" disabled={pending} className="btn btn-sm btn-primary self-start">
         {pending ? "Wird gespeichert..." : submitLabel}
       </button>
     </form>

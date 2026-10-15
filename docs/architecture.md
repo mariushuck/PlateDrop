@@ -216,7 +216,7 @@ erDiagram
     messages {
         uuid id PK
         text plate_number
-        text message_type
+        text_array message_types
         text message_text
         timestamptz created_at
         timestamptz hidden_at
@@ -298,16 +298,19 @@ spiegelt damit die Validierung der Server Action auf Datenbankebene. `hidden_at`
 Empfänger beim Ausblenden oder Melden; der Inhalt bleibt bis zur Löschfrist
 (`MESSAGE_RETENTION_DAYS`, Pflicht) erhalten, damit eine Meldung prüfbar bleibt.
 
-Seit `0013` trägt eine Nachricht `message_type` (Code aus
-[`catalog.json`](../src/lib/messages/catalog.json), per CHECK auf dieselbe Liste begrenzt; ein
-Unit-Test gleicht beide ab) und `read_at` (gesetzt, sobald der Empfänger sie im Dashboard sieht).
+Seit `0013` trägt eine Nachricht einen Typ aus
+[`catalog.json`](../src/lib/messages/catalog.json), seit `0015` mehrere: `message_types text[]`,
+per `messages_types_check` auf eine nicht leere Teilmenge des Katalogs begrenzt (ein Unit-Test
+gleicht Liste und Katalog ab). Der Katalog gliedert die Gründe in Kategorien; eine Nachricht mit
+mehreren Gründen bleibt eine Zeile, also eine Mail und ein Zähler in beiden Rate-Limits. Dazu
+kommt `read_at` (gesetzt, sobald der Empfänger sie im Dashboard sieht).
 `message_text` ist nur noch für Altbestand gefüllt; anonyme Absender schreiben keinen Freitext.
 `messages_has_content` verlangt Typ oder Text.
 
 **`notification_settings`** (`0013`) — je Nutzer E-Mail an/aus und Ruhezeiten (volle Stunden,
 Europe/Berlin). Ohne Zeile gelten die Standards (an, keine Ruhezeit).
 
-**`notification_outbox`** (`0013`) — eine Zeile je fälliger Benachrichtigung: Kennzeichen, Typ,
+**`notification_outbox`** (`0013`) — eine Zeile je fälliger Benachrichtigung: Kennzeichen, Gründe (`message_types`, seit `0015`),
 Versuche, nächster Versuch, `sent_at`. RLS an, keine Policy, kein Grant für die App-Rolle; nur der
 Trigger und der Notifier (als Owner) kommen heran. `prune-outbox.mjs` löscht erledigte Einträge
 nach 30 Tagen.
@@ -391,7 +394,7 @@ Policy unerreichbar; vorher hätte ein Halter sein offenes Kennzeichen per UPDAT
 
 | Policy | Wirkung |
 | --- | --- |
-| `messages_insert_public` | Jede Person darf schreiben, ohne Konto, ohne Login – der Kern der App. Seit `0013` nur ohne Freitext (`message_text IS NULL`). Der Grant erlaubt nur `INSERT (plate_number, message_type, message_text)`; Zeitpunkt, `hidden_at` und `read_at` setzt die Datenbank, sonst ließe sich das Stundenlimit je Kennzeichen mit einem rückdatierten `created_at` umgehen. |
+| `messages_insert_public` | Jede Person darf schreiben, ohne Konto, ohne Login – der Kern der App. Seit `0013` nur ohne Freitext (`message_text IS NULL`). Der Grant erlaubt nur `INSERT (plate_number, message_types, message_text)` (Spalte seit `0015` umbenannt, der Grant hängt an der Spalte); Zeitpunkt, `hidden_at` und `read_at` setzt die Datenbank, sonst ließe sich das Stundenlimit je Kennzeichen mit einem rückdatierten `created_at` umgehen. |
 | `messages_select_if_verified_owner` | Lesen nur, wenn `app.can_read_message(plate_number, created_at)` gilt: eine Zeile in `verified_plates` gehört dem Anfragenden, lautet auf dasselbe Kennzeichen, trägt `is_verified = true`, **und** die Nachricht ist frühestens 30 Tage vor dem Anspruch eingegangen (`app.message_read_since(vp.created_at)`, Migration 0009). Kennzeichen werden neu vergeben; ein neuer Halter soll nicht lesen, was an den Vorbesitzer ging. Die Bedingung steht seit `0012` an genau einer Stelle (die Funktion); `listMessagesForUser` und `exportUserData` filtern zusätzlich mit derselben Grenze. |
 | `messages_update_hide_own` | Ändern nur durch den Empfänger (dieselbe Funktion). Der Grant erlaubt ausschließlich `UPDATE (hidden_at, read_at)`; Text, Typ, Kennzeichen und Zeitpunkt bleiben unveränderlich. |
 | `messages_select_reported_admin` | Ein Admin liest eine Nachricht nur, wenn sie gemeldet wurde. Alle übrigen bleiben auch für ihn unsichtbar. |
@@ -607,10 +610,10 @@ sequenceDiagram
         N->>DB: faellige Outbox-Zeilen, FOR UPDATE SKIP LOCKED, max. 20
         alt E-Mail inzwischen abgeschaltet
             N->>DB: als erledigt markieren
-        else Ruhezeit und Typ nicht dringlich
+        else Ruhezeit und kein Grund dringlich
             N->>DB: next_attempt_at = Ende der Ruhezeit
         else senden
-            N->>S: Mail mit Typ und Kennzeichen, Link zum Dashboard
+            N->>S: Mail mit allen Gründen und Kennzeichen, Link zum Dashboard
             alt zugestellt
                 N->>DB: sent_at = now()
             else Fehler
@@ -622,8 +625,10 @@ sequenceDiagram
 
 Der Trigger `app.enqueue_notifications()` legt eine Zeile nur an, wenn ein freigegebener Halter
 existiert, das Kennzeichen nicht pausiert ist, der Halter E-Mails nicht abgeschaltet hat und für
-denselben Halter, dasselbe Kennzeichen und denselben Typ in den letzten 15 Minuten keine Zeile
-entstanden ist (Bündeln). Dringliche Typen (`urgent` im Katalog) ignorieren Ruhezeiten.
+denselben Halter und dasselbe Kennzeichen in den letzten 15 Minuten keine Zeile entstanden ist,
+die schon alle Gründe der neuen Nachricht enthält (Bündeln, `@>`); ein neuer Grund löst also
+immer eine Mail aus. Enthält eine Nachricht einen dringlichen Grund (`urgent` im Katalog),
+ignoriert sie die Ruhezeiten.
 
 ### Kennzeichen verifizieren
 
@@ -805,6 +810,7 @@ von [`scripts/migrate.mjs`](../scripts/migrate.mjs).
 | `0012_receiver_controls.sql` | `app.can_read_message()`, Ausblenden (`hidden_at`), `message_reports`, Admin liest/löscht nur Gemeldetes, `paused_until` mit `app.set_plate_pause()` |
 | `0013_message_types_and_notifications.sql` | `message_type` mit Katalog-CHECK, kein anonymer Freitext, spaltenscharfes INSERT, `read_at`, `notification_settings`, `notification_outbox` mit Trigger, `app.outbox_lag_seconds()` |
 | `0014_organizations.sql` | Organisationen, Standorte, Org-Admins, Mitgliedschaften, Fuhrparkliste; `org_id`/`site_id`/`sender_id`, Lesebedingung mit Bereich, Mandanten-Policies, Offboarding- und Fuhrparklisten-Trigger, Statistik, `users.name` geleert |
+| `0015_message_type_list.sql` | mehrere Gründe je Nachricht: `message_types text[]` statt `message_type` (Bestand umgewandelt), `messages_types_check`, dieselbe Umstellung in `notification_outbox`, Bündeln nur, wenn alle Gründe schon gemeldet sind |
 
 Der Runner verbindet sich als Owner, stellt zuerst die Rolle `platedrop_app` sicher und spielt dann
 jede noch nicht vermerkte Datei **in einer eigenen Transaktion** ein. Was gelaufen ist, steht in

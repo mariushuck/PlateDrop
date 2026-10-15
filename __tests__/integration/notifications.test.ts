@@ -16,13 +16,13 @@ import {
 const execFileAsync = promisify(execFile);
 
 /** Schreibt eine Nachricht wie die App: als App-Rolle ohne Nutzer. */
-async function drop(plate: string, type: string): Promise<void> {
+async function drop(plate: string, types: string | string[]): Promise<void> {
   const client = new pg.Client({ connectionString: APP_URL });
   await client.connect();
   try {
-    await client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+    await client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
       plate,
-      type,
+      [types].flat(),
     ]);
   } finally {
     await client.end();
@@ -33,13 +33,13 @@ async function outbox() {
   const { rows } = await withAdmin((client) =>
     client.query<{
       user_id: string;
-      message_type: string;
+      message_types: string[];
       sent_at: Date | null;
       attempts: number;
       next_attempt_at: Date;
       last_error: string | null;
     }>(
-      `SELECT user_id, message_type, sent_at, attempts, next_attempt_at, last_error
+      `SELECT user_id, message_types, sent_at, attempts, next_attempt_at, last_error
          FROM notification_outbox ORDER BY id`,
     ),
   );
@@ -96,7 +96,7 @@ describe("Outbox-Trigger", () => {
     await drop("KA-AB-1234", "licht_an");
 
     expect(await outbox()).toMatchObject([
-      { user_id: "user-owner", message_type: "licht_an", sent_at: null, attempts: 0 },
+      { user_id: "user-owner", message_types: ["licht_an"], sent_at: null, attempts: 0 },
     ]);
   });
 
@@ -140,15 +140,19 @@ describe("Outbox-Trigger", () => {
     expect(await outbox()).toEqual([]);
   });
 
-  it("bündelt denselben Typ innerhalb von 15 Minuten", async () => {
+  it("bündelt innerhalb von 15 Minuten, solange kein neuer Grund dazukommt", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
 
     await drop("KA-AB-1234", "licht_an");
-    await drop("KA-AB-1234", "licht_an");
-    await drop("KA-AB-1234", "blockiert");
+    await drop("KA-AB-1234", "licht_an"); // schon gemeldet
+    await drop("KA-AB-1234", ["licht_an", "blockiert"]); // neuer Grund dabei
+    await drop("KA-AB-1234", "blockiert"); // in der vorigen Mail enthalten
 
-    expect((await outbox()).map((o) => o.message_type)).toEqual(["licht_an", "blockiert"]);
+    expect((await outbox()).map((o) => o.message_types)).toEqual([
+      ["licht_an"],
+      ["licht_an", "blockiert"],
+    ]);
   });
 });
 
@@ -158,10 +162,10 @@ describe("scripts/notifier.mjs", () => {
     await clearMailbox();
   });
 
-  it("verschickt eine Mail mit Typ und Kennzeichen und markiert den Eintrag", async () => {
+  it("verschickt eine Mail mit allen Gründen und Kennzeichen und markiert den Eintrag", async () => {
     const owner = await seedUser("user-owner", "owner@example.com");
     await seedPlate(owner, "KA-AB-1234", { verified: true, status: "approved" });
-    await drop("KA-AB-1234", "licht_an");
+    await drop("KA-AB-1234", ["licht_an", "reifen"]);
 
     await runNotifier();
 
@@ -173,6 +177,7 @@ describe("scripts/notifier.mjs", () => {
       Text: string;
     };
     expect(detail.Text).toContain("Am Fahrzeug brennt noch Licht.");
+    expect(detail.Text).toContain("Ein Reifen sieht platt aus.");
     expect(detail.Text).toContain("https://platedrop.test/dashboard");
 
     const [entry] = await outbox();
@@ -191,16 +196,18 @@ describe("scripts/notifier.mjs", () => {
     );
     await drop("KA-AB-1234", "reifen");
     await drop("KA-AB-1234", "licht_an");
+    // Ein dringlicher Grund macht die ganze Nachricht dringlich.
+    await drop("KA-AB-1234", ["schaden_gesehen", "alarm"]);
 
     await runNotifier();
 
     const entries = await outbox();
-    const reifen = entries.find((e) => e.message_type === "reifen");
-    const licht = entries.find((e) => e.message_type === "licht_an");
-    expect(reifen?.sent_at).toBeNull();
-    expect(reifen?.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
-    expect(licht?.sent_at).not.toBeNull();
-    expect(await inbox()).toHaveLength(1);
+    const of = (types: string[]) => entries.find((e) => e.message_types.join() === types.join());
+    expect(of(["reifen"])?.sent_at).toBeNull();
+    expect(of(["reifen"])?.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
+    expect(of(["licht_an"])?.sent_at).not.toBeNull();
+    expect(of(["schaden_gesehen", "alarm"])?.sent_at).not.toBeNull();
+    expect(await inbox()).toHaveLength(2);
   });
 
   it("versucht es nach einem Fehlschlag später erneut", async () => {
@@ -292,15 +299,15 @@ describe("scripts/prune-outbox.mjs", () => {
     await withAdmin(async (client) => {
       const old = daysAgo(31);
       await client.query(
-        "UPDATE notification_outbox SET sent_at = $1, created_at = $1 WHERE message_type = 'licht_an'",
+        "UPDATE notification_outbox SET sent_at = $1, created_at = $1 WHERE message_types = '{licht_an}'",
         [old],
       );
       await client.query(
-        "UPDATE notification_outbox SET attempts = 10, created_at = $1 WHERE message_type = 'blockiert'",
+        "UPDATE notification_outbox SET attempts = 10, created_at = $1 WHERE message_types = '{blockiert}'",
         [old],
       );
       await client.query(
-        "UPDATE notification_outbox SET sent_at = now() WHERE message_type = 'alarm'",
+        "UPDATE notification_outbox SET sent_at = now() WHERE message_types = '{alarm}'",
       );
     });
 
@@ -309,6 +316,6 @@ describe("scripts/prune-outbox.mjs", () => {
       env: { ...process.env, DATABASE_ADMIN_URL: ADMIN_URL },
     });
 
-    expect((await outbox()).map((o) => o.message_type)).toEqual(["alarm", "reifen"]);
+    expect((await outbox()).map((o) => o.message_types)).toEqual([["alarm"], ["reifen"]]);
   });
 });

@@ -6,7 +6,7 @@ export default function PrintButton() {
     <button
       type="button"
       onClick={() => window.print()}
-      className="self-end rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white print:hidden dark:bg-white dark:text-slate-900"
+      className="btn btn-primary w-full print:hidden"
     >
       Drucken oder als PDF speichern
     </button>

@@ -47,38 +47,31 @@ export default function ProofUploadForm({ plateId }: { plateId: string }) {
 
   if (success) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-green-100 p-4 dark:bg-green-900/30">
-        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-        <p className="text-sm font-medium text-green-800 dark:text-green-200">
-          Bild erfolgreich hochgeladen!
-        </p>
-      </div>
+      <p className="flex items-center gap-2 text-[15px] font-medium text-success" role="status">
+        <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+        Bild erfolgreich hochgeladen!
+      </p>
     );
   }
 
   return (
     <div className="space-y-3">
-      <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 p-4 transition-colors hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/10 dark:hover:border-amber-600">
-        <Camera className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Foto hochladen</p>
-          <p className="text-xs text-amber-700 dark:text-amber-200">
-            {isUploading ? "Wird hochgeladen..." : "Klicke hier, um ein Bild zu wählen"}
-          </p>
-        </div>
+      <label className="btn btn-primary w-full cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-tint">
+        <Camera className="h-5 w-5" aria-hidden="true" />
+        {isUploading ? "Wird hochgeladen..." : "Foto hochladen"}
         <input
           type="file"
           accept="image/*"
           onChange={handleUpload}
           disabled={isUploading}
-          className="hidden"
+          className="sr-only"
         />
       </label>
 
       {error && (
-        <div className="rounded-lg bg-red-100 p-3 dark:bg-red-900/30">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-        </div>
+        <p className="text-[15px] text-danger" role="alert">
+          {error}
+        </p>
       )}
     </div>
   );

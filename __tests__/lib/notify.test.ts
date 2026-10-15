@@ -44,14 +44,27 @@ describe("Notifier: Backoff und Mail", () => {
     expect(backoffMs(20)).toBe(3_600_000);
   });
 
-  it("nennt nur Typ und Kennzeichen und maskiert HTML", () => {
+  it("nennt nur Gründe und Kennzeichen und maskiert HTML", () => {
     const mail = notificationMail({
       plate: "KA-AB-1234",
-      typeText: "Am Fahrzeug brennt noch Licht.",
+      typeTexts: ["Am Fahrzeug brennt noch Licht.", "Ein Reifen <b>sieht</b> platt aus."],
       dashboardUrl: 'https://example.test/"><script>',
     });
     expect(mail.subject).toBe("PlateDrop: Nachricht für KA-AB-1234");
-    expect(mail.text).toContain("Am Fahrzeug brennt noch Licht.");
+    expect(mail.text).toContain(
+      "Am Fahrzeug brennt noch Licht.\nEin Reifen <b>sieht</b> platt aus.",
+    );
+    expect(mail.html).toContain("<li");
     expect(mail.html).not.toContain("<script>");
+    expect(mail.html).not.toContain("<b>");
+  });
+
+  it("fällt ohne Katalog-Gründe (Freitext) auf einen allgemeinen Satz zurück", () => {
+    const mail = notificationMail({
+      plate: "KA-AB-1",
+      typeTexts: [],
+      dashboardUrl: "https://x.test",
+    });
+    expect(mail.text).toContain("Du hast eine neue Nachricht.");
   });
 });

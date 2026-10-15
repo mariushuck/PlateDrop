@@ -35,32 +35,17 @@ export default function SettingsForms() {
   }
 
   return (
-    <div className="space-y-10">
-      {/* Change Password */}
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">
-          Passwort ändern
-        </h2>
+    <div className="space-y-9">
+      <section>
+        <h2 className="section-header">Passwort ändern</h2>
         {pwState.success ? (
-          <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              Passwort erfolgreich aktualisiert.
-            </p>
-          </div>
+          <p className="inset-group p-4 text-[15px] text-success" role="status">
+            Passwort erfolgreich aktualisiert.
+          </p>
         ) : (
-          <form action={pwAction} className="flex flex-col gap-4">
-            {pwState.error && (
-              <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                  {pwState.error}
-                </p>
-              </div>
-            )}
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="pw-current"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
+          <form action={pwAction} className="inset-group flex flex-col gap-4 p-4">
+            <div>
+              <label htmlFor="pw-current" className="field-label">
                 Aktuelles Passwort
               </label>
               <input
@@ -70,14 +55,11 @@ export default function SettingsForms() {
                 required
                 autoComplete="current-password"
                 disabled={pwPending}
-                className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                className="field"
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="pw-new"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
+            <div>
+              <label htmlFor="pw-new" className="field-label">
                 Neues Passwort
               </label>
               <input
@@ -89,14 +71,11 @@ export default function SettingsForms() {
                 placeholder={`Mindestens ${MIN_PASSWORD_LENGTH} Zeichen`}
                 autoComplete="new-password"
                 disabled={pwPending}
-                className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                className="field"
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="pw-confirm"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
+            <div>
+              <label htmlFor="pw-confirm" className="field-label">
                 Passwort bestätigen
               </label>
               <input
@@ -106,48 +85,31 @@ export default function SettingsForms() {
                 required
                 autoComplete="new-password"
                 disabled={pwPending}
-                className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                className="field"
               />
             </div>
-            <button
-              type="submit"
-              disabled={pwPending}
-              className="self-start rounded-lg bg-slate-900 px-6 py-2 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
-            >
+            {pwState.error && (
+              <p className="text-[15px] text-danger" role="alert">
+                {pwState.error}
+              </p>
+            )}
+            <button type="submit" disabled={pwPending} className="btn btn-primary w-full">
               {pwPending ? "Wird gespeichert…" : "Passwort speichern"}
             </button>
           </form>
         )}
       </section>
 
-      {/* Change Email */}
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
-          E-Mail-Adresse ändern
-        </h2>
-        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Wir senden eine Bestätigungs-E-Mail an deine bisherige Adresse.
-        </p>
+      <section>
+        <h2 className="section-header">E-Mail-Adresse ändern</h2>
         {emailState.success ? (
-          <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
-            <p className="text-sm font-medium text-green-800 dark:text-green-200">
-              Bestätigungs-E-Mail an deine bisherige Adresse gesendet.
-            </p>
-          </div>
+          <p className="inset-group p-4 text-[15px] text-success" role="status">
+            Bestätigungs-E-Mail an deine bisherige Adresse gesendet.
+          </p>
         ) : (
-          <form action={emailAction} className="flex flex-col gap-4">
-            {emailState.error && (
-              <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                  {emailState.error}
-                </p>
-              </div>
-            )}
-            <div className="flex flex-col gap-2">
-              <label
-                htmlFor="email"
-                className="text-sm font-semibold text-slate-900 dark:text-white"
-              >
+          <form action={emailAction} className="inset-group flex flex-col gap-4 p-4">
+            <div>
+              <label htmlFor="email" className="field-label">
                 Neue E-Mail-Adresse
               </label>
               <input
@@ -158,64 +120,54 @@ export default function SettingsForms() {
                 autoComplete="email"
                 placeholder="name@example.com"
                 disabled={emailPending}
-                className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+                className="field"
               />
             </div>
-            <button
-              type="submit"
-              disabled={emailPending}
-              className="self-start rounded-lg bg-slate-900 px-6 py-2 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
-            >
+            {emailState.error && (
+              <p className="text-[15px] text-danger" role="alert">
+                {emailState.error}
+              </p>
+            )}
+            <button type="submit" disabled={emailPending} className="btn btn-primary w-full">
               {emailPending ? "Wird gesendet…" : "E-Mail ändern"}
             </button>
           </form>
         )}
+        <p className="section-footer">
+          Wir senden eine Bestätigungs-E-Mail an deine bisherige Adresse.
+        </p>
       </section>
 
       {/* Datenexport (DSGVO Art. 15/20) */}
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">
-          Meine Daten exportieren
-        </h2>
-        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Lädt deine Kontodaten, Kennzeichen und die Nachrichten an deine verifizierten Kennzeichen
-          als JSON-Datei herunter.
-        </p>
-        {exportError && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200">{exportError}</p>
-          </div>
+      <section>
+        <h2 className="section-header">Meine Daten</h2>
+        <div className="inset-group">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportPending}
+            className="list-row w-full text-left text-[17px] text-tint active:opacity-60 disabled:opacity-40"
+          >
+            {exportPending ? "Wird erstellt…" : "Export herunterladen"}
+          </button>
+        </div>
+        {exportError ? (
+          <p className="section-footer text-danger" role="alert">
+            {exportError}
+          </p>
+        ) : (
+          <p className="section-footer">
+            Lädt deine Kontodaten, Kennzeichen und die Nachrichten an deine verifizierten
+            Kennzeichen als JSON-Datei herunter.
+          </p>
         )}
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exportPending}
-          className="self-start rounded-lg bg-slate-900 px-6 py-2 font-semibold text-white transition-all disabled:bg-slate-400 dark:bg-white dark:text-slate-900 dark:disabled:bg-slate-400"
-        >
-          {exportPending ? "Wird erstellt…" : "Export herunterladen"}
-        </button>
       </section>
 
-      {/* Konto löschen */}
-      <section className="rounded-lg border border-red-300 bg-white p-6 shadow-sm dark:border-red-800 dark:bg-slate-800">
-        <h2 className="mb-1 text-lg font-semibold text-red-700 dark:text-red-400">Konto löschen</h2>
-        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Entfernt dein Konto, deine Kennzeichen und die dazugehörigen Beweisfotos unwiderruflich.
-          Anonyme Nachrichten an fremde Kennzeichen bleiben erhalten.
-        </p>
-        <form action={deleteAction} className="flex flex-col gap-4">
-          {deleteState.error && (
-            <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                {deleteState.error}
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <label
-              htmlFor="delete-password"
-              className="text-sm font-semibold text-slate-900 dark:text-white"
-            >
+      <section>
+        <h2 className="section-header">Konto löschen</h2>
+        <form action={deleteAction} className="inset-group flex flex-col gap-4 p-4">
+          <div>
+            <label htmlFor="delete-password" className="field-label">
               Passwort zur Bestätigung
             </label>
             <input
@@ -225,17 +177,22 @@ export default function SettingsForms() {
               required
               autoComplete="current-password"
               disabled={deletePending}
-              className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-slate-900 placeholder-slate-400 transition-colors disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
+              className="field"
             />
           </div>
-          <button
-            type="submit"
-            disabled={deletePending}
-            className="self-start rounded-lg bg-red-600 px-6 py-2 font-semibold text-white transition-all hover:bg-red-700 disabled:bg-red-300"
-          >
+          {deleteState.error && (
+            <p className="text-[15px] text-danger" role="alert">
+              {deleteState.error}
+            </p>
+          )}
+          <button type="submit" disabled={deletePending} className="btn btn-danger w-full">
             {deletePending ? "Wird gelöscht…" : "Konto endgültig löschen"}
           </button>
         </form>
+        <p className="section-footer">
+          Entfernt dein Konto, deine Kennzeichen und die dazugehörigen Beweisfotos unwiderruflich.
+          Anonyme Nachrichten an fremde Kennzeichen bleiben erhalten.
+        </p>
       </section>
     </div>
   );

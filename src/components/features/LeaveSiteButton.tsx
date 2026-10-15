@@ -20,18 +20,18 @@ export default function LeaveSiteButton({ siteId, pending }: { siteId: string; p
   }
 
   return (
-    <span className="ml-3 inline-flex flex-wrap items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-3 text-[15px]">
       {confirming ? (
         <>
           <button
             type="button"
             disabled={isPending}
             onClick={leave}
-            className="font-semibold text-red-700 underline disabled:opacity-50 dark:text-red-300"
+            className="font-semibold text-danger disabled:opacity-40"
           >
             {pending ? "Antrag wirklich zurückziehen" : "Wirklich austreten"}
           </button>
-          <button type="button" onClick={() => setConfirming(false)} className="text-slate-500">
+          <button type="button" onClick={() => setConfirming(false)} className="text-tint">
             Abbrechen
           </button>
         </>
@@ -39,13 +39,13 @@ export default function LeaveSiteButton({ siteId, pending }: { siteId: string; p
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="text-slate-500 underline dark:text-slate-400"
+          className="text-danger active:opacity-60"
         >
           {pending ? "Zurückziehen" : "Austreten"}
         </button>
       )}
       {error && (
-        <span className="text-red-800 dark:text-red-200" role="alert">
+        <span className="text-danger" role="alert">
           {error}
         </span>
       )}

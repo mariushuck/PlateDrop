@@ -86,7 +86,7 @@ async function main() {
       ).rows.map((r) => r.plate_number),
       messages: (
         await client.query(
-          `SELECT m.plate_number, m.message_type, m.message_text, m.created_at, s.name AS site
+          `SELECT m.plate_number, m.message_types, m.message_text, m.created_at, s.name AS site
            FROM messages m JOIN org_sites s ON s.id = m.site_id
           WHERE m.org_id = $1 ORDER BY m.created_at`,
           [orgId],

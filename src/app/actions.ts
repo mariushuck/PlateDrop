@@ -2,7 +2,7 @@
 
 import { checkMessageRate, insertMessage, PlateRateLimitError } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
-import { isMessageType } from "@/lib/messages/catalog";
+import { parseMessageTypes } from "@/lib/messages/catalog";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
 
@@ -18,7 +18,7 @@ export async function dropMessage(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
   const plateNumber = formData.get("plateNumber");
-  const messageType = formData.get("messageType");
+  const messageTypes = parseMessageTypes(formData.getAll("messageTypes"));
 
   if (typeof plateNumber !== "string" || !plateNumber.trim()) {
     return { success: false, error: "Bitte geben Sie ein Kennzeichen ein." };
@@ -29,7 +29,7 @@ export async function dropMessage(
     return { success: false, error: plateErrorMessage(parsedPlate.reason) };
   }
 
-  if (!isMessageType(messageType)) {
+  if (!messageTypes?.length) {
     return { success: false, error: "Bitte wählen Sie eine Nachricht aus." };
   }
 
@@ -41,7 +41,7 @@ export async function dropMessage(
       return { success: false, error: RATE_LIMIT_ERROR };
     }
 
-    await insertMessage(parsedPlate.plate, messageType);
+    await insertMessage(parsedPlate.plate, messageTypes);
     return { success: true };
   } catch (err) {
     if (err instanceof PlateRateLimitError) {

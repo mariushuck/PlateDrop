@@ -537,8 +537,10 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Login-Cookie wird nicht gesetzt, Anmeldung „verpufft" | `BETTER_AUTH_URL` passt nicht zur aufgerufenen Adresse (falsche Domain, `http` statt `https`) | Wert in `.env` mit der URL im Browser vergleichen, dann `dcp up -d web` |
 | `migrate` bricht ab | fehlerhafte Migrationsdatei; die Transaktion wurde zurückgerollt | `dcp logs migrate`, Datei korrigieren, `dcp up -d migrate` |
 | Kein TLS-Zertifikat | `DOMAIN` falsch, DNS zeigt nicht auf den Server, oder Port 80 ist blockiert | `dcp logs proxy \| grep -i certificate` |
-| Eingabe wird mit „Bitte Ortskürzel und Buchstaben trennen" abgelehnt | Ohne Trennung ist die Eingabe mehrdeutig (`KAAB1234` = `KA-AB` oder `KAA-B`) | Absicht; mit Bindestrich oder Leerzeichen nach dem Ortskürzel eingeben, z. B. `KA-AB 1234` |
+| Eingabe wird als „Mehrdeutig“ markiert | Ohne Trennung passen zwei amtliche Ortskürzel (`KAB1234` = Köln `K-AB` oder Karlsruhe `KA-B`) | Absicht; im Formular eine der angebotenen Schreibweisen antippen oder nach dem Ortskürzel einen Bindestrich setzen |
+| „Unbekanntes Ortskürzel“ bei einem echten Kennzeichen | Das Kürzel fehlt in `src/lib/utils/districts.json` – meist ein neu zugelassenes Kürzel | Kürzel mit Ortsname laut KBA-Merkblatt „Kfz-Kennzeichen und auslaufende Kennzeichen“ ergänzen, `pnpm test`, neu ausrollen |
 | Nachricht wird mit „Zu viele Anfragen" abgelehnt | eines der beiden Limits greift: 10 pro Minute je Absender, 20 pro Stunde je Kennzeichen | `SELECT * FROM message_throttle ORDER BY window_start DESC LIMIT 5;` |
+| Entwicklung (`docker compose up`): Seite lädt sich mehrmals pro Sekunde neu, im Log vor jedem `GET` ein „✓ Compiled“ | Veralteter Turbopack-Cache im anonymen Volume `/app/.next` – es überlebt `up` und `restart`; nach größeren Codeänderungen passen Browser und Server nicht mehr zusammen („HMR hash mismatch“) | `docker compose up -d --force-recreate --renew-anon-volumes web` (frisches `.next` und `node_modules` aus dem Image) |
 | Alle Absender teilen sich ein Limit, oder `message_throttle` bleibt leer | `TRUSTED_PROXY_HOPS` passt nicht zum Proxy-Setup (siehe B1) | Anzahl der Proxys vor `web` zählen und den Wert in `.env` angleichen |
 
 ## B8 Datenschutz: Auskunft und Löschung
