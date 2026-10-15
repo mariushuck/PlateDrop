@@ -35,7 +35,7 @@ export default function ReportActions({
           type="button"
           disabled={isPending}
           onClick={() => run(() => deleteReportedMessageAction(messageId))}
-          className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="btn btn-sm btn-danger flex-1"
         >
           Nachricht löschen
         </button>
@@ -43,13 +43,13 @@ export default function ReportActions({
           type="button"
           disabled={isPending}
           onClick={() => run(() => resolveReportAction(reportId))}
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+          className="btn btn-sm btn-secondary flex-1"
         >
           Behalten
         </button>
       </div>
       {error && (
-        <p className="text-sm text-red-800 dark:text-red-200" role="alert">
+        <p className="text-[15px] text-danger" role="alert">
           {error}
         </p>
       )}

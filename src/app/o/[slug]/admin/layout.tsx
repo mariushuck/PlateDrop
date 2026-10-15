@@ -1,6 +1,7 @@
-import { ArrowLeft, Building2 } from "lucide-react";
+import { Building2, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import NavBar from "@/components/ui/NavBar";
 import { requireUser } from "@/lib/auth/session";
 import { orgForAdmin } from "@/lib/db/queries";
 
@@ -19,25 +20,20 @@ export default async function OrgAdminLayout({
   if (!org) notFound();
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
-      <header className="border-b border-slate-200 bg-white shadow-sm print:hidden dark:border-slate-700 dark:bg-slate-800">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <Building2 size={18} className="text-slate-600 dark:text-slate-300" />
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">{org.name}</h1>
-            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-              VERWALTUNG
-            </span>
-          </div>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-400"
-          >
-            <ArrowLeft size={15} />
-            Dashboard
-          </Link>
+    <div className="flex flex-1 flex-col">
+      <NavBar width="max-w-3xl">
+        <div className="flex min-w-0 items-center gap-2">
+          <Building2 size={18} className="shrink-0 text-secondary" aria-hidden="true" />
+          <span className="truncate text-[17px] font-semibold">{org.name}</span>
         </div>
-      </header>
+        <Link
+          href="/dashboard"
+          className="flex shrink-0 items-center gap-0.5 text-[17px] text-tint active:opacity-60"
+        >
+          <ChevronLeft size={22} aria-hidden="true" />
+          Dashboard
+        </Link>
+      </NavBar>
       <main className="flex-1">{children}</main>
     </div>
   );

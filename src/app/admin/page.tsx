@@ -22,35 +22,29 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">
-          Überprüfen und genehmigen Sie ausstehende Kennzeichen-Verifizierungen
+    <div className="mx-auto max-w-5xl space-y-9 px-4 pt-6 pb-8">
+      <div>
+        <h1 className="large-title">Prüfungen</h1>
+        <p className="mt-1 text-[17px] text-secondary">
+          Kennzeichen-Verifizierungen und gemeldete Nachrichten
         </p>
       </div>
 
       {openReports.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-            Meldungen ({openReports.length})
-          </h2>
+        <section>
+          <h2 className="section-header">Meldungen ({openReports.length})</h2>
           <div className="grid gap-4 md:grid-cols-2">
             {openReports.map((report) => (
-              <div
-                key={report.id}
-                className="rounded-lg border border-red-200 bg-white p-4 shadow-sm dark:border-red-900/50 dark:bg-slate-800"
-              >
-                <p className="mb-1 text-xs font-semibold text-red-700 dark:text-red-400">
-                  {report.reason} · gemeldet am{" "}
-                  {new Date(report.created_at).toLocaleDateString("de-DE")}
-                </p>
-                <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                  an {report.plate_number}, gesendet am{" "}
-                  {new Date(report.message_created_at).toLocaleDateString("de-DE")}
-                </p>
-                <p className="mb-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-900 dark:bg-slate-700 dark:text-white">
+              <div key={report.id} className="inset-group space-y-3 p-4">
+                <div>
+                  <p className="text-[15px] font-semibold text-danger">{report.reason}</p>
+                  <p className="text-[13px] text-secondary">
+                    gemeldet am {new Date(report.created_at).toLocaleDateString("de-DE")} · an{" "}
+                    {report.plate_number}, gesendet am{" "}
+                    {new Date(report.message_created_at).toLocaleDateString("de-DE")}
+                  </p>
+                </div>
+                <p className="whitespace-pre-wrap rounded-[10px] bg-fill p-3 text-[15px]">
                   {(report.message_type && messageType(report.message_type)?.text) ??
                     report.message_text}
                 </p>
@@ -61,81 +55,64 @@ export default async function AdminPage() {
         </section>
       )}
 
-      {/* Pending Verifications Grid */}
-      {pendingVerifications.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-slate-200 bg-slate-50 py-12 dark:border-slate-700 dark:bg-slate-800">
-          <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
-          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Keine ausstehenden Verifizierungen
-            <br />
-            Alle Kennzeichen wurden überprüft.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {pendingVerifications.map((verification) => (
-            <div
-              key={verification.id}
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800"
-            >
-              {/* Image Container: provide explicit width/height/alt to avoid layout shift */}
-              <div className="w-full overflow-hidden rounded-t-xl">
+      <section>
+        <h2 className="section-header">Verifizierungen ({pendingVerifications.length})</h2>
+        {pendingVerifications.length === 0 ? (
+          <div className="inset-group flex flex-col items-center gap-2 px-6 py-10 text-center">
+            <CheckCircle2 className="h-9 w-9 text-success" aria-hidden="true" />
+            <p className="text-[17px] font-semibold">Keine ausstehenden Verifizierungen</p>
+            <p className="text-[15px] text-secondary">Alle Kennzeichen wurden überprüft.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {pendingVerifications.map((verification) => (
+              <div key={verification.id} className="inset-group">
                 <Image
                   src={`/api/proofs/${verification.proof_image_url}`}
                   alt={`Beweisfoto für ${verification.plate_number}`}
                   width={800}
                   height={800}
-                  className="w-full h-auto object-cover"
+                  className="h-auto w-full object-cover"
                   priority={false}
                   // Beweisfotos zeigen echte Kennzeichen – nicht durch den
                   // Bild-Cache von Next.js auf die Platte spiegeln.
                   unoptimized
                 />
-              </div>
 
-              {/* Content */}
-              <div className="p-4">
-                {/* Plate Number */}
-                <div className="mb-3 inline-block rounded-lg border-2 border-slate-900 bg-yellow-300 px-2 py-1 font-mono text-sm font-bold text-slate-900 dark:border-white dark:bg-yellow-200">
-                  {verification.plate_number}
-                </div>
+                <div className="space-y-3 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="plate">{verification.plate_number}</span>
+                    <span className="font-mono text-[17px] font-bold">
+                      <span className="sr-only">Code: </span>
+                      {verification.verification_code}
+                    </span>
+                  </div>
 
-                {/* Verification Code */}
-                <div className="mb-4">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Code:</p>
-                  <p className="font-mono text-lg font-bold text-slate-900 dark:text-white">
-                    {verification.verification_code}
-                  </p>
-                </div>
-
-                {verification.has_approved_holder && (
-                  <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                  {verification.has_approved_holder && (
+                    <p className="flex items-start gap-2 text-[13px] text-warning">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       Für dieses Kennzeichen gibt es bereits einen freigegebenen Halter. Eine
                       Freigabe löst ihn ab; er wird per Mail informiert.
                     </p>
-                  </div>
-                )}
+                  )}
 
-                {isCanonicalPlate(verification.plate_number) ? (
-                  <VerificationActions plateId={verification.id} />
-                ) : (
-                  // Altzeile aus der Zeit vor Migration 0008: mehrdeutig, Freigabe
-                  // und Ablehnung scheitern an der Formatprüfung.
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                    <p className="text-xs text-amber-900 dark:text-amber-100">
+                  {isCanonicalPlate(verification.plate_number) ? (
+                    <VerificationActions plateId={verification.id} />
+                  ) : (
+                    // Altzeile aus der Zeit vor Migration 0008: mehrdeutig, Freigabe
+                    // und Ablehnung scheitern an der Formatprüfung.
+                    <p className="flex items-start gap-2 text-[13px] text-warning">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       Altformat: Kennzeichen anhand des Fotos zuordnen (docs/admin.md, A3), danach
                       hier freigeben.
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

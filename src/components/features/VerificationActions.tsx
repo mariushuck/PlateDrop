@@ -33,22 +33,23 @@ export default function VerificationActions({ plateId }: { plateId: string }) {
           type="button"
           onClick={() => run(approvePlate)}
           disabled={isPending}
-          className="flex-1 rounded-lg border border-green-600 bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-green-700 hover:bg-green-700 disabled:opacity-50 dark:border-green-500 dark:bg-green-500 dark:hover:border-green-600 dark:hover:bg-green-600"
+          className="btn btn-sm btn-primary flex-1"
         >
-          {isPending ? <Loader2 className="inline-block h-4 w-4 animate-spin" /> : "Genehmigen"}
+          {isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          Genehmigen
         </button>
         <button
           type="button"
           onClick={() => run(rejectPlate)}
           disabled={isPending}
-          className="flex-1 rounded-lg border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-red-700 hover:bg-red-700 disabled:opacity-50 dark:border-red-500 dark:bg-red-500 dark:hover:border-red-600 dark:hover:bg-red-600"
+          className="btn btn-sm btn-danger flex-1"
         >
-          {isPending ? <Loader2 className="inline-block h-4 w-4 animate-spin" /> : "Ablehnen"}
+          Ablehnen
         </button>
       </div>
 
       {error && (
-        <p className="text-sm text-red-800 dark:text-red-200" role="alert">
+        <p className="text-[15px] text-danger" role="alert">
           {error}
         </p>
       )}
