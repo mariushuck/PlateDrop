@@ -1,26 +1,339 @@
 @import "tailwindcss";
 
+/* iOS system colors (accessible variants). Use only these tokens in components, never raw palette classes or dark:. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: light dark;
+  --canvas: #f2f2f7;
+  --surface: #ffffff;
+  --fill: #e9e9ee;
+  --segment: #ffffff;
+  --label: #000000;
+  --secondary: rgb(60 60 67 / 0.65);
+  --separator: rgb(60 60 67 / 0.29);
+  --tint: #0040dd;
+  --danger: #d70015;
+  --success: #248a3d;
+  --warning: #c93400;
+  --eu: #003399;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #000000;
+    --surface: #1c1c1e;
+    --fill: #2c2c2e;
+    --segment: #636366;
+    --label: #ffffff;
+    --secondary: rgb(235 235 245 / 0.65);
+    --separator: rgb(84 84 88 / 0.65);
+    --tint: #409cff;
+    --danger: #ff6961;
+    --success: #30db5b;
+    --warning: #ffb340;
   }
 }
 
+/* Paper is always white. */
+@media print {
+  :root {
+    color-scheme: light;
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --fill: #e9e9ee;
+    --label: #000000;
+    --secondary: rgb(60 60 67 / 0.75);
+    --separator: rgb(60 60 67 / 0.29);
+    --tint: #0040dd;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-fill: var(--fill);
+  --color-label: var(--label);
+  --color-secondary: var(--secondary);
+  --color-separator: var(--separator);
+  --color-tint: var(--tint);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-eu: var(--eu);
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--label);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep the footer clear of the fixed tab bar. */
+body:has([data-tabbar]) {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+}
+
+:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Buttons: one base, four roles. */
+@utility btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 1.125rem;
+  border-radius: 0.75rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+@utility btn-sm {
+  min-height: 2.25rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
+}
+@utility btn-primary {
+  background: var(--tint);
+  color: #ffffff;
+}
+@utility btn-secondary {
+  background: var(--fill);
+  color: var(--tint);
+}
+@utility btn-danger {
+  background: var(--fill);
+  color: var(--danger);
+}
+@utility btn-plain {
+  color: var(--tint);
+  font-weight: 500;
+}
+
+/* Inputs, selects, textareas. */
+@utility field {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.625rem;
+  background: var(--fill);
+  color: var(--label);
+  font-size: 1.0625rem;
+  border: 0;
+  &::placeholder {
+    color: var(--secondary);
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+@utility field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.9375rem;
+  color: var(--secondary);
+}
+
+/* Inset grouped list (iOS Settings). */
+@utility inset-group {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+@utility list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.6875rem 1rem;
+  & + & {
+    box-shadow: inset 1rem 0 0 var(--surface), inset 0 0.5px 0 var(--separator);
+  }
+}
+@utility section-header {
+  display: block;
+  padding: 0 1rem 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--secondary);
+}
+@utility section-footer {
+  display: block;
+  padding: 0.375rem 1rem 0;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--secondary);
+}
+@utility large-title {
+  font-size: 2.125rem;
+  line-height: 2.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Translucent bars. */
+@utility bar {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* German EU plate: white face, black rim, blue band with "D". Same in dark mode, like the real thing. */
+@utility plate {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 2px solid #000000;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: #000000;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-right: 0.5em;
+  &::before {
+    content: "D" / "";
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin-right: 0.45em;
+    padding: 0 0.3em 0.1em;
+    background: var(--eu);
+    color: #ffffff;
+    font-size: 0.6em;
+    letter-spacing: 0;
+  }
+}
+@utility plate-field {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 3px solid #000000;
+  border-radius: 0.625rem;
+  background: #ffffff;
+  &::before {
+    content: "D" / "";
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 2.75rem;
+    flex-shrink: 0;
+    padding-bottom: 0.5rem;
+    background: var(--eu);
+    color: #ffffff;
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  &:focus-within {
+    outline: 3px solid var(--tint);
+    outline-offset: 2px;
+  }
+  & input {
+    width: 100%;
+    min-width: 0;
+    padding: 0.75rem 0.875rem;
+    background: transparent;
+    color: #000000;
+    font-size: 1.875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    outline: none;
+  }
+  & input::placeholder {
+    color: rgb(60 60 67 / 0.35);
+  }
+}
+
+/* iOS switch on a real checkbox. */
+@utility switch {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 3.1875rem;
+  height: 1.9375rem;
+  border-radius: 9999px;
+  background: var(--fill);
+  cursor: pointer;
+  transition: background-color 200ms ease;
+  &::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1.6875rem;
+    height: 1.6875rem;
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+    transition: transform 200ms ease;
+  }
+  &:checked {
+    background: var(--success);
+  }
+  &:checked::after {
+    transform: translateX(1.25rem);
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+/* Segmented control: a radiogroup or button group inside. */
+@utility segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 0.5625rem;
+  background: var(--fill);
+  & > * {
+    flex: 1;
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.4375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
+    color: var(--label);
+    transition: background-color 150ms ease;
+  }
+  & > [aria-pressed="true"],
+  & > [aria-selected="true"],
+  & > :has(:checked) {
+    background: var(--segment);
+    font-weight: 600;
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.12), 0 3px 1px rgb(0 0 0 / 0.04);
+  }
 }

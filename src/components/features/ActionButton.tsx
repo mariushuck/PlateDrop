@@ -24,10 +24,10 @@ export default function ActionButton({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const styles = {
-    primary: "bg-slate-900 text-white dark:bg-white dark:text-slate-900",
-    secondary: "border border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200",
-    danger: "bg-red-600 text-white",
+  const style = {
+    primary: "btn-primary",
+    secondary: "btn-secondary",
+    danger: "btn-danger",
   }[confirming ? "danger" : variant];
 
   function run() {
@@ -46,16 +46,11 @@ export default function ActionButton({
 
   return (
     <span className="inline-flex flex-col gap-1">
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={run}
-        className={`rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50 ${styles}`}
-      >
+      <button type="button" disabled={isPending} onClick={run} className={`btn btn-sm ${style}`}>
         {confirming ? confirmLabel : label}
       </button>
       {error && (
-        <span className="text-xs text-red-800 dark:text-red-200" role="alert">
+        <span className="text-[13px] text-danger" role="alert">
           {error}
         </span>
       )}

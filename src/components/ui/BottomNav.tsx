@@ -30,32 +30,24 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-      <div className="mx-auto flex max-w-6xl">
+    <nav
+      data-tabbar
+      className="bar fixed inset-x-0 bottom-0 z-50 border-t-[0.5px] border-separator pb-[env(safe-area-inset-bottom)] print:hidden"
+    >
+      <div className="mx-auto flex max-w-xl">
         {navItems.map(({ href, icon: Icon, label, isActive }) => {
           const active = isActive(pathname);
           return (
             <Link
               key={href}
               href={href}
-              className="flex flex-1 flex-col items-center gap-1 py-3 transition-colors active:opacity-70"
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 active:opacity-60 ${
+                active ? "text-tint" : "text-secondary"
+              }`}
             >
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 ${
-                  active
-                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                    : "text-slate-400 dark:text-slate-500"
-                }`}
-              >
-                <Icon size={18} strokeWidth={active ? 2.5 : 1.8} />
-              </div>
-              <span
-                className={`text-[10px] font-semibold leading-none tracking-wide transition-colors ${
-                  active ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"
-                }`}
-              >
-                {label}
-              </span>
+              <Icon size={24} strokeWidth={active ? 2.2 : 1.8} aria-hidden="true" />
+              <span className="text-[10px] font-medium leading-tight">{label}</span>
             </Link>
           );
         })}
