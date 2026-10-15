@@ -10,38 +10,62 @@
  *
  * Dasselbe Muster prüft ein CHECK-Constraint auf `verified_plates` und
  * `messages` (db/migrations/0008_plate_format.sql).
+ *
+ * Zusätzlich muss das Ortskürzel amtlich sein: `districts.json` enthält alle
+ * vergebenen und auslaufenden Unterscheidungszeichen (FZV Anlage 1, ohne die
+ * Sonderzeichen aus Anlage 2 wie BP, THW, X, Y). Quelle: KBA-Merkblatt
+ * „Kfz-Kennzeichen und auslaufende Kennzeichen in Deutschland“, abgeglichen mit
+ * den Wikipedia-Listen der gültigen und nicht mehr ausgegebenen Kennzeichen,
+ * Stand Oktober 2026. Neue Kürzel dort ergänzen (docs/admin.md, B7).
  */
+import districts from "./districts.json";
+
 const DISTRICT = /^[A-ZÄÖÜ]{1,3}$/;
 const LETTERS = /^[A-Z]{1,2}$/;
 const NUMBER = /^[1-9]\d{0,3}[EH]?$/;
 const CANONICAL = /^[A-ZÄÖÜ]{1,3}-[A-Z]{1,2}-[1-9]\d{0,3}[EH]?$/;
 
+/** Beispiel für Platzhalter und Hinweise: XX ist kein Ortskürzel, das Kennzeichen kann es nicht geben. */
+export const EXAMPLE_PLATE = "XX-AB-123";
+
+const DISTRICTS: Readonly<Record<string, string>> = districts;
+
+export type PlateCandidate = { plate: string; district: string };
+
 export type ParsedPlate =
   | { ok: true; plate: string }
-  | { ok: false; reason: "invalid" | "ambiguous" };
+  | { ok: false; reason: "invalid" | "unknown-district" }
+  | { ok: false; reason: "ambiguous"; candidates: PlateCandidate[] };
+
+export type PlateError = Exclude<ParsedPlate, { ok: true }>["reason"];
 
 const INVALID: ParsedPlate = { ok: false, reason: "invalid" };
 
+/** Ortsname zum Kürzel, z. B. „Karlsruhe“ für KA; `undefined` für Unbekanntes. */
+export function districtName(code: string): string | undefined {
+  return Object.hasOwn(DISTRICTS, code) ? DISTRICTS[code] : undefined;
+}
+
 function build(district: string, letters: string, number: string): ParsedPlate {
-  if (DISTRICT.test(district) && LETTERS.test(letters) && NUMBER.test(number)) {
-    return { ok: true, plate: `${district}-${letters}-${number}` };
-  }
-  return INVALID;
+  if (!(DISTRICT.test(district) && LETTERS.test(letters) && NUMBER.test(number))) return INVALID;
+  if (!districtName(district)) return { ok: false, reason: "unknown-district" };
+  return { ok: true, plate: `${district}-${letters}-${number}` };
 }
 
 /**
  * Teilt einen Buchstabenblock ohne Trennzeichen in Ortskürzel und Buchstaben.
- * Gibt es genau eine gültige Aufteilung, wird sie übernommen; bei mehreren ist
- * die Eingabe mehrdeutig.
+ * Nur amtliche Ortskürzel zählen. Gibt es genau eine Aufteilung, wird sie
+ * übernommen; bei mehreren (K-AB / KA-B) muss die Person wählen.
  */
 function splitLetterBlock(block: string, number: string): ParsedPlate {
-  const candidates: string[] = [];
+  const candidates: PlateCandidate[] = [];
   for (let i = 1; i <= 3 && i < block.length; i++) {
-    const result = build(block.slice(0, i), block.slice(i), number);
-    if (result.ok) candidates.push(result.plate);
+    const district = block.slice(0, i);
+    const result = build(district, block.slice(i), number);
+    if (result.ok) candidates.push({ plate: result.plate, district: DISTRICTS[district] });
   }
-  if (candidates.length === 1) return { ok: true, plate: candidates[0] };
-  return candidates.length > 1 ? { ok: false, reason: "ambiguous" } : INVALID;
+  if (candidates.length === 1) return { ok: true, plate: candidates[0].plate };
+  return candidates.length > 1 ? { ok: false, reason: "ambiguous", candidates } : INVALID;
 }
 
 export function parsePlate(input: string): ParsedPlate {
@@ -90,8 +114,12 @@ export function isCanonicalPlate(plate: string): boolean {
 }
 
 /** Meldung für Formulare und Server Actions. */
-export function plateErrorMessage(reason: "invalid" | "ambiguous"): string {
-  return reason === "ambiguous"
-    ? "Bitte Ortskürzel und Buchstaben trennen, z. B. KA-AB 1234 oder K-AB 1234."
-    : "Ungültiges deutsches Kennzeichen. Beispiel: KA-AB-1234";
+export function plateErrorMessage(reason: PlateError): string {
+  if (reason === "ambiguous") {
+    return "Mehrdeutig: Bitte wähle das Ortskürzel aus oder trenne es mit einem Bindestrich.";
+  }
+  if (reason === "unknown-district") {
+    return "Unbekanntes Ortskürzel. Bitte prüfe die Buchstaben vor dem ersten Bindestrich.";
+  }
+  return "Ungültiges deutsches Kennzeichen. Aufbau: Ortskürzel – Buchstaben – Zahl.";
 }

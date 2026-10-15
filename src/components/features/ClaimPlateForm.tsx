@@ -2,7 +2,9 @@
 
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import { useActionState, useEffect, useId, useState } from "react";
-import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
+import { EXAMPLE_PLATE } from "@/lib/utils/plateUtils";
+import { usePlateInput } from "@/lib/utils/usePlateInput";
+import PlateChoice from "./PlateChoice";
 
 interface ClaimPlateFormProps {
   action: (
@@ -17,15 +19,9 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
   const [state, formAction, isPending] = useActionState(action, null);
   // Mehrere Formulare je Seite (öffentlich + je Organisation) brauchen eigene IDs.
   const inputId = useId();
-  const [plateInput, setPlateInput] = useState("");
+  const plate = usePlateInput();
+  const { setValue: setPlate } = plate;
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // Compute plate error synchronously
-  const parsedPlate = parsePlate(plateInput);
-  const plateError =
-    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
-
-  const isFormValid = plateInput.trim() && !plateError;
 
   // Handle success state without synchronous updates in the effect body
   useEffect(() => {
@@ -33,7 +29,7 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
 
     const showTimer = window.setTimeout(() => {
       setShowSuccess(true);
-      setPlateInput("");
+      setPlate("");
 
       window.setTimeout(() => {
         setShowSuccess(false);
@@ -41,7 +37,7 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
     }, 0);
 
     return () => window.clearTimeout(showTimer);
-  }, [state]);
+  }, [state, setPlate]);
 
   return (
     <div className="space-y-4">
@@ -66,15 +62,15 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
               id={inputId}
               name="plateNumber"
               type="text"
-              placeholder="KA-AB-1234"
+              placeholder={EXAMPLE_PLATE}
               autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
-              value={plateInput}
-              onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+              value={plate.value}
+              onChange={plate.onChange}
               disabled={isPending}
             />
-            {plateInput && !plateError && (
+            {plate.valid && (
               // The plate stays white in dark mode, so the check keeps the light-mode green.
               <Check
                 className="mr-3 shrink-0 self-center text-[#248a3d]"
@@ -83,7 +79,12 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
               />
             )}
           </div>
-          {plateError && <p className="mt-1.5 text-[13px] text-danger">{plateError}</p>}
+          {plate.error ? (
+            <p className="mt-1.5 text-[13px] text-danger">{plate.error}</p>
+          ) : (
+            plate.district && <p className="mt-1.5 text-[13px] text-secondary">{plate.district}</p>
+          )}
+          <PlateChoice candidates={plate.candidates} onPick={setPlate} />
         </div>
 
         {state?.error && (
@@ -94,7 +95,7 @@ export default function ClaimPlateForm({ action, hiddenFields }: ClaimPlateFormP
 
         <button
           type="submit"
-          disabled={isPending || !isFormValid}
+          disabled={isPending || !plate.valid}
           className="btn btn-primary w-full"
         >
           {isPending ? (

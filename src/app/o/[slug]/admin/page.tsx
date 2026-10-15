@@ -11,6 +11,7 @@ import {
   orgForAdmin,
   orgWeeklyStats,
 } from "@/lib/db/queries";
+import { EXAMPLE_PLATE } from "@/lib/utils/plateUtils";
 import {
   addAllowlistAction,
   approveMemberAction,
@@ -210,7 +211,7 @@ export default async function OrgAdminPage({ params }: { params: Promise<{ slug:
             <input
               name="plateNumber"
               required
-              placeholder="KA-AB-1234"
+              placeholder={EXAMPLE_PLATE}
               className={`${input} uppercase`}
             />
           </label>

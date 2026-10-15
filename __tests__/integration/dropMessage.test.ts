@@ -95,14 +95,14 @@ describe("dropMessage", () => {
   it("weist eine mehrdeutige Eingabe ab, statt sie einem Kennzeichen zuzuordnen", async () => {
     const { dropMessage } = await loadActions();
 
-    // KAAB1234 kann KA-AB-1234 oder KAA-B-1234 sein.
+    // KAB1234 kann K-AB-1234 (Köln) oder KA-B-1234 (Karlsruhe) sein.
     const result = await dropMessage(
       null,
-      form({ plateNumber: "KAAB1234", messageTypes: "licht_an" }),
+      form({ plateNumber: "KAB1234", messageTypes: "licht_an" }),
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Ortskürzel und Buchstaben trennen");
+    expect(result.error).toContain("Mehrdeutig");
 
     const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
     expect(stored.rows).toHaveLength(0);
@@ -122,6 +122,22 @@ describe("dropMessage", () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain("Ungültiges deutsches Kennzeichen");
 
+    const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
+    expect(stored.rows).toHaveLength(0);
+  });
+
+  it("weist ein unbekanntes Ortskürzel ab, auch wenn das Format stimmt", async () => {
+    const { dropMessage } = await loadActions();
+
+    const result = await dropMessage(
+      null,
+      form({ plateNumber: "XX-AB-123", messageTypes: "licht_an" }),
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.stringContaining("Unbekanntes Ortskürzel"),
+    });
     const stored = await withAdmin((client) => client.query("SELECT id FROM messages"));
     expect(stored.rows).toHaveLength(0);
   });

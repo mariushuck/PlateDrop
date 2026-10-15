@@ -33,7 +33,7 @@ describe("ClaimPlateForm", () => {
     );
 
     expect(screen.getByLabelText(/Kennzeichen/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/KA-AB-1234/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("XX-AB-123")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeInTheDocument();
   });
 
@@ -51,17 +51,49 @@ describe("ClaimPlateForm", () => {
     expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeDisabled();
   });
 
-  it("verlangt bei mehrdeutiger Eingabe eine Trennung zwischen Ortskürzel und Buchstaben", () => {
+  it("bietet bei mehrdeutiger Eingabe die Ortskürzel zur Wahl an", () => {
     render(
       <ClaimPlateForm
         action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
       />,
     );
 
-    const input = screen.getByLabelText(/Kennzeichen/i);
-    fireEvent.change(input, { target: { value: "KAAB1234" } });
+    const input = screen.getByLabelText(/Kennzeichen/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "KAB1234" } });
 
-    expect(screen.getByText(/Ortskürzel und Buchstaben trennen/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mehrdeutig/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "KA-B-1234 · Karlsruhe" }));
+    expect(input.value).toBe("KA-B-1234");
+    expect(screen.getByText("Karlsruhe")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeEnabled();
+  });
+
+  it("setzt die Bindestriche beim Tippen selbst", () => {
+    render(
+      <ClaimPlateForm
+        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+      />,
+    );
+
+    const input = screen.getByLabelText(/Kennzeichen/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "kaab1234" } });
+
+    expect(input.value).toBe("KA-AB-1234");
+    expect(screen.getByText("Karlsruhe")).toBeInTheDocument();
+  });
+
+  it("weist ein unbekanntes Ortskürzel ab", () => {
+    render(
+      <ClaimPlateForm
+        action={jest.fn() as unknown as Parameters<typeof ClaimPlateForm>[0]["action"]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Kennzeichen/i), { target: { value: "XX-AB-123" } });
+
+    expect(screen.getByText(/Unbekanntes Ortskürzel/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Kennzeichen registrieren/i })).toBeDisabled();
   });
 

@@ -5,7 +5,9 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { toast } from "sonner";
 import { MessageTypeIcon } from "@/components/ui/MessageTypeIcon";
 import { MESSAGE_CATEGORIES } from "@/lib/messages/catalog";
-import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
+import { EXAMPLE_PLATE } from "@/lib/utils/plateUtils";
+import { usePlateInput } from "@/lib/utils/usePlateInput";
+import PlateChoice from "./PlateChoice";
 
 type ActionState = { success: boolean; error?: string } | null;
 
@@ -27,21 +29,18 @@ export default function MessageForm({
   allowFreeText?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(action, null);
-  const [plateInput, setPlateInput] = useState("");
+  const plate = usePlateInput();
+  const { setValue: setPlate } = plate;
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [messageText, setMessageText] = useState("");
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
-  const parsedPlate = parsePlate(plateInput);
-  const plateError =
-    plateInput.trim() && !parsedPlate.ok ? plateErrorMessage(parsedPlate.reason) : "";
-
   useEffect(() => {
     if (state?.success) {
       toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
-        setPlateInput("");
+        setPlate("");
         setSelected(new Set());
         setMessageText("");
         formRef.current?.reset();
@@ -49,9 +48,9 @@ export default function MessageForm({
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state]);
+  }, [state, setPlate]);
 
-  const isFormValid = plateInput.trim() && !plateError && (selected.size > 0 || messageText.trim());
+  const isFormValid = plate.valid && (selected.size > 0 || messageText.trim());
 
   function toggle(code: string) {
     setSelected((current) => {
@@ -72,24 +71,27 @@ export default function MessageForm({
             id="plateNumber"
             name="plateNumber"
             type="text"
-            placeholder="KA-AB-1234"
+            placeholder={EXAMPLE_PLATE}
             autoCapitalize="characters"
             autoComplete="off"
             spellCheck={false}
-            value={plateInput}
-            onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
+            value={plate.value}
+            onChange={plate.onChange}
             disabled={isPending}
           />
-          {plateInput && !plateError && (
+          {plate.valid && (
             // The plate stays white in dark mode, so the check keeps the light-mode green.
             <Check className="mr-3 shrink-0 self-center text-[#248a3d]" size={26} strokeWidth={3} />
           )}
         </div>
-        {plateError ? (
-          <p className="section-footer text-danger">{plateError}</p>
+        {plate.error ? (
+          <p className="section-footer text-danger">{plate.error}</p>
         ) : (
-          <p className="section-footer">Deutsche Kennzeichen im Format KA-AB-1234</p>
+          <p className="section-footer">
+            {plate.district ?? "Ortskürzel, Buchstaben, Zahl – die Bindestriche setzen wir."}
+          </p>
         )}
+        <PlateChoice candidates={plate.candidates} onPick={setPlate} />
       </div>
 
       {hiddenFields &&
