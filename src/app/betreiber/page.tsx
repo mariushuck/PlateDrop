@@ -1,5 +1,7 @@
+import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import NavBar from "@/components/ui/NavBar";
 
 export const metadata: Metadata = {
   title: "Für Betreiber | PlateDrop",
@@ -38,65 +40,80 @@ export default function BetreiberPage() {
   const hasContact = CONTACT_EMAIL.includes("@");
 
   return (
-    <main className="mx-auto max-w-2xl space-y-10 px-4 py-10 text-slate-900 dark:text-white">
-      <header className="space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Für Betreiber privater Gelände
-        </p>
-        <h1 className="text-3xl font-bold">Den Halter in Minuten erreichen – ohne Rundmail.</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          Firmenparkplatz, Tiefgarage einer Wohnanlage, Hotel, Klinik oder Vereinsgelände: Wenn ein
-          Fahrzeug eine Ausfahrt blockiert oder das Licht brennt, erreicht PlateDrop den Halter
-          direkt. Niemand muss Telefonnummern herausgeben.
-        </p>
-      </header>
+    <div className="flex flex-1 flex-col">
+      <NavBar>
+        <Link href="/" className="text-[17px] font-semibold active:opacity-60">
+          PlateDrop
+        </Link>
+      </NavBar>
 
-      <ol className="space-y-4">
-        {steps.map((step, index) => (
-          <li
-            key={step.title}
-            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"
-          >
-            <p className="font-semibold">
-              {index + 1}. {step.title}
+      <main className="mx-auto w-full max-w-xl space-y-9 px-4 pt-6 pb-8">
+        <header>
+          <h1 className="large-title">Den Halter in Minuten erreichen – ohne Rundmail.</h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-secondary">
+            Firmenparkplatz, Tiefgarage einer Wohnanlage, Hotel, Klinik oder Vereinsgelände: Wenn
+            ein Fahrzeug eine Ausfahrt blockiert oder das Licht brennt, erreicht PlateDrop den
+            Halter direkt. Niemand muss Telefonnummern herausgeben.
+          </p>
+        </header>
+
+        <section>
+          <h2 className="section-header">So funktioniert es</h2>
+          <ol className="inset-group">
+            {steps.map((step, index) => (
+              <li key={step.title} className="list-row items-start">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-tint text-[15px] font-semibold text-white">
+                  {index + 1}
+                </span>
+                <div>
+                  <p className="text-[17px] font-semibold">{step.title}</p>
+                  <p className="mt-0.5 text-[15px] text-secondary">{step.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section>
+          <h2 className="section-header">Datenschutz eingebaut</h2>
+          <ul className="inset-group text-[15px]">
+            {[
+              "Keine Ortsdaten, keine Auswertung pro Person – nur Vorfälle je Woche und Standort.",
+              "Verwaltungen lesen keine Nachrichten ihrer Mitglieder.",
+              "Absendernamen nur, wenn Sie es einstellen; Besucher bleiben immer anonym.",
+              "Selbst betrieben in Deutschland, Auftragsverarbeitungsvertrag inklusive.",
+            ].map((point) => (
+              <li key={point} className="list-row items-start">
+                <ShieldCheck
+                  className="mt-0.5 shrink-0 text-success"
+                  size={20}
+                  aria-hidden="true"
+                />
+                {point}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="section-header">Pilot anfragen</h2>
+          <div className="inset-group space-y-3 p-4">
+            <p className="text-[15px]">
+              Drei Monate kostenlos für ein Gelände, mit vorher vereinbartem Preis für danach.
             </p>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{step.text}</p>
-          </li>
-        ))}
-      </ol>
-
-      <section className="space-y-2">
-        <h2 className="text-xl font-bold">Datenschutz eingebaut</h2>
-        <ul className="list-inside list-disc space-y-1 text-sm text-slate-600 dark:text-slate-300">
-          <li>
-            Keine Ortsdaten, keine Auswertung pro Person – nur Vorfälle je Woche und Standort.
-          </li>
-          <li>Verwaltungen lesen keine Nachrichten ihrer Mitglieder.</li>
-          <li>Absendernamen nur, wenn Sie es einstellen; Besucher bleiben immer anonym.</li>
-          <li>Selbst betrieben in Deutschland, Auftragsverarbeitungsvertrag inklusive.</li>
-        </ul>
-      </section>
-
-      <section className="space-y-3 rounded-lg bg-slate-100 p-6 dark:bg-slate-800">
-        <h2 className="text-xl font-bold">Pilot anfragen</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Drei Monate kostenlos für ein Gelände, mit vorher vereinbartem Preis für danach.
-        </p>
-        {hasContact ? (
-          <a
-            href={`mailto:${CONTACT_EMAIL}?subject=PlateDrop%20Pilot`}
-            className="inline-block rounded-lg bg-slate-900 px-5 py-3 font-semibold text-white dark:bg-white dark:text-slate-900"
-          >
-            {CONTACT_EMAIL}
-          </a>
-        ) : (
-          <p className="text-sm font-semibold">Kontakt: {CONTACT_EMAIL}</p>
-        )}
-      </section>
-
-      <Link href="/" className="text-sm font-semibold underline">
-        Zur Startseite
-      </Link>
-    </main>
+            {hasContact ? (
+              <a
+                href={`mailto:${CONTACT_EMAIL}?subject=PlateDrop%20Pilot`}
+                className="btn btn-primary w-full"
+              >
+                {CONTACT_EMAIL}
+              </a>
+            ) : (
+              <p className="text-[15px] font-semibold">Kontakt: {CONTACT_EMAIL}</p>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import NavBar from "@/components/ui/NavBar";
 
 export const metadata: Metadata = {
   title: "Impressum | PlateDrop",
@@ -14,30 +16,27 @@ const PLACEHOLDER = "[Platzhalter – vor Go-Live ersetzen]";
 
 export default function Impressum() {
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Impressum</h1>
-          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Angaben gemäß § 5 DDG
-          </p>
-        </div>
-      </header>
+    <div className="flex flex-1 flex-col">
+      <NavBar width="max-w-2xl">
+        <Link href="/" className="text-[17px] font-semibold active:opacity-60">
+          PlateDrop
+        </Link>
+      </NavBar>
 
-      {/* Main Content */}
-      <main className="flex-1 px-4 py-8">
-        <div className="mx-auto max-w-2xl space-y-8 text-slate-700 dark:text-slate-300">
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      <main className="flex-1 px-4 pt-6 pb-8">
+        <div className="mx-auto max-w-2xl space-y-8 text-[17px] leading-relaxed">
+          <header>
+            <h1 className="large-title">Impressum</h1>
+            <p className="mt-1 text-secondary">Angaben gemäß § 5 DDG</p>
+          </header>
+          <p className="rounded-xl bg-surface p-4 text-[15px] text-warning">
             Hinweis: Dieses Impressum enthält noch Platzhalter. Vor dem produktiven Betrieb müssen
             die tatsächlichen Angaben des Betreibers eingetragen werden.
           </p>
 
           {/* Diensteanbieter */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Diensteanbieter
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Diensteanbieter</h2>
             <p className="mb-2">
               <strong>{PLACEHOLDER}</strong> (Name bzw. Firma des Betreibers)
             </p>
@@ -57,7 +56,7 @@ export default function Impressum() {
 
           {/* Kontakt */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">Kontakt</h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Kontakt</h2>
             <p>
               <strong>E-Mail:</strong> {PLACEHOLDER}
               <br />
@@ -67,7 +66,7 @@ export default function Impressum() {
 
           {/* Vertretungsberechtigte */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               Vertretungsberechtigte Person(en)
             </h2>
             <p>{PLACEHOLDER} (z. B. Geschäftsführung / Inhaber:in)</p>
@@ -75,16 +74,14 @@ export default function Impressum() {
 
           {/* Registereintrag */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Registereintrag
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Registereintrag</h2>
             <p className="mb-2">
               <strong>Registergericht:</strong> {PLACEHOLDER}
             </p>
             <p>
               <strong>Registernummer:</strong> {PLACEHOLDER} (z. B. HRB …)
             </p>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-[15px] text-secondary">
               Entfällt, sofern der Betreiber nicht im Handels-, Vereins-, Partnerschafts- oder
               Genossenschaftsregister eingetragen ist.
             </p>
@@ -92,9 +89,7 @@ export default function Impressum() {
 
           {/* Umsatzsteuer-ID */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Umsatzsteuer-ID
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Umsatzsteuer-ID</h2>
             <p>
               <strong>USt-IdNr. gemäß § 27a UStG:</strong> {PLACEHOLDER}
             </p>
@@ -102,7 +97,7 @@ export default function Impressum() {
 
           {/* Redaktionell Verantwortlicher */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               Verantwortlich i.S.d. § 18 Abs. 2 MStV
             </h2>
             <p>
@@ -114,9 +109,7 @@ export default function Impressum() {
 
           {/* Disclaimer */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Haftungsausschluss
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Haftungsausschluss</h2>
             <p className="mb-2">
               Trotz sorgfältiger inhaltlicher Kontrolle übernehmen wir keine Haftung für die Inhalte
               externer Links. Für den Inhalt der verlinkten Seiten sind ausschließlich deren
@@ -131,9 +124,7 @@ export default function Impressum() {
 
           {/* Intellectual Property */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Urheberrecht
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Urheberrecht</h2>
             <p>
               Alle Inhalte dieser Website, einschließlich Text, Bilder und Design, sind
               urheberrechtlich geschützt. Eine Vervielfältigung oder Weiterverbreitung bedarf der
@@ -143,12 +134,10 @@ export default function Impressum() {
 
           {/* Data Protection */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              Datenschutz
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">Datenschutz</h2>
             <p>
               Informationen zur Verarbeitung personenbezogener Daten finden Sie in unserer{" "}
-              <a href="/datenschutz" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="/datenschutz" className="text-tint">
                 Datenschutzerklärung
               </a>
               .

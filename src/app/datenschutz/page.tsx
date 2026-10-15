@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import NavBar from "@/components/ui/NavBar";
 
 export const metadata: Metadata = {
   title: "Datenschutzerklärung | PlateDrop",
@@ -21,36 +23,31 @@ export default function Datenschutz() {
   const retentionDays = process.env.MESSAGE_RETENTION_DAYS ?? PLACEHOLDER;
 
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-col items-center gap-1 px-4 py-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Datenschutzerklärung
-          </h1>
-          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-            Informationen nach Art. 13, 14 DSGVO
-          </p>
-        </div>
-      </header>
+    <div className="flex flex-1 flex-col">
+      <NavBar width="max-w-2xl">
+        <Link href="/" className="text-[17px] font-semibold active:opacity-60">
+          PlateDrop
+        </Link>
+      </NavBar>
 
-      {/* Main Content */}
-      <main className="flex-1 px-4 py-8">
-        <div className="mx-auto max-w-2xl space-y-8 text-slate-700 dark:text-slate-300">
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      <main className="flex-1 px-4 pt-6 pb-8">
+        <div className="mx-auto max-w-2xl space-y-8 text-[17px] leading-relaxed">
+          <header>
+            <h1 className="large-title">Datenschutzerklärung</h1>
+            <p className="mt-1 text-secondary">Informationen nach Art. 13, 14 DSGVO</p>
+          </header>
+          <p className="rounded-xl bg-surface p-4 text-[15px] text-warning">
             Hinweis: Verantwortlicher, Hosting-Standort und zuständige Aufsichtsbehörde sind noch
             Platzhalter und müssen vor dem produktiven Betrieb eingetragen werden.
           </p>
 
           {/* 1. Verantwortlicher */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              1. Verantwortlicher
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">1. Verantwortlicher</h2>
             <p className="mb-2">
               Verantwortlich für die Verarbeitung personenbezogener Daten auf dieser Website ist der
               im{" "}
-              <a href="/impressum" className="text-blue-600 hover:underline dark:text-blue-400">
+              <a href="/impressum" className="text-tint">
                 Impressum
               </a>{" "}
               genannte Betreiber ({PLACEHOLDER}).
@@ -63,7 +60,7 @@ export default function Datenschutz() {
 
           {/* 2. Grundprinzip */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               2. Grundprinzip „Shadow-Drop“
             </h2>
             <p>
@@ -78,9 +75,7 @@ export default function Datenschutz() {
 
           {/* 3. Anonyme Nachrichten */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              3. Anonyme Nachrichten
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">3. Anonyme Nachrichten</h2>
             <p className="mb-2">
               <strong>Gespeicherte Daten:</strong> das normalisierte Kennzeichen, die gewählte
               vordefinierte Nachricht (z. B. „Licht ist an“) und der Zeitpunkt der Einreichung.
@@ -112,7 +107,7 @@ export default function Datenschutz() {
 
           {/* 4. Konto und Authentifizierung */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               4. Konto und Authentifizierung
             </h2>
             <p className="mb-2">
@@ -139,7 +134,7 @@ export default function Datenschutz() {
 
           {/* 5. Kennzeichen-Verifizierung */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               5. Verifizierung eines Kennzeichens
             </h2>
             <p className="mb-2">
@@ -163,7 +158,7 @@ export default function Datenschutz() {
 
           {/* 5a. Gelände und Organisationen */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               5a. Gelände und Organisationen
             </h2>
             <p className="mb-2">
@@ -194,9 +189,7 @@ export default function Datenschutz() {
 
           {/* 6. E-Mail-Versand */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              6. E-Mail-Versand
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">6. E-Mail-Versand</h2>
             <p className="mb-2">
               Zur Bestätigung der E-Mail-Adresse, für die Passwort-Zurücksetzung und für die
               Bestätigung einer E-Mail-Änderung versendet PlateDrop E-Mails an die Adresse der
@@ -215,10 +208,10 @@ export default function Datenschutz() {
 
           {/* 7. Hosting und Empfänger */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               7. Hosting und Empfänger der Daten
             </h2>
-            <ul className="mb-2 list-inside list-disc space-y-1">
+            <ul className="mb-2 list-disc pl-5 space-y-1">
               <li>
                 <strong>Server-Hosting:</strong> {PLACEHOLDER} (Anbieter und Standort;
                 Auftragsverarbeitungsvertrag nach Art. 28 DSGVO). Auf diesem Server laufen die
@@ -241,9 +234,7 @@ export default function Datenschutz() {
 
           {/* 8. Cookies */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              8. Cookies
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">8. Cookies</h2>
             <p className="mb-2">
               PlateDrop setzt ausschließlich ein <strong>technisch notwendiges Cookie</strong> für
               die angemeldete Sitzung (HttpOnly). Es dient allein der Authentifizierung.
@@ -257,10 +248,8 @@ export default function Datenschutz() {
 
           {/* 9. Speicherdauer */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              9. Speicherdauer
-            </h2>
-            <ul className="list-inside list-disc space-y-1">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">9. Speicherdauer</h2>
+            <ul className="list-disc pl-5 space-y-1">
               <li>
                 <strong>Nachrichten:</strong> höchstens {retentionDays} Tage ab Eingang; danach
                 werden sie durch eine regelmäßige Bereinigung gelöscht. Ausgeblendete Nachrichten
@@ -298,11 +287,9 @@ export default function Datenschutz() {
 
           {/* 10. Rechte der betroffenen Personen */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
-              10. Deine Rechte
-            </h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">10. Deine Rechte</h2>
             <p className="mb-2">Nach der DSGVO hast du das Recht auf:</p>
-            <ul className="mb-4 list-inside list-disc space-y-1">
+            <ul className="mb-4 list-disc pl-5 space-y-1">
               <li>Auskunft (Art. 15)</li>
               <li>Berichtigung (Art. 16)</li>
               <li>Löschung (Art. 17)</li>
@@ -323,7 +310,7 @@ export default function Datenschutz() {
 
           {/* 11. Pflicht zur Bereitstellung */}
           <section>
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
               11. Erforderlichkeit der Daten
             </h2>
             <p>
@@ -335,11 +322,11 @@ export default function Datenschutz() {
           </section>
 
           {/* Last Updated */}
-          <div className="mt-12 rounded-lg bg-slate-100 p-4 dark:bg-slate-800">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+          <div className="mt-12 rounded-xl bg-surface p-4">
+            <p className="text-[15px] text-secondary">
               <strong>Stand:</strong> Oktober 2026
             </p>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-[15px] text-secondary">
               Diese Datenschutzerklärung wird angepasst, sobald sich die beschriebene Verarbeitung
               ändert.
             </p>
