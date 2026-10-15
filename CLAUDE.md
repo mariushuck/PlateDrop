@@ -166,6 +166,7 @@ CI (`.github/workflows/ci.yml`, on push to `main`/`dev` and on PRs) runs `pnpm c
 - **Mobile-first** — design for touch, not desktop. No hover-only states.
 - Fixed bottom nav bar for the authenticated dashboard.
 - Icons from `lucide-react`, toasts via `sonner`.
+- **iOS look, system font, automatic dark mode.** Colors come only from the tokens in `src/app/globals.css` (`bg-canvas`, `bg-surface`, `bg-fill`, `text-secondary`, `text-tint`, `text-danger`, …), which switch with `prefers-color-scheme` and reset to light for print — no raw palette classes (`slate-*`, `red-*`) and no `dark:`. Use the shared utilities there instead of ad-hoc classes: `btn` + `btn-primary|secondary|danger|plain` (+ `btn-sm`), `field`/`field-label`, `inset-group`/`list-row`/`section-header`/`section-footer`, `large-title`, `segmented`, `switch`, and `plate`/`plate-field` for license plates. Page headers use `src/components/ui/NavBar.tsx`.
 
 ## Public repository
 
