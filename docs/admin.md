@@ -539,6 +539,7 @@ dcp logs web --no-log-prefix | grep '^{' | jq 'select(.level == "error")'
 | Kein TLS-Zertifikat | `DOMAIN` falsch, DNS zeigt nicht auf den Server, oder Port 80 ist blockiert | `dcp logs proxy \| grep -i certificate` |
 | Eingabe wird mit „Bitte Ortskürzel und Buchstaben trennen" abgelehnt | Ohne Trennung ist die Eingabe mehrdeutig (`KAAB1234` = `KA-AB` oder `KAA-B`) | Absicht; mit Bindestrich oder Leerzeichen nach dem Ortskürzel eingeben, z. B. `KA-AB 1234` |
 | Nachricht wird mit „Zu viele Anfragen" abgelehnt | eines der beiden Limits greift: 10 pro Minute je Absender, 20 pro Stunde je Kennzeichen | `SELECT * FROM message_throttle ORDER BY window_start DESC LIMIT 5;` |
+| Entwicklung (`docker compose up`): Seite lädt sich mehrmals pro Sekunde neu, im Log vor jedem `GET` ein „✓ Compiled“ | Veralteter Turbopack-Cache im anonymen Volume `/app/.next` – es überlebt `up` und `restart`; nach größeren Codeänderungen passen Browser und Server nicht mehr zusammen („HMR hash mismatch“) | `docker compose up -d --force-recreate --renew-anon-volumes web` (frisches `.next` und `node_modules` aus dem Image) |
 | Alle Absender teilen sich ein Limit, oder `message_throttle` bleibt leer | `TRUSTED_PROXY_HOPS` passt nicht zum Proxy-Setup (siehe B1) | Anzahl der Proxys vor `web` zählen und den Wert in `.env` angleichen |
 
 ## B8 Datenschutz: Auskunft und Löschung
