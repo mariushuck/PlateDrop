@@ -87,12 +87,12 @@ function constraintName(error: unknown): string | undefined {
  *
  * @throws {PlateRateLimitError} wenn der Stunden-Deckel des Kennzeichens greift.
  */
-export async function insertMessage(plateNumber: string, messageType: string): Promise<void> {
+export async function insertMessage(plateNumber: string, messageTypes: string[]): Promise<void> {
   try {
     await withAnon((client) =>
-      client.query("INSERT INTO messages (plate_number, message_type) VALUES ($1, $2)", [
+      client.query("INSERT INTO messages (plate_number, message_types) VALUES ($1, $2)", [
         plateNumber,
-        messageType,
+        messageTypes,
       ]),
     );
   } catch (error) {
@@ -149,7 +149,7 @@ export function listPlatesForUser(userId: string): Promise<VerifiedPlate[]> {
 export function listMessagesForUser(userId: string): Promise<Message[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<Message>(
-      `SELECT m.id, m.plate_number, m.message_type, m.message_text, m.created_at, m.read_at,
+      `SELECT m.id, m.plate_number, m.message_types, m.message_text, m.created_at, m.read_at,
               vp.id AS plate_id, os.name AS site_name,
               app.message_sender_name(m.id) AS sender_name
          FROM messages m
@@ -362,7 +362,7 @@ export interface UserDataExport {
   }>;
   messages: Array<{
     plate_number: string;
-    message_type: string | null;
+    message_types: string[] | null;
     message_text: string | null;
     created_at: Date;
   }>;
@@ -386,7 +386,7 @@ export function exportUserData(userId: string): Promise<UserDataExport> {
       [userId],
     );
     const messages = await client.query<UserDataExport["messages"][number]>(
-      `SELECT m.plate_number, m.message_type, m.message_text, m.created_at
+      `SELECT m.plate_number, m.message_types, m.message_text, m.created_at
          FROM messages m
          JOIN verified_plates vp ON ${RECIPIENT_MATCH}
         WHERE vp.user_id = $1
@@ -545,7 +545,7 @@ export function listPendingVerifications(userId: string): Promise<PendingVerific
 export function listOpenReports(userId: string): Promise<OpenReport[]> {
   return withUser(userId, async (client) => {
     const { rows } = await client.query<OpenReport>(
-      `SELECT r.id, r.reason, r.created_at, m.id AS message_id, m.plate_number, m.message_type, m.message_text,
+      `SELECT r.id, r.reason, r.created_at, m.id AS message_id, m.plate_number, m.message_types, m.message_text,
               m.created_at AS message_created_at
          FROM message_reports r
          JOIN messages m ON m.id = r.message_id
@@ -682,7 +682,7 @@ export async function insertSiteMessage(
   senderId: string | null,
   message: {
     plate: string;
-    type: string | null;
+    types: string[] | null;
     text: string | null;
     orgId: string;
     siteId: string;
@@ -691,9 +691,9 @@ export async function insertSiteMessage(
   try {
     await withUser(senderId, (client) =>
       client.query(
-        `INSERT INTO messages (plate_number, message_type, message_text, org_id, site_id, sender_id)
+        `INSERT INTO messages (plate_number, message_types, message_text, org_id, site_id, sender_id)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [message.plate, message.type, message.text, message.orgId, message.siteId, senderId],
+        [message.plate, message.types, message.text, message.orgId, message.siteId, senderId],
       ),
     );
   } catch (error) {

@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, Loader2, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Circle, CircleCheck, Loader2, TriangleAlert } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { MessageTypeIcon } from "@/components/ui/MessageTypeIcon";
-import { MESSAGE_TYPES } from "@/lib/messages/catalog";
+import { MESSAGE_CATEGORIES } from "@/lib/messages/catalog";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 
 type ActionState = { success: boolean; error?: string } | null;
@@ -28,7 +28,7 @@ export default function MessageForm({
 }) {
   const [state, formAction, isPending] = useActionState(action, null);
   const [plateInput, setPlateInput] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [messageText, setMessageText] = useState("");
   const [, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
@@ -42,7 +42,7 @@ export default function MessageForm({
       toast.success("Nachricht erfolgreich gedroppt! 🚗💨");
       startTransition(() => {
         setPlateInput("");
-        setMessageType("");
+        setSelected(new Set());
         setMessageText("");
         formRef.current?.reset();
       });
@@ -51,7 +51,15 @@ export default function MessageForm({
     }
   }, [state]);
 
-  const isFormValid = plateInput.trim() && !plateError && (messageType || messageText.trim());
+  const isFormValid = plateInput.trim() && !plateError && (selected.size > 0 || messageText.trim());
+
+  function toggle(code: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(code)) next.add(code);
+      return next;
+    });
+  }
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-1 flex-col gap-7">
@@ -90,40 +98,61 @@ export default function MessageForm({
         ))}
 
       <fieldset>
-        <legend className="section-header">Was ist los?</legend>
-        <div className="inset-group">
-          {MESSAGE_TYPES.map((type) => (
-            <label
-              key={type.code}
-              className="list-row cursor-pointer has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-tint"
-            >
-              <input
-                type="radio"
-                name="messageType"
-                value={type.code}
-                checked={messageType === type.code}
-                onChange={() => setMessageType(type.code)}
-                disabled={isPending}
-                className="sr-only"
-              />
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-white ${
-                  type.urgent ? "bg-warning" : "bg-tint"
-                }`}
-              >
-                <MessageTypeIcon icon={type.icon} className="h-[18px] w-[18px]" />
-              </span>
-              <span className="flex-1 text-[17px]">{type.label}</span>
-              {messageType === type.code && (
-                <Check
-                  className="shrink-0 text-tint"
-                  size={20}
-                  strokeWidth={2.5}
-                  aria-hidden="true"
-                />
-              )}
-            </label>
-          ))}
+        <legend className="section-header">Was ist los? Mehrere Gründe möglich.</legend>
+        <div className="space-y-3">
+          {MESSAGE_CATEGORIES.map((category, index) => {
+            const count = category.types.filter((type) => selected.has(type.code)).length;
+            return (
+              // Geschlossene Gruppen schicken ihre Häkchen trotzdem mit.
+              <details key={category.name} open={index === 0} className="inset-group group/cat">
+                <summary className="list-row cursor-pointer list-none active:opacity-60 [&::-webkit-details-marker]:hidden">
+                  <span className="flex-1 text-[17px] font-semibold">{category.name}</span>
+                  {count > 0 && <span className="text-[15px] text-tint">{count} ausgewählt</span>}
+                  <ChevronRight
+                    className="shrink-0 text-secondary transition-transform group-open/cat:rotate-90"
+                    size={20}
+                    aria-hidden="true"
+                  />
+                </summary>
+                {category.types.map((type) => {
+                  const checked = selected.has(type.code);
+                  return (
+                    <label
+                      key={type.code}
+                      className="list-row cursor-pointer has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-tint"
+                    >
+                      <input
+                        type="checkbox"
+                        name="messageTypes"
+                        value={type.code}
+                        checked={checked}
+                        onChange={() => toggle(type.code)}
+                        disabled={isPending}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-white ${
+                          type.urgent ? "bg-warning" : "bg-tint"
+                        }`}
+                      >
+                        <MessageTypeIcon icon={type.icon} className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="flex-1 text-[17px]">{type.label}</span>
+                      {checked ? (
+                        <CircleCheck
+                          className="shrink-0 fill-tint text-surface"
+                          size={24}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Circle className="shrink-0 text-separator" size={24} aria-hidden="true" />
+                      )}
+                    </label>
+                  );
+                })}
+              </details>
+            );
+          })}
         </div>
       </fieldset>
 
@@ -164,6 +193,12 @@ export default function MessageForm({
       {state?.error && (
         <p role="alert" className="rounded-xl bg-surface p-4 text-[15px] text-danger">
           {state.error}
+        </p>
+      )}
+
+      {selected.size > 0 && (
+        <p className="-mb-4 px-4 text-[13px] text-secondary" aria-live="polite">
+          {selected.size === 1 ? "1 Grund" : `${selected.size} Gründe`} ausgewählt
         </p>
       )}
 

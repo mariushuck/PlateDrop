@@ -10,7 +10,7 @@ import {
   siteByToken,
 } from "@/lib/db/queries";
 import { logger } from "@/lib/logger";
-import { isMessageType } from "@/lib/messages/catalog";
+import { parseMessageTypes } from "@/lib/messages/catalog";
 import { SITE_TOKEN_PATTERN } from "@/lib/tags/token";
 import { parsePlate, plateErrorMessage } from "@/lib/utils/plateUtils";
 import { getClientIpHash } from "@/lib/utils/rateLimit";
@@ -30,7 +30,7 @@ export async function dropSiteMessage(
 ): Promise<{ success: boolean; error?: string }> {
   const token = formData.get("token");
   const plateNumber = formData.get("plateNumber");
-  const messageType = formData.get("messageType");
+  const types = parseMessageTypes(formData.getAll("messageTypes"));
   const rawText = formData.get("messageText");
   const text = typeof rawText === "string" && rawText.trim() ? rawText.trim() : null;
 
@@ -43,8 +43,9 @@ export async function dropSiteMessage(
   const parsed = parsePlate(plateNumber);
   if (!parsed.ok) return { success: false, error: plateErrorMessage(parsed.reason) };
 
-  const type = isMessageType(messageType) ? messageType : null;
-  if (!type && !text) return { success: false, error: "Bitte wählen Sie eine Nachricht aus." };
+  if (!types || (types.length === 0 && !text)) {
+    return { success: false, error: "Bitte wählen Sie eine Nachricht aus." };
+  }
   if (text && text.length > MAX_TEXT) {
     return { success: false, error: `Nachricht darf nicht länger als ${MAX_TEXT} Zeichen sein.` };
   }
@@ -54,8 +55,8 @@ export async function dropSiteMessage(
     if (!site?.active) return { success: false, error: UNKNOWN_SITE };
 
     const user = await getSessionUser();
-    // Freitext nur angemeldet und wenn erlaubt; bei Typ + Text zählt der Typ.
-    const sendText = type ? null : text;
+    // Freitext nur angemeldet und wenn erlaubt; bei Gründen + Text zählen die Gründe.
+    const sendText = types.length > 0 ? null : text;
     if (sendText && !(user && site.allowFreeText)) {
       return { success: false, error: "Bitte wählen Sie eine Nachricht aus." };
     }
@@ -66,7 +67,7 @@ export async function dropSiteMessage(
 
     await insertSiteMessage(user?.id ?? null, {
       plate: parsed.plate,
-      type,
+      types: types.length > 0 ? types : null,
       text: sendText,
       orgId: site.orgId,
       siteId: site.siteId,

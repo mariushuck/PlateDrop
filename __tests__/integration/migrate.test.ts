@@ -46,6 +46,7 @@ describe("scripts/migrate.mjs", () => {
       "0012_receiver_controls.sql",
       "0013_message_types_and_notifications.sql",
       "0014_organizations.sql",
+      "0015_message_type_list.sql",
     ]);
   });
 

@@ -4,7 +4,7 @@ import ReportActions from "@/components/features/ReportActions";
 import VerificationActions from "@/components/features/VerificationActions";
 import { requireAdmin } from "@/lib/auth/session";
 import { listOpenReports, listPendingVerifications } from "@/lib/db/queries";
-import { messageType } from "@/lib/messages/catalog";
+import { messageEntries } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 
 /**
@@ -45,8 +45,9 @@ export default async function AdminPage() {
                   </p>
                 </div>
                 <p className="whitespace-pre-wrap rounded-[10px] bg-fill p-3 text-[15px]">
-                  {(report.message_type && messageType(report.message_type)?.text) ??
-                    report.message_text}
+                  {messageEntries(report.message_types)
+                    .map((entry) => entry.text)
+                    .join("\n") || report.message_text}
                 </p>
                 <ReportActions reportId={report.id} messageId={report.message_id} />
               </div>

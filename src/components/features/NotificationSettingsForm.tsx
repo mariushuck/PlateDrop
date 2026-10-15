@@ -3,12 +3,8 @@
 import { useActionState } from "react";
 import { saveNotificationSettingsAction } from "@/app/dashboard/settings/actions";
 import type { NotificationSettings } from "@/lib/db/types";
-import { MESSAGE_TYPES } from "@/lib/messages/catalog";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-const URGENT = MESSAGE_TYPES.filter((type) => type.urgent)
-  .map((type) => type.label)
-  .join(", ");
 const initialState = { error: null as string | null, success: false };
 
 /** E-Mail-Benachrichtigungen und Ruhezeiten (volle Stunden, deutsche Zeit). */
@@ -81,8 +77,8 @@ export default function NotificationSettingsForm({ initial }: { initial: Notific
         </div>
       </form>
       <p className="section-footer">
-        In den Ruhezeiten kommen nur dringende Nachrichten sofort ({URGENT}). Alles andere folgt
-        danach.
+        In den Ruhezeiten kommen nur dringende Hinweise sofort, z. B. Licht an, Alarmanlage oder
+        blockierte Ausfahrt. Alles andere folgt danach.
       </p>
     </section>
   );

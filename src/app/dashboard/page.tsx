@@ -15,7 +15,7 @@ import {
   listPlatesForUser,
 } from "@/lib/db/queries";
 import type { Message } from "@/lib/db/types";
-import { messageType } from "@/lib/messages/catalog";
+import { messageEntries } from "@/lib/messages/catalog";
 import { isCanonicalPlate } from "@/lib/utils/plateUtils";
 import { claimPlate } from "./actions";
 
@@ -168,7 +168,9 @@ export default async function DashboardPage() {
                       </p>
                     ) : (
                       plateMessages.map((msg) => {
-                        const type = msg.message_type ? messageType(msg.message_type) : undefined;
+                        const entries = messageEntries(msg.message_types);
+                        // Dringliche Gründe stehen vorn; der erste bestimmt das Symbol.
+                        const type = entries[0];
                         return (
                           <article key={msg.id} className="list-row items-start">
                             <span
@@ -180,11 +182,15 @@ export default async function DashboardPage() {
                             </span>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start gap-2">
-                                <p
-                                  className={`flex-1 text-[17px] leading-snug ${msg.read_at ? "" : "font-semibold"}`}
+                                <div
+                                  className={`flex-1 space-y-0.5 text-[17px] leading-snug ${msg.read_at ? "" : "font-semibold"}`}
                                 >
-                                  {type?.text ?? msg.message_text}
-                                </p>
+                                  {entries.length > 0 ? (
+                                    entries.map((entry) => <p key={entry.code}>{entry.text}</p>)
+                                  ) : (
+                                    <p>{msg.message_text}</p>
+                                  )}
+                                </div>
                                 {!msg.read_at && (
                                   <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-tint">
                                     <span className="sr-only">neu</span>

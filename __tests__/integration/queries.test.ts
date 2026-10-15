@@ -36,24 +36,24 @@ describe("insertMessage", () => {
   it("speichert eine Nachricht ohne angemeldeten Nutzer", async () => {
     const { insertMessage } = await loadQueries();
 
-    await insertMessage("KA-AB-1234", "licht_an");
+    await insertMessage("KA-AB-1234", ["licht_an"]);
 
     const stored = await withAdmin((client) =>
-      client.query<{ plate_number: string; message_type: string }>(
-        "SELECT plate_number, message_type FROM messages",
+      client.query<{ plate_number: string; message_types: string[] }>(
+        "SELECT plate_number, message_types FROM messages",
       ),
     );
-    expect(stored.rows).toEqual([{ plate_number: "KA-AB-1234", message_type: "licht_an" }]);
+    expect(stored.rows).toEqual([{ plate_number: "KA-AB-1234", message_types: ["licht_an"] }]);
   });
 
   it("meldet das Erreichen des Kennzeichen-Limits als PlateRateLimitError", async () => {
     const { insertMessage, PlateRateLimitError } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", "licht_an");
+      await insertMessage("KA-AB-1234", ["licht_an"]);
     }
 
-    await expect(insertMessage("KA-AB-1234", "licht_an")).rejects.toBeInstanceOf(
+    await expect(insertMessage("KA-AB-1234", ["licht_an"])).rejects.toBeInstanceOf(
       PlateRateLimitError,
     );
   });
@@ -62,10 +62,10 @@ describe("insertMessage", () => {
     const { insertMessage } = await loadQueries();
 
     for (let i = 0; i < 20; i++) {
-      await insertMessage("KA-AB-1234", "licht_an");
+      await insertMessage("KA-AB-1234", ["licht_an"]);
     }
 
-    await expect(insertMessage("M-XY-9999", "licht_an")).resolves.toBeUndefined();
+    await expect(insertMessage("M-XY-9999", ["licht_an"])).resolves.toBeUndefined();
   });
 });
 
@@ -718,14 +718,14 @@ describe("Organisationen: Standort und Nachrichten", () => {
 
     await insertSiteMessage(null, {
       plate: "KA-AB-1",
-      type: "blockiert",
+      types: ["blockiert", "warnblinker_an"],
       text: null,
       orgId,
       siteId,
     });
     await insertSiteMessage(member, {
       plate: "KA-AB-1",
-      type: null,
+      types: null,
       text: "Bitte umparken",
       orgId,
       siteId,
@@ -733,12 +733,12 @@ describe("Organisationen: Standort und Nachrichten", () => {
 
     const stored = await withAdmin((client) =>
       client.query(
-        "SELECT message_type, message_text, sender_id FROM messages ORDER BY created_at",
+        "SELECT message_types, message_text, sender_id FROM messages ORDER BY created_at",
       ),
     );
     expect(stored.rows).toEqual([
-      { message_type: "blockiert", message_text: null, sender_id: null },
-      { message_type: null, message_text: "Bitte umparken", sender_id: "user-member" },
+      { message_types: ["blockiert", "warnblinker_an"], message_text: null, sender_id: null },
+      { message_types: null, message_text: "Bitte umparken", sender_id: "user-member" },
     ]);
   });
 

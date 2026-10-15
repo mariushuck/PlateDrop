@@ -35,7 +35,7 @@ export interface Message {
   id: string;
   plate_number: string;
   /** Code aus src/lib/messages/catalog.json; `null` nur bei Freitext-Altbestand. */
-  message_type: string | null;
+  message_types: string[] | null;
   /** Freitext – seit 0013 nicht mehr von anonymen Absendern. */
   message_text: string | null;
   created_at: Date;
@@ -55,7 +55,7 @@ export interface OpenReport {
   created_at: Date;
   message_id: string;
   plate_number: string;
-  message_type: string | null;
+  message_types: string[] | null;
   message_text: string | null;
   message_created_at: Date;
 }

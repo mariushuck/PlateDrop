@@ -135,7 +135,8 @@ async function callAction(worker, exportedName, pagePath, cookie, args) {
     const ref = index + 1;
     for (const [name, value] of Object.entries(arg)) {
       if (value instanceof Blob) body.append(`_${ref}_${name}`, value, "foto.jpg");
-      else body.append(`_${ref}_${name}`, value);
+      // Mehrfachfelder (Checkboxen) als Liste.
+      else for (const item of [value].flat()) body.append(`_${ref}_${name}`, item);
     }
     return `$K${ref}`;
   });
@@ -477,7 +478,7 @@ async function main() {
   await fetch(APP_URL); // Startseite kompilieren lassen (Dev-Server)
   const drop = await callAction("app/page", "dropMessage", "/", "", [
     null,
-    { plateNumber: plateNumber, messageType: "licht_an" },
+    { plateNumber: plateNumber, messageTypes: ["licht_an", "reifen"] },
   ]);
   check("Nachricht angenommen", drop.body.includes('"success":true'), drop.body.slice(0, 200));
   const notification = await mailFor(OWNER_EMAIL);
@@ -488,8 +489,9 @@ async function main() {
     notification?.Subject,
   );
   check(
-    "Mail nennt nur den Nachrichtentyp",
-    (notification?.Text ?? "").includes("Am Fahrzeug brennt noch Licht."),
+    "Mail nennt alle gewählten Gründe",
+    (notification?.Text ?? "").includes("Am Fahrzeug brennt noch Licht.") &&
+      (notification?.Text ?? "").includes("Ein Reifen sieht platt aus."),
   );
   const health = await (await fetch(`${APP_URL}/api/health`)).json();
   check("Healthcheck meldet den Outbox-Rückstand", typeof health.outboxLagSeconds === "number");
@@ -589,7 +591,7 @@ async function main() {
     "dropSiteMessage",
     `/s/${siteToken}`,
     "",
-    [null, { token: siteToken, plateNumber: orgPlateNumber, messageType: "blockiert" }],
+    [null, { token: siteToken, plateNumber: orgPlateNumber, messageTypes: ["blockiert"] }],
   );
   check(
     "Besucher-Nachricht angenommen",

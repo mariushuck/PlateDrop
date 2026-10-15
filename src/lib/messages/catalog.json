@@ -1,48 +1,199 @@
 [
   {
     "code": "licht_an",
+    "category": "Licht & Elektrik",
     "label": "Licht ist an",
     "text": "Am Fahrzeug brennt noch Licht.",
     "icon": "lightbulb",
     "urgent": true
   },
   {
-    "code": "fenster_offen",
-    "label": "Fenster oder Schiebedach offen",
-    "text": "Ein Fenster oder das Schiebedach steht offen.",
-    "icon": "app-window",
+    "code": "innenlicht_an",
+    "category": "Licht & Elektrik",
+    "label": "Innenbeleuchtung ist an",
+    "text": "Im Fahrzeug brennt die Innenbeleuchtung.",
+    "icon": "lamp-ceiling",
     "urgent": true
   },
   {
-    "code": "tuer_offen",
-    "label": "Tür oder Kofferraum offen",
-    "text": "Eine Tür oder der Kofferraum ist nicht geschlossen.",
-    "icon": "door-open",
+    "code": "warnblinker_an",
+    "category": "Licht & Elektrik",
+    "label": "Warnblinker ist an",
+    "text": "Die Warnblinkanlage ist eingeschaltet.",
+    "icon": "triangle-alert",
     "urgent": true
   },
   {
-    "code": "blockiert",
-    "label": "Blockiert Ausfahrt oder Fahrzeug",
-    "text": "Das Fahrzeug blockiert eine Ausfahrt oder ein anderes Fahrzeug.",
-    "icon": "octagon-alert",
-    "urgent": true
-  },
-  {
-    "code": "abschleppen",
-    "label": "Abschleppwagen oder Ordnungsdienst",
-    "text": "Am Fahrzeug steht ein Abschleppwagen oder Ordnungsdienst.",
-    "icon": "truck",
+    "code": "motor_laeuft",
+    "category": "Licht & Elektrik",
+    "label": "Motor läuft, niemand im Fahrzeug",
+    "text": "Der Motor läuft, obwohl niemand im Fahrzeug sitzt.",
+    "icon": "gauge",
     "urgent": true
   },
   {
     "code": "alarm",
+    "category": "Licht & Elektrik",
     "label": "Alarmanlage ausgelöst",
     "text": "Die Alarmanlage ist ausgelöst.",
     "icon": "siren",
     "urgent": true
   },
   {
+    "code": "licht_defekt",
+    "category": "Licht & Elektrik",
+    "label": "Licht defekt",
+    "text": "Ein Scheinwerfer, Rücklicht, Bremslicht oder Blinker funktioniert nicht.",
+    "icon": "zap-off",
+    "urgent": false
+  },
+  {
+    "code": "fenster_offen",
+    "category": "Offen oder ungesichert",
+    "label": "Fenster oder Schiebedach offen",
+    "text": "Ein Fenster oder das Schiebedach steht offen.",
+    "icon": "app-window",
+    "urgent": true
+  },
+  {
+    "code": "verdeck_offen",
+    "category": "Offen oder ungesichert",
+    "label": "Cabrio-Verdeck offen",
+    "text": "Das Verdeck ist geöffnet.",
+    "icon": "panel-top",
+    "urgent": true
+  },
+  {
+    "code": "tuer_offen",
+    "category": "Offen oder ungesichert",
+    "label": "Tür oder Kofferraum offen",
+    "text": "Eine Tür oder der Kofferraum ist nicht geschlossen.",
+    "icon": "door-open",
+    "urgent": true
+  },
+  {
+    "code": "schluessel_sichtbar",
+    "category": "Offen oder ungesichert",
+    "label": "Schlüssel steckt oder liegt sichtbar",
+    "text": "Der Schlüssel steckt oder liegt sichtbar im Fahrzeug.",
+    "icon": "key-round",
+    "urgent": true
+  },
+  {
+    "code": "tankklappe_offen",
+    "category": "Offen oder ungesichert",
+    "label": "Tank- oder Ladeklappe offen",
+    "text": "Die Tank- oder Ladeklappe steht offen.",
+    "icon": "fuel",
+    "urgent": false
+  },
+  {
+    "code": "wertsachen_sichtbar",
+    "category": "Offen oder ungesichert",
+    "label": "Wertsachen sichtbar",
+    "text": "Im Fahrzeug liegen Wertsachen gut sichtbar.",
+    "icon": "wallet",
+    "urgent": false
+  },
+  {
+    "code": "gegenstand_auf_dach",
+    "category": "Offen oder ungesichert",
+    "label": "Etwas liegt auf Dach oder Motorhaube",
+    "text": "Auf dem Dach oder der Motorhaube liegt ein Gegenstand.",
+    "icon": "package",
+    "urgent": false
+  },
+  {
+    "code": "blockiert",
+    "category": "Parken",
+    "label": "Blockiert Ausfahrt oder Fahrzeug",
+    "text": "Das Fahrzeug blockiert eine Ausfahrt oder ein anderes Fahrzeug.",
+    "icon": "octagon-alert",
+    "urgent": true
+  },
+  {
+    "code": "rettungsweg",
+    "category": "Parken",
+    "label": "Steht in Feuerwehrzufahrt oder Rettungsweg",
+    "text": "Das Fahrzeug steht in einer Feuerwehrzufahrt oder einem Rettungsweg.",
+    "icon": "ban",
+    "urgent": true
+  },
+  {
+    "code": "weggerollt",
+    "category": "Parken",
+    "label": "Fahrzeug rollt oder ist weggerollt",
+    "text": "Das Fahrzeug ist weggerollt oder droht wegzurollen.",
+    "icon": "move-right",
+    "urgent": true
+  },
+  {
+    "code": "abschleppen",
+    "category": "Parken",
+    "label": "Abschleppwagen oder Ordnungsdienst",
+    "text": "Am Fahrzeug steht ein Abschleppwagen oder Ordnungsdienst.",
+    "icon": "truck",
+    "urgent": true
+  },
+  {
+    "code": "halteverbot",
+    "category": "Parken",
+    "label": "Steht im Halteverbot",
+    "text": "Das Fahrzeug steht im Halteverbot.",
+    "icon": "circle-slash",
+    "urgent": false
+  },
+  {
+    "code": "fremder_stellplatz",
+    "category": "Parken",
+    "label": "Steht auf fremdem oder reserviertem Platz",
+    "text": "Das Fahrzeug steht auf einem fremden oder reservierten Stellplatz.",
+    "icon": "square-parking",
+    "urgent": false
+  },
+  {
+    "code": "zwei_stellplaetze",
+    "category": "Parken",
+    "label": "Belegt zwei Stellplätze",
+    "text": "Das Fahrzeug belegt zwei Stellplätze.",
+    "icon": "arrow-left-right",
+    "urgent": false
+  },
+  {
+    "code": "zu_dicht",
+    "category": "Parken",
+    "label": "Steht sehr dicht an einem anderen Fahrzeug",
+    "text": "Das Fahrzeug steht so dicht, dass andere kaum einsteigen können.",
+    "icon": "move-horizontal",
+    "urgent": false
+  },
+  {
+    "code": "strafzettel",
+    "category": "Parken",
+    "label": "Strafzettel am Fahrzeug",
+    "text": "Am Fahrzeug hängt ein Strafzettel.",
+    "icon": "ticket",
+    "urgent": false
+  },
+  {
+    "code": "parkzeit_abgelaufen",
+    "category": "Parken",
+    "label": "Parkschein oder Parkscheibe abgelaufen",
+    "text": "Der Parkschein oder die Parkscheibe ist abgelaufen oder fehlt.",
+    "icon": "timer-off",
+    "urgent": false
+  },
+  {
+    "code": "ladesaeule_belegt",
+    "category": "Parken",
+    "label": "Fertig geladen, Ladesäule weiter belegt",
+    "text": "Das Fahrzeug ist fertig geladen und belegt weiter die Ladesäule.",
+    "icon": "ev-charger",
+    "urgent": false
+  },
+  {
     "code": "reifen",
+    "category": "Schäden & Technik",
     "label": "Reifen sieht platt aus",
     "text": "Ein Reifen sieht platt aus.",
     "icon": "circle-dot",
@@ -50,13 +201,127 @@
   },
   {
     "code": "schaden_gesehen",
+    "category": "Schäden & Technik",
     "label": "Schaden am Fahrzeug",
     "text": "Am Fahrzeug ist ein Schaden zu sehen.",
     "icon": "car-front",
     "urgent": false
   },
   {
+    "code": "angefahren",
+    "category": "Schäden & Technik",
+    "label": "Wurde angefahren, Verursacher ist weg",
+    "text": "Das Fahrzeug wurde angefahren, die verursachende Person ist weitergefahren.",
+    "icon": "badge-alert",
+    "urgent": true
+  },
+  {
+    "code": "scheibe_beschaedigt",
+    "category": "Schäden & Technik",
+    "label": "Scheibe beschädigt oder eingeschlagen",
+    "text": "Eine Scheibe ist beschädigt oder eingeschlagen.",
+    "icon": "square-dashed",
+    "urgent": true
+  },
+  {
+    "code": "einbruchsspuren",
+    "category": "Schäden & Technik",
+    "label": "Einbruchsspuren",
+    "text": "Am Fahrzeug sind Einbruchsspuren zu sehen.",
+    "icon": "shield-alert",
+    "urgent": true
+  },
+  {
+    "code": "fluessigkeit",
+    "category": "Schäden & Technik",
+    "label": "Flüssigkeit läuft aus",
+    "text": "Unter dem Fahrzeug läuft Flüssigkeit aus, etwa Öl, Kühlwasser oder Kraftstoff.",
+    "icon": "droplets",
+    "urgent": true
+  },
+  {
+    "code": "spiegel_beschaedigt",
+    "category": "Schäden & Technik",
+    "label": "Spiegel beschädigt",
+    "text": "Ein Außenspiegel ist beschädigt oder abgefahren.",
+    "icon": "scan-line",
+    "urgent": false
+  },
+  {
+    "code": "kennzeichen_lose",
+    "category": "Schäden & Technik",
+    "label": "Kennzeichen lose oder fehlt",
+    "text": "Ein Kennzeichen ist lose, beschädigt oder fehlt.",
+    "icon": "rectangle-horizontal",
+    "urgent": false
+  },
+  {
+    "code": "hu_abgelaufen",
+    "category": "Schäden & Technik",
+    "label": "HU-Plakette abgelaufen",
+    "text": "Die Prüfplakette (HU) ist abgelaufen.",
+    "icon": "calendar-x",
+    "urgent": false
+  },
+  {
+    "code": "unwetter",
+    "category": "Wetter & Umgebung",
+    "label": "Unwetter oder Hagel angekündigt",
+    "text": "Für hier ist Unwetter oder Hagel angekündigt.",
+    "icon": "cloud-hail",
+    "urgent": true
+  },
+  {
+    "code": "hochwasser",
+    "category": "Wetter & Umgebung",
+    "label": "Hochwasser droht",
+    "text": "Der Stellplatz droht überflutet zu werden.",
+    "icon": "cloud-rain",
+    "urgent": true
+  },
+  {
+    "code": "ast_baum",
+    "category": "Wetter & Umgebung",
+    "label": "Ast oder Baum droht zu fallen",
+    "text": "Über dem Fahrzeug hängt ein loser Ast, oder ein Baum droht umzufallen.",
+    "icon": "tree-deciduous",
+    "urgent": true
+  },
+  {
+    "code": "tier_am_fahrzeug",
+    "category": "Wetter & Umgebung",
+    "label": "Tier unter dem Fahrzeug oder im Motorraum",
+    "text": "Unter dem Fahrzeug oder im Motorraum sitzt ein Tier.",
+    "icon": "paw-print",
+    "urgent": true
+  },
+  {
+    "code": "mobiles_halteverbot",
+    "category": "Wetter & Umgebung",
+    "label": "Mobiles Halteverbot aufgestellt",
+    "text": "Hier wurde ein mobiles Halteverbot aufgestellt, etwa für einen Umzug.",
+    "icon": "signpost",
+    "urgent": false
+  },
+  {
+    "code": "bauarbeiten",
+    "category": "Wetter & Umgebung",
+    "label": "Bauarbeiten oder Sperrung angekündigt",
+    "text": "Hier sind Bauarbeiten, Straßenreinigung oder eine Sperrung angekündigt.",
+    "icon": "construction",
+    "urgent": false
+  },
+  {
+    "code": "gegenstand_verloren",
+    "category": "Hinweise & Dank",
+    "label": "Gegenstand liegt neben dem Fahrzeug",
+    "text": "Neben dem Fahrzeug liegt ein Gegenstand, der wohl dazugehört.",
+    "icon": "tag",
+    "urgent": false
+  },
+  {
     "code": "danke",
+    "category": "Hinweise & Dank",
     "label": "Danke fürs Parken",
     "text": "Danke fürs rücksichtsvolle Parken.",
     "icon": "heart",
