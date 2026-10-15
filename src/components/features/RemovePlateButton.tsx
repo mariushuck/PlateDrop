@@ -29,14 +29,14 @@ export default function RemovePlateButton({ plateId }: { plateId: string }) {
   }
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="space-y-2">
       {confirming ? (
         <div className="flex gap-2">
           <button
             type="button"
             onClick={remove}
             disabled={isPending}
-            className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="btn btn-sm btn-danger flex-1"
           >
             {isPending ? "Wird entfernt..." : "Wirklich entfernen"}
           </button>
@@ -44,7 +44,7 @@ export default function RemovePlateButton({ plateId }: { plateId: string }) {
             type="button"
             onClick={() => setConfirming(false)}
             disabled={isPending}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200"
+            className="btn btn-sm btn-secondary flex-1"
           >
             Abbrechen
           </button>
@@ -53,14 +53,14 @@ export default function RemovePlateButton({ plateId }: { plateId: string }) {
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400"
+          className="flex items-center gap-1.5 text-[15px] text-danger active:opacity-60"
         >
           <Trash2 className="h-4 w-4" />
           Kennzeichen entfernen
         </button>
       )}
       {error && (
-        <p className="text-sm text-red-800 dark:text-red-200" role="alert">
+        <p className="text-[15px] text-danger" role="alert">
           {error}
         </p>
       )}

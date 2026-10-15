@@ -13,8 +13,8 @@ export default async function SettingsPage() {
   const notifications = await getNotificationSettings(user.id);
 
   return (
-    <div className="mx-auto max-w-lg space-y-10 px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Einstellungen</h1>
+    <div className="mx-auto max-w-xl space-y-9 px-4 pt-6 pb-8">
+      <h1 className="large-title">Einstellungen</h1>
       <NotificationSettingsForm initial={notifications} />
       <DisplayNameForm current={user.name} />
       <SettingsForms />

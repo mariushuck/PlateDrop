@@ -26,12 +26,10 @@ export default function MessageActions({ messageId }: { messageId: string }) {
   }
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-2 space-y-2">
       {reporting ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-            Grund der Meldung
-          </p>
+          <p className="text-[13px] text-secondary">Grund der Meldung</p>
           <div className="flex flex-wrap gap-2">
             {REPORT_REASONS.map((reason) => (
               <button
@@ -39,7 +37,7 @@ export default function MessageActions({ messageId }: { messageId: string }) {
                 type="button"
                 disabled={isPending}
                 onClick={() => run(() => reportMessageAction(messageId, reason))}
-                className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-50 dark:border-red-700 dark:text-red-300"
+                className="btn btn-sm btn-danger"
               >
                 {reason}
               </button>
@@ -48,19 +46,19 @@ export default function MessageActions({ messageId }: { messageId: string }) {
               type="button"
               disabled={isPending}
               onClick={() => setReporting(false)}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 dark:text-slate-400"
+              className="btn btn-sm btn-plain"
             >
               Abbrechen
             </button>
           </div>
         </div>
       ) : (
-        <div className="flex gap-4">
+        <div className="flex gap-5">
           <button
             type="button"
             disabled={isPending}
             onClick={() => run(() => hideMessageAction(messageId))}
-            className="flex items-center gap-1.5 py-1 text-sm font-medium text-slate-500 disabled:opacity-50 dark:text-slate-400"
+            className="flex items-center gap-1.5 py-1 text-[15px] text-tint active:opacity-60 disabled:opacity-40"
           >
             <EyeOff className="h-4 w-4" />
             Ausblenden
@@ -69,7 +67,7 @@ export default function MessageActions({ messageId }: { messageId: string }) {
             type="button"
             disabled={isPending}
             onClick={() => setReporting(true)}
-            className="flex items-center gap-1.5 py-1 text-sm font-medium text-slate-500 disabled:opacity-50 dark:text-slate-400"
+            className="flex items-center gap-1.5 py-1 text-[15px] text-tint active:opacity-60 disabled:opacity-40"
           >
             <Flag className="h-4 w-4" />
             Melden
@@ -77,7 +75,7 @@ export default function MessageActions({ messageId }: { messageId: string }) {
         </div>
       )}
       {error && (
-        <p className="text-sm text-red-800 dark:text-red-200" role="alert">
+        <p className="text-[15px] text-danger" role="alert">
           {error}
         </p>
       )}

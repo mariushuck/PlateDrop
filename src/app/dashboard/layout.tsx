@@ -2,49 +2,35 @@ import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { BottomNav } from "@/components/ui/BottomNav";
+import NavBar from "@/components/ui/NavBar";
 import { requireUser } from "@/lib/auth/session";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin } = await requireUser();
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">PlateDrop</h1>
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Dashboard
-            </span>
-          </div>
-
-          {/* Nav Actions */}
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50"
-              >
-                <ShieldAlert size={14} />
-                Admin
-              </Link>
-            )}
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
-              >
-                Abmelden
-              </button>
-            </form>
-          </div>
+    <div className="flex flex-1 flex-col">
+      <NavBar>
+        <span className="text-[17px] font-semibold">PlateDrop</span>
+        <div className="flex items-center gap-5">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-1 text-[17px] text-tint active:opacity-60"
+            >
+              <ShieldAlert size={18} aria-hidden="true" />
+              Admin
+            </Link>
+          )}
+          <form action={signOut}>
+            <button type="submit" className="text-[17px] text-danger active:opacity-60">
+              Abmelden
+            </button>
+          </form>
         </div>
-      </header>
+      </NavBar>
 
-      {/* Main Content */}
-      <main className="flex-1 pb-20">{children}</main>
+      <main className="flex-1">{children}</main>
 
       <BottomNav />
     </div>
