@@ -234,15 +234,24 @@ export default function Datenschutz() {
 
           {/* 8. Cookies */}
           <section>
-            <h2 className="mb-2 text-[22px] font-bold leading-tight">8. Cookies</h2>
+            <h2 className="mb-2 text-[22px] font-bold leading-tight">
+              8. Cookies und lokaler Speicher
+            </h2>
             <p className="mb-2">
               PlateDrop setzt ausschließlich ein <strong>technisch notwendiges Cookie</strong> für
               die angemeldete Sitzung (HttpOnly). Es dient allein der Authentifizierung.
             </p>
+            <p className="mb-2">
+              Wählst du über den Schalter in der Navigationsleiste eine feste Darstellung (hell oder
+              dunkel), wird diese Wahl im lokalen Speicher deines Browsers abgelegt (Eintrag{" "}
+              <code>theme</code>). Sie verlässt dein Gerät nicht und wird nicht an uns übertragen.
+              Mit „Automatisch“ wird der Eintrag wieder gelöscht.
+            </p>
             <p>
               Es werden <strong>keine</strong> Analyse-, Werbe- oder Drittanbieter-Cookies gesetzt.
               Eine Einwilligung nach § 25 Abs. 1 TDDDG ist daher nicht erforderlich (§ 25 Abs. 2 Nr.
-              2 TDDDG). Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO.
+              2 TDDDG – die Darstellung wird nur auf deinen ausdrücklichen Wunsch gespeichert).
+              Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO.
             </p>
           </section>
 

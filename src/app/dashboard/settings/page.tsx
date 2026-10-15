@@ -1,5 +1,6 @@
 import DisplayNameForm from "@/components/features/DisplayNameForm";
 import NotificationSettingsForm from "@/components/features/NotificationSettingsForm";
+import ThemeSetting from "@/components/features/ThemeSetting";
 import { requireUser } from "@/lib/auth/session";
 import { getNotificationSettings } from "@/lib/db/queries";
 import SettingsForms from "./SettingsForms";
@@ -16,6 +17,7 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-xl space-y-9 px-4 pt-6 pb-8">
       <h1 className="large-title">Einstellungen</h1>
       <NotificationSettingsForm initial={notifications} />
+      <ThemeSetting />
       <DisplayNameForm current={user.name} />
       <SettingsForms />
     </div>
