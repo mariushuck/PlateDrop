@@ -22,21 +22,21 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "better-auth": "^1.7.7",
-    "lucide-react": "^1.55.0",
-    "next": "16.4.0",
-    "nodemailer": "^10.1.0",
+    "better-auth": "^1.7.18",
+    "lucide-react": "^1.69.0",
+    "next": "16.4.5",
+    "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "server-only": "^0.0.1",
     "sonner": "^2.0.8"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
+    "@biomejs/biome": "^2.6.5",
     "@swc/jest": "^0.2.39",
-    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.10.0",
     "@testing-library/react": "^16.3.3",
@@ -49,7 +49,7 @@
     "@types/react-dom": "^19.3.0",
     "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.2",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
